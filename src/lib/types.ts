@@ -7,3 +7,12 @@ export type Lead = {
   lastEnriched?: string; // ISO date string
   createdAt?: string; // ISO date string
 };
+
+export type Task = {
+  id: string;
+  leadId: string;
+  leadName: string;
+  description: string;
+  completed: boolean;
+  createdAt: string; // ISO date string
+};
