@@ -2,63 +2,57 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Users2 } from "lucide-react";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
+} from "firebase/firestore";
+
 import { Button } from "@/components/ui/button";
 import { LeadCard } from "@/components/lead-card";
 import { LeadDialog } from "@/components/lead-dialog";
 import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import { enrichLeadAction } from "@/app/actions";
+import { db } from "@/lib/firebase";
 import type { Lead } from "@/lib/types";
 import type { LeadFormValues } from "@/lib/schemas";
 
-const initialLeads: Lead[] = [
-  {
-    id: "1",
-    name: "Elon Musk",
-    email: "elon@tesla.com",
-    phone: "123-456-7890",
-  },
-  {
-    id: "2",
-    name: "Jeff Bezos",
-    email: "jeff@amazon.com",
-    phone: "234-567-8901",
-  },
-  {
-    id: "3",
-    name: "Jane Smith",
-    email: "jane.smith@example.com",
-    phone: "345-678-9012",
-  },
-];
-
 export default function Home() {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [isMounted, setIsMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    try {
-      const storedLeads = localStorage.getItem("leads");
-      if (storedLeads) {
-        setLeads(JSON.parse(storedLeads));
-      } else {
-        setLeads(initialLeads);
+    const fetchLeads = async () => {
+      try {
+        const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
+        const querySnapshot = await getDocs(q);
+        const leadsData = querySnapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as Lead)
+        );
+        setLeads(leadsData);
+      } catch (error) {
+        console.error("Error fetching leads:", error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to fetch leads from the database.",
+        });
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Failed to parse leads from localStorage", error);
-      setLeads(initialLeads);
-    }
-    setIsMounted(true);
-  }, []);
+    };
 
-  useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem("leads", JSON.stringify(leads));
-    }
-  }, [leads, isMounted]);
+    fetchLeads();
+  }, [toast]);
 
   const handleAddClick = () => {
     setEditingLead(null);
@@ -70,60 +64,95 @@ export default function Home() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (leadId: string) => {
-    setLeads((prev) => prev.filter((lead) => lead.id !== leadId));
-    toast({
-      title: "Lead Deleted",
-      description: "The lead has been removed successfully.",
-    });
-  };
-
-  const handleSaveLead = (values: LeadFormValues) => {
-    if (editingLead) {
-      // Update existing lead
-      setLeads((prev) =>
-        prev.map((lead) =>
-          lead.id === editingLead.id ? { ...lead, ...values } : lead
-        )
-      );
+  const handleDelete = async (leadId: string) => {
+    try {
+      await deleteDoc(doc(db, "leads", leadId));
+      setLeads((prev) => prev.filter((lead) => lead.id !== leadId));
       toast({
-        title: "Lead Updated",
-        description: "The lead's details have been saved.",
+        title: "Lead Deleted",
+        description: "The lead has been removed successfully.",
       });
-    } else {
-      // Add new lead
-      const newLead: Lead = {
-        id: crypto.randomUUID(),
-        ...values,
-      };
-      setLeads((prev) => [newLead, ...prev]);
+    } catch (error) {
+      console.error("Error deleting lead:", error);
       toast({
-        title: "Lead Added",
-        description: "A new lead has been created successfully.",
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete lead.",
       });
     }
-    setIsDialogOpen(false);
-    setEditingLead(null);
+  };
+
+  const handleSaveLead = async (values: LeadFormValues) => {
+    try {
+      if (editingLead) {
+        // Update existing lead
+        const leadRef = doc(db, "leads", editingLead.id);
+        await updateDoc(leadRef, values);
+        setLeads((prev) =>
+          prev.map((lead) =>
+            lead.id === editingLead.id ? { ...lead, ...values } : lead
+          )
+        );
+        toast({
+          title: "Lead Updated",
+          description: "The lead's details have been saved.",
+        });
+      } else {
+        // Add new lead
+        const newLeadData = { ...values, createdAt: new Date().toISOString() };
+        const docRef = await addDoc(collection(db, "leads"), newLeadData);
+        const newLead: Lead = {
+          id: docRef.id,
+          ...newLeadData,
+        };
+        setLeads((prev) => [newLead, ...prev]);
+        toast({
+          title: "Lead Added",
+          description: "A new lead has been created successfully.",
+        });
+      }
+      setIsDialogOpen(false);
+      setEditingLead(null);
+    } catch (error) {
+      console.error("Error saving lead:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save lead.",
+      });
+    }
   };
 
   const handleEnrich = async (leadToEnrich: Lead) => {
     const result = await enrichLeadAction(leadToEnrich);
     if (result.success && result.additionalInformation) {
-      setLeads((prevLeads) =>
-        prevLeads.map((lead) =>
-          lead.id === leadToEnrich.id
-            ? {
-                ...lead,
-                additionalInformation: result.additionalInformation,
-                lastEnriched: new Date().toISOString(),
-              }
-            : lead
-        )
-      );
-      toast({
-        title: "Lead Enriched!",
-        description: "AI has added new information to the lead.",
-      });
+      try {
+        const leadRef = doc(db, "leads", leadToEnrich.id);
+        const enrichedData = {
+          additionalInformation: result.additionalInformation,
+          lastEnriched: new Date().toISOString(),
+        };
+        await updateDoc(leadRef, enrichedData);
+
+        setLeads((prevLeads) =>
+          prevLeads.map((lead) =>
+            lead.id === leadToEnrich.id
+              ? { ...lead, ...enrichedData }
+              : lead
+          )
+        );
+        toast({
+          title: "Lead Enriched!",
+          description: "AI has added new information to the lead.",
+        });
+      } catch (error) {
+        console.error("Error updating enriched lead:", error);
+        toast({
+          variant: "destructive",
+          title: "Update Failed",
+          description: "Could not save enriched information.",
+        });
+      }
     } else {
       toast({
         variant: "destructive",
@@ -133,7 +162,7 @@ export default function Home() {
     }
   };
 
-  if (!isMounted) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Logo className="h-12 w-12 animate-spin text-primary" />

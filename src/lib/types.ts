@@ -5,4 +5,5 @@ export type Lead = {
   phone: string;
   additionalInformation?: string;
   lastEnriched?: string; // ISO date string
+  createdAt?: string; // ISO date string
 };
