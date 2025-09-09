@@ -1,0 +1,24 @@
+# Python virtual environment
+functions/venv/
+
+# Python compiled bytecode
+functions/__pycache__/
+
+# Node.js dependencies (from your root and potentially inside functions or src)
+node_modules/
+
+# Next.js build output
+.next/
+
+# Log files
+*.log
+
+# Editor/IDE specific directories (if present, to avoid including development-specific configurations)
+.vscode/
+.idea/
+
+# macOS system files (if you are on a Mac)
+.DS_Store
+
+# Temporary files or build artifacts
+tmp/
