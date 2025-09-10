@@ -52,11 +52,11 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     # --- Shared Logic ---
     # 1. Mark open Interactive tasks as complete
     tasks_ref = db.collection("tasks")
-    open_interactive_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).where("nature", "==", "Interactive")
-    open_interactive_tasks = open_interactive_tasks_query.stream()
-    for task in open_interactive_tasks:
-        task.reference.update({"completed": True})
-        print(f"Completed interactive task {task.id} for lead {lead_id}")
+    open_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
+    for task in open_tasks_query:
+        if task.to_dict().get("nature") == "Interactive":
+            task.reference.update({"completed": True})
+            print(f"Completed interactive task {task.id} for lead {lead_id}")
     
     # 2. Update last_interaction_date for all logs
     lead_ref.update({"last_interaction_date": firestore.SERVER_TIMESTAMP})
@@ -113,9 +113,10 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     
     # After any responsive log ("Unchanged" or Detailed), reset the AFC
     # 1. Delete any other pending "Follow-up" tasks to avoid duplicates
-    pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False)
-    for task in pending_follow_ups_query.stream():
-        if "Follow-up" in task.to_dict().get("description", ""):
+    pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
+    for task in pending_follow_ups_query:
+        task_data = task.to_dict()
+        if "Follow-up" in task_data.get("description", "") and task_data.get("nature") == "Interactive":
             print(f"Deleting pending follow-up task {task.id} to reset AFC.")
             task.reference.delete()
         
@@ -138,8 +139,8 @@ def afcEngine(event: scheduler_fn.ScheduledEvent) -> None:
     # Find active leads with no interaction history (brand new)
     new_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "==", None)
     for lead in new_leads_query.stream():
-        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1)
-        if not any(tasks_query.stream()):
+        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).limit(1).stream()
+        if not any(tasks_query):
             print(f"New lead {lead.id} has no tasks. Initializing AFC.")
             lead.reference.update({"afc_step": 0})
             due_date = now + timedelta(days=1)
@@ -148,8 +149,8 @@ def afcEngine(event: scheduler_fn.ScheduledEvent) -> None:
     # Find active leads who were missed by the system somehow
     active_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "<", one_day_ago)
     for lead in active_leads_query.stream():
-        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1)
-        if not any(tasks_query.stream()):
+        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1).stream()
+        if not any(tasks_query):
             print(f"Orphaned lead {lead.id} has no tasks. Resetting AFC.")
             lead.reference.update({"afc_step": 0})
             due_date = now + timedelta(days=1)

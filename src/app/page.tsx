@@ -9,6 +9,7 @@ import {
   updateDoc,
   query,
   orderBy,
+  where,
 } from "firebase/firestore";
 import { AlertTriangle, Badge, ListTodo } from "lucide-react";
 
@@ -35,7 +36,11 @@ export default function TasksPage() {
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+        const q = query(
+          collection(db, "tasks"),
+          where("completed", "==", false),
+          orderBy("createdAt", "desc")
+        );
         const querySnapshot = await getDocs(q);
         const tasksData = querySnapshot.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as Task)
@@ -130,10 +135,11 @@ export default function TasksPage() {
                     {task.nature === "Procedural" && (
                       <Checkbox
                         checked={task.completed}
-                        onClick={(e) => e.preventDefault()}
-                        onCheckedChange={(checked) =>
-                          handleMarkComplete(task.id, !!checked)
-                        }
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleMarkComplete(task.id, !task.completed)
+                        }}
                         className="mt-1"
                       />
                     )}
