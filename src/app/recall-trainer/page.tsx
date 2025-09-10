@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { collection, getDocs, query, where, limit } from "firebase/firestore";
-import { Brain, RotateCw, Check, X } from "lucide-radix";
+import { Brain, RotateCw } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { Lead } from "@/lib/types";

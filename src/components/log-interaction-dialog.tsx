@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { addDoc, collection } from "firebase/firestore";
-import { Calendar as CalendarIcon, ThumbsDown, ThumbsUp } from "lucide-radix";
+import { Calendar as CalendarIcon, ThumbsDown, ThumbsUp } from "lucide-react";
 import { format } from "date-fns";
 
 import { db } from "@/lib/firebase";
