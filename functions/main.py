@@ -125,7 +125,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     print(f"AFC reset for lead {lead_id}. New 1st follow-up task created.")
 
 
-@scheduler_fn.on_schedule(schedule="30 9,12,15,18 * * *", timezone="Asia/Dubai")
+@scheduler_fn.on_schedule(schedule="30 9,17 * * *", timezone="Asia/Dubai")
 def afcEngine(event: scheduler_fn.ScheduledEvent) -> None:
     """
     Safety net to initialize AFC for new leads or catch any orphaned Active leads.
