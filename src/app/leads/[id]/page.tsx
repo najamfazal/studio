@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import {
   doc,
   getDoc,
@@ -36,7 +36,8 @@ import { LogInteractionDialog } from "@/components/log-interaction-dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-export default function LeadDetailPage({ params }: { params: { id: string } }) {
+export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const [lead, setLead] = useState<Lead | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -292,7 +293,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
                                 ))}
                             </div>
                             <div className="flex gap-2">
-                                <Input value={insightInput} onChange={e => setInputInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()}/>
+                                <Input value={insightInput} onChange={e => setInsightInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()}/>
                                 <Button onClick={handleAddInsight}>Add</Button>
                             </div>
                         </div>
@@ -350,5 +351,3 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
     </div>
   );
 }
-
-    
