@@ -1,6 +1,8 @@
 # Python virtual environment
 functions/venv/
 
+functions/node_modules
+
 # Python compiled bytecode
 functions/__pycache__/
 
