@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { format, parseISO } from "date-fns";
+import Link from 'next/link';
 import {
   BrainCircuit,
   FilePenLine,
@@ -12,12 +12,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,11 +53,11 @@ export function LeadCard({
 
   return (
     <Card className="flex flex-col">
-      <CardHeader className="flex flex-row items-start justify-between">
-        <div className="flex-1">
-          <CardTitle className="text-xl">{lead.name}</CardTitle>
-          <CardDescription>Lead Contact</CardDescription>
-        </div>
+       <CardHeader className="flex flex-row items-start justify-between">
+        <Link href={`/leads/${lead.id}`} className="flex-1">
+            <CardTitle className="text-xl hover:underline">{lead.name}</CardTitle>
+            <CardDescription>{lead.status || 'Active'}</CardDescription>
+        </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
@@ -112,23 +106,6 @@ export function LeadCard({
           )}
           {isEnriching ? "Enriching..." : "Enrich with AI"}
         </Button>
-        {lead.additionalInformation && (
-          <Accordion type="single" collapsible>
-            <AccordionItem value="item-1">
-              <AccordionTrigger className="text-sm">
-                AI Generated Info
-              </AccordionTrigger>
-              <AccordionContent className="text-sm text-muted-foreground space-y-2">
-                <p>{lead.additionalInformation}</p>
-                {lead.lastEnriched && (
-                  <Badge variant="secondary">
-                    Last updated: {format(parseISO(lead.lastEnriched), "PPp")}
-                  </Badge>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        )}
       </CardFooter>
     </Card>
   );

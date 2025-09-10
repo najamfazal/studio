@@ -1,6 +1,6 @@
 import type {Metadata} from 'next';
 import Link from 'next/link';
-import { Home, ListChecks } from 'lucide-react';
+import { Home, ListChecks, Brain, UserCheck } from 'lucide-react';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
@@ -28,15 +28,29 @@ export default function RootLayout({
               href="/"
               className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
             >
-              <Home className="h-4 w-4 transition-all group-hover:scale-110" />
+              <ListChecks className="h-4 w-4 transition-all group-hover:scale-110" />
+              <span className="sr-only">Tasks</span>
+            </Link>
+            <Link
+              href="/leads"
+              className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+            >
+              <Home className="h-5 w-5" />
               <span className="sr-only">Leads</span>
             </Link>
             <Link
-              href="/tasks"
+              href="/follow-list"
               className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
             >
-              <ListChecks className="h-5 w-5" />
-              <span className="sr-only">Tasks</span>
+              <UserCheck className="h-5 w-5" />
+              <span className="sr-only">Follow List</span>
+            </Link>
+            <Link
+              href="/recall-trainer"
+              className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+            >
+              <Brain className="h-5 w-5" />
+              <span className="sr-only">Recall Trainer</span>
             </Link>
           </nav>
           <div className="flex-1">{children}</div>
