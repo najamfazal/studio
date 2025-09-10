@@ -38,7 +38,6 @@ export default function TasksPage() {
       try {
         const q = query(
           collection(db, "tasks"),
-          where("completed", "==", false),
           orderBy("createdAt", "desc")
         );
         const querySnapshot = await getDocs(q);
