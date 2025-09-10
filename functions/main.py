@@ -52,13 +52,11 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     # --- Shared Logic ---
     # 1. Mark open Interactive tasks as complete
     tasks_ref = db.collection("tasks")
-    open_interactive_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False)
+    open_interactive_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).where("nature", "==", "Interactive")
     open_interactive_tasks = open_interactive_tasks_query.stream()
     for task in open_interactive_tasks:
-        task_data = task.to_dict()
-        if task_data.get("nature") == "Interactive":
-            task.reference.update({"completed": True})
-            print(f"Completed interactive task {task.id} for lead {lead_id}")
+        task.reference.update({"completed": True})
+        print(f"Completed interactive task {task.id} for lead {lead_id}")
     
     # 2. Update last_interaction_date for all logs
     lead_ref.update({"last_interaction_date": firestore.SERVER_TIMESTAMP})
