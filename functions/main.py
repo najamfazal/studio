@@ -52,11 +52,13 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     # --- Shared Logic ---
     # 1. Mark open Interactive tasks as complete
     tasks_ref = db.collection("tasks")
-    open_interactive_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).where("nature", "==", "Interactive")
+    open_interactive_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False)
     open_interactive_tasks = open_interactive_tasks_query.stream()
     for task in open_interactive_tasks:
-        task.reference.update({"completed": True})
-        print(f"Completed interactive task {task.id} for lead {lead_id}")
+        task_data = task.to_dict()
+        if task_data.get("nature") == "Interactive":
+            task.reference.update({"completed": True})
+            print(f"Completed interactive task {task.id} for lead {lead_id}")
     
     # 2. Update last_interaction_date for all logs
     lead_ref.update({"last_interaction_date": firestore.SERVER_TIMESTAMP})
@@ -70,10 +72,10 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             lead_ref.update({"status": new_status, "afc_step": 0})
             print(f"Lead {lead_id} status set to {new_status}. Ending AFC process.")
             # Delete any pending follow-ups for this now-closed lead
-            pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("description", "like", "%. Follow-up").where("completed", "==", False)
-            pending_follow_ups = pending_follow_ups_query.stream()
-            for task in pending_follow_ups:
-                task.reference.delete()
+            pending_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
+            for task in pending_tasks_query:
+                 if "Follow-up" in task.to_dict().get("description", ""):
+                    task.reference.delete()
             return
             
         elif quick_log_type == "Unresponsive":
@@ -113,10 +115,11 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     
     # After any responsive log ("Unchanged" or Detailed), reset the AFC
     # 1. Delete any other pending "Follow-up" tasks to avoid duplicates
-    pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("description", "like", "%. Follow-up").where("completed", "==", False)
+    pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False)
     for task in pending_follow_ups_query.stream():
-        print(f"Deleting pending follow-up task {task.id} to reset AFC.")
-        task.reference.delete()
+        if "Follow-up" in task.to_dict().get("description", ""):
+            print(f"Deleting pending follow-up task {task.id} to reset AFC.")
+            task.reference.delete()
         
     # 2. Reset AFC step and create a new 1st follow-up task for tomorrow
     lead_ref.update({"afc_step": 0})
@@ -173,8 +176,8 @@ def relationshipEngine(event: scheduler_fn.ScheduledEvent) -> None:
         # Check if last interaction was more than 30 days ago
         if not last_interaction or last_interaction.replace(tzinfo=None) < thirty_days_ago:
             # Check if a "Reconnect" task already exists
-            reconnect_task_query = db.collection("tasks").where("leadId", "==", lead.id).where("description", "==", "Reconnect").where("completed", "==", False).limit(1)
-            if not any(reconnect_task_query.stream()):
+            reconnect_task_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False)
+            if not any(task.to_dict().get("description") == "Reconnect" for task in reconnect_task_query.stream()):
                  print(f"Creating Reconnect task for lead {lead.id}")
                  create_task(lead.id, lead_data['name'], "Reconnect", "Procedural")
 
