@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { LogInteractionDialog } from "@/components/log-interaction-dialog";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   const [lead, setLead] = useState<Lead | null>(null);
@@ -291,7 +292,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
                                 ))}
                             </div>
                             <div className="flex gap-2">
-                                <Input value={insightInput} onChange={e => setInsightInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()}/>
+                                <Input value={insightInput} onChange={e => setInputInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()}/>
                                 <Button onClick={handleAddInsight}>Add</Button>
                             </div>
                         </div>
@@ -349,3 +350,5 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
     </div>
   );
 }
+
+    
