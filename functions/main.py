@@ -1,4 +1,4 @@
-from firebase_functions import firestore_fn, options, pubsub_fn
+from firebase_functions import firestore_fn, options, scheduler_fn
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
 
@@ -52,7 +52,8 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     # --- Shared Logic ---
     # 1. Mark open Interactive tasks as complete
     tasks_ref = db.collection("tasks")
-    open_interactive_tasks = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).where("nature", "==", "Interactive").stream()
+    open_interactive_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).where("nature", "==", "Interactive")
+    open_interactive_tasks = open_interactive_tasks_query.stream()
     for task in open_interactive_tasks:
         task.reference.update({"completed": True})
         print(f"Completed interactive task {task.id} for lead {lead_id}")
@@ -69,7 +70,8 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             lead_ref.update({"status": new_status, "afc_step": 0})
             print(f"Lead {lead_id} status set to {new_status}. Ending AFC process.")
             # Delete any pending follow-ups for this now-closed lead
-            pending_follow_ups = tasks_ref.where("leadId", "==", lead_id).where("description", "like", "%. Follow-up").where("completed", "==", False).stream()
+            pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("description", "like", "%. Follow-up").where("completed", "==", False)
+            pending_follow_ups = pending_follow_ups_query.stream()
             for task in pending_follow_ups:
                 task.reference.delete()
             return
@@ -111,8 +113,8 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     
     # After any responsive log ("Unchanged" or Detailed), reset the AFC
     # 1. Delete any other pending "Follow-up" tasks to avoid duplicates
-    pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("description", "like", "%. Follow-up").where("completed", "==", False).stream()
-    for task in pending_follow_ups_query:
+    pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("description", "like", "%. Follow-up").where("completed", "==", False)
+    for task in pending_follow_ups_query.stream():
         print(f"Deleting pending follow-up task {task.id} to reset AFC.")
         task.reference.delete()
         
@@ -123,8 +125,8 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     print(f"AFC reset for lead {lead_id}. New 1st follow-up task created.")
 
 
-@pubsub_fn.on_schedule(schedule="every 1 hours")
-def afcEngine(event: pubsub_fn.CloudEvent) -> None:
+@scheduler_fn.on_schedule(schedule="every 1 hours")
+def afcEngine(event: scheduler_fn.ScheduledEvent) -> None:
     """
     Safety net to initialize AFC for new leads or catch any orphaned Active leads.
     """
@@ -133,28 +135,28 @@ def afcEngine(event: pubsub_fn.CloudEvent) -> None:
     one_day_ago = now - timedelta(days=1)
 
     # Find active leads with no interaction history (brand new)
-    new_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "==", None).stream()
-    for lead in new_leads_query:
-        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1).stream()
-        if not any(tasks_query):
+    new_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "==", None)
+    for lead in new_leads_query.stream():
+        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1)
+        if not any(tasks_query.stream()):
             print(f"New lead {lead.id} has no tasks. Initializing AFC.")
             lead.reference.update({"afc_step": 0})
             due_date = now + timedelta(days=1)
             create_task(lead.id, lead.to_dict()['name'], "1. Follow-up", "Interactive", due_date)
 
     # Find active leads who were missed by the system somehow
-    active_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "<", one_day_ago).stream()
-    for lead in active_leads_query:
-        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1).stream()
-        if not any(tasks_query):
+    active_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "<", one_day_ago)
+    for lead in active_leads_query.stream():
+        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1)
+        if not any(tasks_query.stream()):
             print(f"Orphaned lead {lead.id} has no tasks. Resetting AFC.")
             lead.reference.update({"afc_step": 0})
             due_date = now + timedelta(days=1)
             create_task(lead.id, lead.to_dict()['name'], "1. Follow-up", "Interactive", due_date)
 
 
-@pubsub_fn.on_schedule(schedule="every 24 hours")
-def relationshipEngine(event: pubsub_fn.CloudEvent) -> None:
+@scheduler_fn.on_schedule(schedule="every 24 hours")
+def relationshipEngine(event: scheduler_fn.ScheduledEvent) -> None:
     """
     Nurtures leads on the follow list by creating Reconnect tasks.
     """
@@ -162,17 +164,17 @@ def relationshipEngine(event: pubsub_fn.CloudEvent) -> None:
     now = datetime.now()
     thirty_days_ago = now - timedelta(days=30)
     
-    follow_leads = db.collection("leads").where("onFollowList", "==", True).stream()
+    follow_leads_query = db.collection("leads").where("onFollowList", "==", True)
 
-    for lead in follow_leads:
+    for lead in follow_leads_query.stream():
         lead_data = lead.to_dict()
         last_interaction = lead_data.get("last_interaction_date")
         
         # Check if last interaction was more than 30 days ago
         if not last_interaction or last_interaction.replace(tzinfo=None) < thirty_days_ago:
             # Check if a "Reconnect" task already exists
-            reconnect_task_query = db.collection("tasks").where("leadId", "==", lead.id).where("description", "==", "Reconnect").where("completed", "==", False).limit(1).stream()
-            if not any(reconnect_task_query):
+            reconnect_task_query = db.collection("tasks").where("leadId", "==", lead.id).where("description", "==", "Reconnect").where("completed", "==", False).limit(1)
+            if not any(reconnect_task_query.stream()):
                  print(f"Creating Reconnect task for lead {lead.id}")
                  create_task(lead.id, lead_data['name'], "Reconnect", "Procedural")
 
