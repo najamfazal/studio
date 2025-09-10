@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, use } from "react";
@@ -10,14 +11,13 @@ import {
   getDocs,
   orderBy,
   updateDoc,
-  writeBatch,
-  addDoc
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Lead, Interaction, Task } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Users, Brain, ToggleRight, X } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -30,11 +30,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { LogInteractionDialog } from "@/components/log-interaction-dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+
+// Helper function to safely convert Firestore Timestamps or strings to Date objects
+const toDate = (dateValue: any): Date | null => {
+  if (!dateValue) return null;
+  if (dateValue instanceof Timestamp) {
+    return dateValue.toDate();
+  }
+  if (typeof dateValue === 'string') {
+    const date = new Date(dateValue);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  return null;
+};
 
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
@@ -163,7 +177,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       updateField('insights', newInsights);
   };
 
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -186,6 +199,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       </div>
     );
   }
+  
+  const lastInteractionDate = toDate(lead.last_interaction_date);
 
   return (
     <div className="flex flex-col min-h-screen bg-background relative">
@@ -248,7 +263,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     <CardContent className="flex items-center gap-4">
                        <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'}>{lead.status}</Badge>
                        <p className="text-sm text-muted-foreground">
-                        Last interaction: {lead.last_interaction_date ? format(new Date(lead.last_interaction_date), 'PP') : 'Never'}
+                        Last interaction: {lastInteractionDate ? format(lastInteractionDate, 'PP') : 'Never'}
                        </p>
                     </CardContent>
                 </Card>
@@ -308,15 +323,18 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     <CardContent>
                        {interactions.length > 0 ? (
                            <div className="space-y-4">
-                               {interactions.map(interaction => (
-                                   <div key={interaction.id} className="p-3 rounded-md bg-muted/50">
-                                       <p className="font-semibold">
-                                        {format(new Date(interaction.createdAt), 'PPP p')}
-                                        {interaction.outcome && <Badge variant="secondary" className="ml-2">{interaction.outcome}</Badge>}
-                                       </p>
-                                       <p className="text-sm text-muted-foreground mt-1">{interaction.notes || 'Quick Log'}</p>
-                                   </div>
-                               ))}
+                               {interactions.map(interaction => {
+                                   const interactionDate = toDate(interaction.createdAt);
+                                   return (
+                                     <div key={interaction.id} className="p-3 rounded-md bg-muted/50">
+                                         <p className="font-semibold">
+                                          {interactionDate ? format(interactionDate, 'PPP p') : 'Invalid date'}
+                                          {interaction.outcome && <Badge variant="secondary" className="ml-2">{interaction.outcome}</Badge>}
+                                         </p>
+                                         <p className="text-sm text-muted-foreground mt-1">{interaction.notes || 'Quick Log'}</p>
+                                     </div>
+                                   );
+                               })}
                            </div>
                        ) : (
                            <p className="text-muted-foreground">No interactions logged yet.</p>
@@ -351,3 +369,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
