@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, use } from "react";
@@ -213,25 +212,22 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   return (
     <div className="flex flex-col min-h-screen bg-background relative">
        <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full">
           <SidebarTrigger className="sm:hidden" />
-          <Button variant="ghost" size="icon" className="sm:hidden" onClick={() => router.back()}>
-            <ArrowLeft />
-          </Button>
           <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
-            <Link href="/">
+            <Link href="/leads">
               <ArrowLeft />
             </Link>
           </Button>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight truncate">{lead.name}</h1>
-            <p className="text-sm text-muted-foreground truncate">{lead.email}</p>
+          <div className="flex-1 overflow-hidden">
+            <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
           </div>
-        </div>
-         <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0" >
-            <Star className={cn("mr-2 h-4 w-4", lead.onFollowList && "fill-yellow-400 text-yellow-500")}/>
-            {lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}
+          <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
+            <Star className={cn("h-4 w-4", lead.onFollowList && "fill-yellow-400 text-yellow-500", "sm:mr-2")}/>
+            <span className="hidden sm:inline">{lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}</span>
+            <span className="sr-only">Add to Follow List</span>
           </Button>
+        </div>
       </header>
 
       <main className="flex-1 p-4 sm:p-6 md:p-8 pb-24">
@@ -381,3 +377,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
