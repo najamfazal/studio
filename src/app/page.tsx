@@ -9,11 +9,11 @@ import {
   updateDoc,
   query,
   orderBy,
-  where,
+  Timestamp
 } from "firebase/firestore";
-import { AlertTriangle, Badge, ListTodo } from "lucide-react";
+import { AlertTriangle, Check, ListTodo } from "lucide-react";
+import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
 
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardDescription,
@@ -25,13 +25,36 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import type { Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { isPast } from "date-fns";
+
+// Helper to safely convert Firestore Timestamps or strings to Date objects
+const toDate = (dateValue: any): Date | null => {
+    if (!dateValue) return null;
+    if (dateValue instanceof Timestamp) {
+      return dateValue.toDate();
+    }
+    if (typeof dateValue === 'string') {
+      const date = new Date(dateValue);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+    // Handle Firestore Timestamp-like objects from server-side rendering
+    if (typeof dateValue === 'object' && dateValue.seconds) {
+        return new Timestamp(dateValue.seconds, dateValue.nanoseconds).toDate();
+    }
+    return null;
+  };
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filterOverdue, setFilterOverdue] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const { toast } = useToast();
+
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  }, []);
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -83,15 +106,24 @@ export default function TasksPage() {
     }
   };
 
-  const { overdueCount, visibleTasks } = useMemo(() => {
-    const incomplete = tasks.filter((task) => !task.completed);
-    const overdue = incomplete.filter(
-      (task) => task.dueDate && isPast(new Date(task.dueDate))
-    );
-    const overdueCount = overdue.length;
-    const visibleTasks = filterOverdue ? overdue : incomplete;
-    return { overdueCount, visibleTasks };
-  }, [tasks, filterOverdue]);
+  const visibleTasks = useMemo(() => {
+    return tasks.filter(task => {
+        if (task.completed) return false;
+        const dueDate = toDate(task.dueDate);
+        return dueDate && isSameDay(dueDate, selectedDate);
+    }).sort((a,b) => {
+        const dateA = toDate(a.dueDate) ?? new Date();
+        const dateB = toDate(b.dueDate) ?? new Date();
+        return dateA.getTime() - dateB.getTime();
+    });
+  }, [tasks, selectedDate]);
+
+  const getUrgencyColor = (dueDate: Date | null) => {
+    if (!dueDate) return 'border-l-gray-400';
+    if (isPast(dueDate) && !isToday(dueDate)) return 'border-l-red-500'; // Hot
+    if (isToday(dueDate)) return 'border-l-yellow-500'; // Warm
+    return 'border-l-blue-500'; // Cold
+  }
 
   if (isLoading) {
     return (
@@ -103,69 +135,80 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-3">
+      <header className="bg-card border-b p-4 sticky top-0 z-10">
+        <div className="flex items-center gap-3 mb-4">
           <ListTodo className="h-8 w-8 text-primary" />
           <h1 className="text-xl font-bold tracking-tight">My Tasks</h1>
         </div>
-        {overdueCount > 0 && (
-          <Badge
-            variant={filterOverdue ? "default" : "outline"}
-            className="cursor-pointer gap-2"
-            onClick={() => setFilterOverdue(!filterOverdue)}
-          >
-            <AlertTriangle className="h-4 w-4" />
-            <span>{overdueCount} Overdue</span>
-          </Badge>
-        )}
+        {/* Horizontal Date Selector */}
+        <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4">
+          {weekDays.map(day => (
+            <button key={day.toISOString()} onClick={() => setSelectedDate(day)} className={cn(
+                "flex flex-col items-center justify-center rounded-lg p-2 w-14 h-16 transition-colors duration-200",
+                isSameDay(selectedDate, day)
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted hover:bg-muted-foreground/20"
+            )}>
+              <span className="text-xs font-medium">{format(day, 'E')}</span>
+              <span className="text-lg font-bold">{format(day, 'd')}</span>
+            </button>
+          ))}
+        </div>
       </header>
 
-      <main className="flex-1 p-4 sm:p-6 md:p-8">
+      <main className="flex-1 p-4 sm:p-6">
         {visibleTasks.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {visibleTasks.map((task) => (
-              <Link href={`/leads/${task.leadId}`} key={task.id}>
-                <Card
-                  className={cn(
-                    "flex flex-col h-full transition-shadow hover:shadow-md"
-                  )}
-                >
-                  <CardHeader className="flex-row items-start gap-4">
-                    {task.nature === "Procedural" && (
-                      <Checkbox
-                        checked={task.completed}
+          <div className="space-y-3">
+            {visibleTasks.map((task) => {
+              const dueDate = toDate(task.dueDate);
+              const urgencyClass = getUrgencyColor(dueDate);
+              
+              return (
+                <Link href={`/leads/${task.leadId}`} key={task.id}>
+                  <Card
+                    className={cn(
+                      "flex items-center p-3 transition-shadow hover:shadow-md border-l-4",
+                      urgencyClass
+                    )}
+                  >
+                    <div className="flex-1">
+                      <p className="font-semibold text-base leading-tight">{task.description}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {task.leadName}
+                      </p>
+                    </div>
+                    {task.nature === "Procedural" ? (
+                      <button
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           handleMarkComplete(task.id, !task.completed)
                         }}
-                        className="mt-1"
-                      />
+                        className={cn(
+                          "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors",
+                          task.completed ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/50 hover:border-primary"
+                        )}
+                      >
+                       {task.completed && <Check className="h-5 w-5" />}
+                      </button>
+                    ) : (
+                        <div className="text-sm text-muted-foreground font-medium px-2">
+                            {dueDate ? format(dueDate, 'h:mm a') : ''}
+                        </div>
                     )}
-                    <div className="flex-1">
-                      <CardTitle>{task.description}</CardTitle>
-                      <CardDescription>
-                        For lead: {task.leadName}
-                      </CardDescription>
-                       {task.dueDate && (
-                        <CardDescription>
-                          Due: {new Date(task.dueDate).toLocaleDateString()}
-                        </CardDescription>
-                      )}
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
-            ))}
+                  </Card>
+                </Link>
+              )
+            })}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
+          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[50vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
-              All tasks completed!
+              No tasks for this day!
             </h2>
             <p className="mt-2 max-w-xs">
-             {filterOverdue ? "No overdue tasks." : "Great job clearing your list!"}
+             Select another date or enjoy your day off.
             </p>
           </div>
         )}
