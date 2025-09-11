@@ -17,12 +17,11 @@ import { db } from "@/lib/firebase";
 import type { Lead, Interaction, Task } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -34,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LogInteractionDialog } from "@/components/log-interaction-dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useRouter } from "next/navigation";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
@@ -201,7 +200,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           The lead you are looking for does not exist or has been deleted.
         </p>
         <Button asChild className="mt-4">
-            <Link href="/"><ArrowLeft className="mr-2"/> Back to Tasks</Link>
+            <Link href="/leads"><ArrowLeft className="mr-2"/> Back to Leads</Link>
         </Button>
       </div>
     );
@@ -211,9 +210,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   return (
     <div className="flex flex-col min-h-screen bg-background relative">
-       <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-3 w-full">
-          <SidebarTrigger className="sm:hidden" />
+       <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 gap-3">
+          <SidebarTrigger />
           <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
             <Link href="/leads">
               <ArrowLeft />
@@ -223,14 +221,13 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
           </div>
           <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
-            <Star className={cn("h-4 w-4", lead.onFollowList && "fill-yellow-400 text-yellow-500", "sm:mr-2")}/>
+            <Star className={cn("h-4 w-4", lead.onFollowList && "fill-current text-yellow-400", "sm:mr-2")}/>
             <span className="hidden sm:inline">{lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}</span>
             <span className="sr-only">Add to Follow List</span>
           </Button>
-        </div>
       </header>
 
-      <main className="flex-1 p-4 sm:p-6 md:p-8 pb-24">
+      <main className="flex-1 p-4 pb-24">
         <Tabs defaultValue="summary">
           <TabsList className="mb-4">
             <TabsTrigger value="summary">Summary</TabsTrigger>
@@ -238,37 +235,36 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </TabsList>
           
           <TabsContent value="summary">
-             <div className="grid gap-6">
+             <div className="grid gap-4">
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Commitment Snapshot</CardTitle>
-                        <CardDescription>Key details about the potential enrollment.</CardDescription>
+                    <CardHeader className="p-4">
+                        <CardTitle className="text-lg">Commitment Snapshot</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid sm:grid-cols-2 gap-4">
+                    <CardContent className="grid sm:grid-cols-2 gap-4 p-4 pt-0 text-sm">
                         <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Course</p>
+                            <p className="font-medium text-muted-foreground">Course</p>
                             <p>{lead.commitmentSnapshot?.course || 'Not specified'}</p>
                         </div>
                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Price</p>
+                            <p className="font-medium text-muted-foreground">Price</p>
                             <p>{lead.commitmentSnapshot?.price || 'Not specified'}</p>
                         </div>
                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Schedule</p>
+                            <p className="font-medium text-muted-foreground">Schedule</p>
                             <p>{lead.commitmentSnapshot?.schedule || 'Not specified'}</p>
                         </div>
                         <div className="space-y-1 sm:col-span-2">
-                            <p className="text-sm font-medium text-muted-foreground">Key Notes</p>
-                            <p>{lead.commitmentSnapshot?.keyNotes || 'None'}</p>
+                            <p className="font-medium text-muted-foreground">Key Notes</p>
+                            <p className="text-muted-foreground/80">{lead.commitmentSnapshot?.keyNotes || 'None'}</p>
                         </div>
                     </CardContent>
                 </Card>
 
                  <Card>
-                    <CardHeader>
-                        <CardTitle>Lead Status</CardTitle>
+                    <CardHeader className="p-4">
+                        <CardTitle className="text-lg">Lead Status</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex items-center gap-4">
+                    <CardContent className="flex items-center gap-4 p-4 pt-0">
                        <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'}>{lead.status}</Badge>
                        <p className="text-sm text-muted-foreground">
                         Last interaction: {lastInteractionDate ? format(lastInteractionDate, 'PP') : 'Never'}
@@ -279,17 +275,14 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </TabsContent>
 
           <TabsContent value="history">
-             <div className="grid gap-6">
-                 {/* Traits & Insights */}
+             <div className="grid gap-4">
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Intel</CardTitle>
-                        <CardDescription>Manually added traits and insights about the lead.</CardDescription>
+                    <CardHeader className="p-4">
+                        <CardTitle className="text-lg">Intel</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Traits */}
+                    <CardContent className="space-y-4 p-4 pt-0">
                         <div>
-                            <h3 className="font-semibold mb-2 flex items-center gap-2"><Brain className="text-primary"/> Traits</h3>
+                            <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm"><Brain className="text-primary h-4 w-4"/> Traits</h3>
                              <div className="flex flex-wrap gap-2 mb-2">
                                 {traits.map(trait => (
                                     <Badge key={trait} variant="outline" className="flex items-center gap-1">
@@ -299,14 +292,13 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                 ))}
                             </div>
                             <div className="flex gap-2">
-                                <Input value={traitInput} onChange={e => setTraitInput(e.target.value)} placeholder="Add a trait..." onKeyDown={e => e.key === 'Enter' && handleAddTrait()}/>
-                                <Button onClick={handleAddTrait}>Add</Button>
+                                <Input value={traitInput} onChange={e => setTraitInput(e.target.value)} placeholder="Add a trait..." onKeyDown={e => e.key === 'Enter' && handleAddTrait()} className="h-9 text-sm"/>
+                                <Button onClick={handleAddTrait} size="sm">Add</Button>
                             </div>
                         </div>
                         <Separator />
-                        {/* Insights */}
                          <div>
-                            <h3 className="font-semibold mb-2 flex items-center gap-2"><ToggleRight className="text-primary"/> Insights</h3>
+                            <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm"><ToggleRight className="text-primary h-4 w-4"/> Insights</h3>
                              <div className="flex flex-wrap gap-2 mb-2">
                                 {insights.map(insight => (
                                     <Badge key={insight} variant="outline" className="flex items-center gap-1">
@@ -316,36 +308,35 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                 ))}
                             </div>
                             <div className="flex gap-2">
-                                <Input value={insightInput} onChange={e => setInsightInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()}/>
-                                <Button onClick={handleAddInsight}>Add</Button>
+                                <Input value={insightInput} onChange={e => setInsightInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()} className="h-9 text-sm"/>
+                                <Button onClick={handleAddInsight} size="sm">Add</Button>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
-
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Interaction History</CardTitle>
+                    <CardHeader className="p-4">
+                        <CardTitle className="text-lg">Interaction History</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-4 pt-0">
                        {interactions.length > 0 ? (
-                           <div className="space-y-4">
+                           <div className="space-y-3">
                                {interactions.map(interaction => {
                                    const interactionDate = toDate(interaction.createdAt);
                                    return (
-                                     <div key={interaction.id} className="p-3 rounded-md bg-muted/50">
+                                     <div key={interaction.id} className="p-3 rounded-md bg-muted/50 text-sm">
                                          <p className="font-semibold">
-                                          {interactionDate ? format(interactionDate, 'PPP p') : 'Invalid date'}
+                                          {interactionDate ? format(interactionDate, 'PP p') : 'Invalid date'}
                                           {interaction.outcome && <Badge variant="secondary" className="ml-2">{interaction.outcome}</Badge>}
                                          </p>
-                                         <p className="text-sm text-muted-foreground mt-1">{interaction.notes || 'Quick Log'}</p>
+                                         <p className="text-muted-foreground mt-1">{interaction.notes || 'Quick Log'}</p>
                                      </div>
                                    );
                                })}
                            </div>
                        ) : (
-                           <p className="text-muted-foreground">No interactions logged yet.</p>
+                           <p className="text-sm text-muted-foreground">No interactions logged yet.</p>
                        )}
                     </CardContent>
                 </Card>
@@ -377,5 +368,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    
