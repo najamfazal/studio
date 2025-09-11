@@ -212,10 +212,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     <div className="flex flex-col min-h-screen bg-background relative">
        <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 gap-3">
           <SidebarTrigger />
-          <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
-            <Link href="/leads">
-              <ArrowLeft />
-            </Link>
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="hidden sm:inline-flex">
+            <ArrowLeft />
           </Button>
           <div className="flex-1 overflow-hidden">
             <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
@@ -227,9 +225,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </Button>
       </header>
 
-      <main className="flex-1 p-4 pb-24">
+      <main className="flex-1 p-2 sm:p-4 pb-24">
         <Tabs defaultValue="summary">
-          <TabsList className="mb-4">
+          <TabsList className="mb-2">
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="history">History & Intel</TabsTrigger>
           </TabsList>
@@ -253,7 +251,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             <p className="font-medium text-muted-foreground">Schedule</p>
                             <p>{lead.commitmentSnapshot?.schedule || 'Not specified'}</p>
                         </div>
-                        <div className="space-y-1 sm:col-span-2">
+                        <div className="space-y-1">
                             <p className="font-medium text-muted-foreground">Key Notes</p>
                             <p className="text-muted-foreground/80">{lead.commitmentSnapshot?.keyNotes || 'None'}</p>
                         </div>
@@ -293,7 +291,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             </div>
                             <div className="flex gap-2">
                                 <Input value={traitInput} onChange={e => setTraitInput(e.target.value)} placeholder="Add a trait..." onKeyDown={e => e.key === 'Enter' && handleAddTrait()} className="h-9 text-sm"/>
-                                <Button onClick={handleAddTrait} size="sm">Add</Button>
+                                <Button onClick={handleAddTrait} size="icon" className="sm:w-auto sm:px-4">
+                                  <Plus className="sm:mr-2"/>
+                                  <span className="sr-only sm:not-sr-only">Add</span>
+                                </Button>
                             </div>
                         </div>
                         <Separator />
@@ -309,7 +310,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             </div>
                             <div className="flex gap-2">
                                 <Input value={insightInput} onChange={e => setInsightInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()} className="h-9 text-sm"/>
-                                <Button onClick={handleAddInsight} size="sm">Add</Button>
+                                <Button onClick={handleAddInsight} size="icon" className="sm:w-auto sm:px-4">
+                                   <Plus className="sm:mr-2"/>
+                                  <span className="sr-only sm:not-sr-only">Add</span>
+                                </Button>
                             </div>
                         </div>
                     </CardContent>
@@ -368,3 +372,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
