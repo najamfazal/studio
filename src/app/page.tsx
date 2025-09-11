@@ -181,13 +181,13 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-background sm:pl-0 pl-12">
       <header className="bg-card border-b p-4 sticky top-0 z-10">
         <div className="flex items-center gap-3 mb-4">
           <ListTodo className="h-8 w-8 text-primary" />
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
         </div>
-        <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4">
+        <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4 hide-scrollbar">
           {weekDays.map((day) => (
             <button
               key={day.toISOString()}
@@ -281,4 +281,3 @@ export default function TasksPage() {
     </div>
   );
 }
-

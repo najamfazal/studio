@@ -29,14 +29,6 @@
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
   .dark {
     --background: 240 10% 3.9%;
@@ -63,14 +55,6 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -81,23 +65,30 @@
   body {
     @apply bg-background text-foreground;
   }
+  .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+  }
+  .hide-scrollbar {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+  }
 }
 
 @layer utilities {
   .loader-hot {
-    border-bottom-color: #ef4444; /* red-500 */
+    background-color: #ef4444; /* red-500 */
     animation: loader-progress 1.5s infinite;
   }
   .loader-warm {
-    border-bottom-color: #eab308; /* yellow-500 */
+    background-color: #eab308; /* yellow-500 */
     animation: loader-progress 1.5s infinite;
   }
   .loader-cold {
-    border-bottom-color: #3b82f6; /* blue-500 */
+    background-color: #3b82f6; /* blue-500 */
     animation: loader-progress 1.5s infinite;
   }
   .loader-neutral {
-     border-bottom-color: #a1a1aa; /* gray-400 */
+     background-color: #a1a1aa; /* gray-400 */
     animation: loader-progress 1.5s infinite;
   }
 
