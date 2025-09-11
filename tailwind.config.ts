@@ -88,10 +88,16 @@ export default {
             height: '0',
           },
         },
+        loader: {
+          '0%': { width: '0%', left: '0' },
+          '50%': { width: '100%', left: '0' },
+          '100%': { width: '0%', left: '100%' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'loader': 'loader 1.5s infinite',
       },
     },
   },

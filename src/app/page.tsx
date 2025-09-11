@@ -8,8 +8,9 @@ import {
   doc,
   updateDoc,
   query,
-  orderBy,
-  Timestamp
+  where,
+  Timestamp,
+  orderBy
 } from "firebase/firestore";
 import { AlertTriangle, Check, ListTodo } from "lucide-react";
 import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
@@ -49,6 +50,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [activeTask, setActiveTask] = useState<string | null>(null);
   const { toast } = useToast();
 
   const weekDays = useMemo(() => {
@@ -108,7 +110,6 @@ export default function TasksPage() {
 
   const visibleTasks = useMemo(() => {
     return tasks.filter(task => {
-        if (task.completed) return false;
         const dueDate = toDate(task.dueDate);
         return dueDate && isSameDay(dueDate, selectedDate);
     }).sort((a,b) => {
@@ -117,12 +118,14 @@ export default function TasksPage() {
         return dateA.getTime() - dateB.getTime();
     });
   }, [tasks, selectedDate]);
+  
+  type Urgency = 'hot' | 'warm' | 'cold' | 'neutral';
 
-  const getUrgencyColor = (dueDate: Date | null) => {
-    if (!dueDate) return 'border-l-gray-400';
-    if (isPast(dueDate) && !isToday(dueDate)) return 'border-l-red-500'; // Hot
-    if (isToday(dueDate)) return 'border-l-yellow-500'; // Warm
-    return 'border-l-blue-500'; // Cold
+  const getUrgency = (dueDate: Date | null): { class: string, colorClass: string, name: Urgency } => {
+    if (!dueDate) return { class: 'border-l-gray-400', colorClass: 'loader-neutral', name: 'neutral' };
+    if (isPast(dueDate) && !isToday(dueDate)) return { class: 'border-l-red-500', colorClass: 'loader-hot', name: 'hot' };
+    if (isToday(dueDate)) return { class: 'border-l-yellow-500', colorClass: 'loader-warm', name: 'warm' };
+    return { class: 'border-l-blue-500', colorClass: 'loader-cold', name: 'cold' };
   }
 
   if (isLoading) {
@@ -140,7 +143,6 @@ export default function TasksPage() {
           <ListTodo className="h-8 w-8 text-primary" />
           <h1 className="text-xl font-bold tracking-tight">My Tasks</h1>
         </div>
-        {/* Horizontal Date Selector */}
         <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4">
           {weekDays.map(day => (
             <button key={day.toISOString()} onClick={() => setSelectedDate(day)} className={cn(
@@ -161,43 +163,52 @@ export default function TasksPage() {
           <div className="space-y-3">
             {visibleTasks.map((task) => {
               const dueDate = toDate(task.dueDate);
-              const urgencyClass = getUrgencyColor(dueDate);
-              
+              const { class: urgencyClass, colorClass: loaderColorClass } = getUrgency(dueDate);
+              const isNavigating = activeTask === task.id;
+
               return (
-                <Link href={`/leads/${task.leadId}`} key={task.id}>
-                  <Card
-                    className={cn(
-                      "flex items-center p-3 transition-shadow hover:shadow-md border-l-4",
-                      urgencyClass
-                    )}
-                  >
-                    <div className="flex-1">
-                      <p className="font-semibold text-base leading-tight">{task.description}</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {task.leadName}
-                      </p>
-                    </div>
-                    {task.nature === "Procedural" ? (
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleMarkComplete(task.id, !task.completed)
-                        }}
-                        className={cn(
-                          "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors",
-                          task.completed ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/50 hover:border-primary"
-                        )}
-                      >
-                       {task.completed && <Check className="h-5 w-5" />}
-                      </button>
-                    ) : (
-                        <div className="text-sm text-muted-foreground font-medium px-2">
-                            {dueDate ? format(dueDate, 'h:mm a') : ''}
-                        </div>
-                    )}
-                  </Card>
-                </Link>
+                 <div key={task.id} className="relative">
+                  <Link href={`/leads/${task.leadId}`} onClick={() => setActiveTask(task.id)} legacyBehavior>
+                    <a
+                      className={cn(
+                        "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
+                        "border-l-4",
+                        urgencyClass
+                      )}
+                    >
+                      <Card className="border-none shadow-none bg-transparent">
+                          <div className="flex items-center p-3">
+                            <div className="flex-1">
+                              <p className="font-semibold text-base leading-tight">{task.description}</p>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {task.leadName}
+                              </p>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if(!isNavigating) handleMarkComplete(task.id, !task.completed)
+                              }}
+                              disabled={isNavigating}
+                              className={cn(
+                                "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors",
+                                task.completed ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/50 hover:border-primary"
+                              )}
+                            >
+                            {task.completed && <Check className="h-5 w-5" />}
+                            </button>
+                          </div>
+                      </Card>
+                    </a>
+                  </Link>
+                   {isNavigating && (
+                      <div className={cn(
+                        "absolute bottom-0 h-1 w-0 rounded-full",
+                        loaderColorClass
+                      )}></div>
+                   )}
+                </div>
               )
             })}
           </div>
