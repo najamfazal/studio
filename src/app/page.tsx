@@ -13,7 +13,7 @@ import {
   orderBy,
   where,
 } from "firebase/firestore";
-import { AlertTriangle, Check, ListTodo } from "lucide-react";
+import { AlertTriangle, Check, ListTodo, Menu } from "lucide-react";
 import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
 
 import {
@@ -189,10 +189,8 @@ export default function TasksPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-4 sticky top-0 z-10">
         <div className="flex items-center gap-3 mb-4">
-          <SidebarTrigger className="sm:hidden -ml-2">
-            <ListTodo className="h-8 w-8 text-primary" />
-          </SidebarTrigger>
-          <div className="hidden sm:flex items-center gap-3">
+          <SidebarTrigger className="sm:hidden" />
+           <div className="hidden sm:flex items-center gap-3">
              <ListTodo className="h-8 w-8 text-primary" />
              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
           </div>

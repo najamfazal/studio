@@ -25,9 +25,10 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased h-full">
         <SidebarProvider>
-          <Sidebar>
+          <div className="flex min-h-screen w-full">
+            <Sidebar />
             <div className="flex-1 w-full">{children}</div>
-          </Sidebar>
+          </div>
         </SidebarProvider>
         <Toaster />
       </body>

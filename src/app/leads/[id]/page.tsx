@@ -36,6 +36,7 @@ import { LogInteractionDialog } from "@/components/log-interaction-dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useRouter } from "next/navigation";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -49,11 +50,16 @@ const toDate = (dateValue: any): Date | null => {
       return date;
     }
   }
+  // Handle Firestore Timestamp-like objects from server-side rendering
+  if (typeof dateValue === "object" && dateValue.seconds) {
+    return new Timestamp(dateValue.seconds, dateValue.nanoseconds).toDate();
+  }
   return null;
 };
 
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
+  const router = useRouter();
   const [lead, setLead] = useState<Lead | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -208,9 +214,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     <div className="flex flex-col min-h-screen bg-background relative">
        <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
-           <SidebarTrigger className="sm:hidden -ml-2">
+          <SidebarTrigger className="sm:hidden" />
+          <Button variant="ghost" size="icon" className="sm:hidden" onClick={() => router.back()}>
             <ArrowLeft />
-          </SidebarTrigger>
+          </Button>
           <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
             <Link href="/">
               <ArrowLeft />

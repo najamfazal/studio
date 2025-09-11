@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Home, ListChecks, Brain, UserCheck, PanelLeft } from 'lucide-react'
+import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu } from 'lucide-react'
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -16,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { Logo } from "../icons"
 
 const sidebarItems = [
     { href: '/', icon: ListChecks, label: 'Tasks' },
@@ -56,42 +57,47 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 const Sidebar = React.forwardRef<
     HTMLDivElement,
     React.ComponentProps<"div">
->(({ className, children, ...props }, ref) => {
+>(({ className, ...props }, ref) => {
     const { isMobile } = useSidebar();
+
+    if (isMobile) {
+        return <MobileSidebar />
+    }
+
     return (
-        <div className={cn("flex min-h-screen w-full", className)} ref={ref} {...props}>
-            {isMobile ? <MobileSidebar /> : <DesktopSidebar />}
-            {children}
-        </div>
+        <nav className={cn("hidden sm:flex flex-col items-center gap-4 border-r bg-card px-2 sm:px-4 py-8", className)} ref={ref} {...props}>
+            <TooltipProvider>
+                <Link href="/" className="mb-4">
+                  <Logo className="h-8 w-8 text-primary" />
+                </Link>
+                {sidebarItems.map(item => (
+                    <DesktopSidebarItem key={item.href} {...item} />
+                ))}
+            </TooltipProvider>
+        </nav>
     )
 })
 Sidebar.displayName = "Sidebar"
 
 
-function DesktopSidebar() {
+function DesktopSidebarItem({ href, icon: Icon, label }: typeof sidebarItems[number]) {
   const pathname = usePathname();
   return (
-    <nav className="hidden sm:flex flex-col items-center gap-4 border-r bg-card px-2 sm:px-4 py-8">
-        <TooltipProvider>
-            {sidebarItems.map(item => (
-                <Tooltip key={item.href} delayDuration={0}>
-                    <TooltipTrigger asChild>
-                        <Link
-                            href={item.href}
-                            className={cn(
-                                "group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
-                                pathname === item.href && "bg-primary text-primary-foreground hover:text-primary-foreground"
-                            )}
-                        >
-                            <item.icon className="h-5 w-5" />
-                            <span className="sr-only">{item.label}</span>
-                        </Link>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{item.label}</TooltipContent>
-                </Tooltip>
-            ))}
-        </TooltipProvider>
-    </nav>
+    <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild>
+            <Link
+                href={href}
+                className={cn(
+                    "group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
+                    pathname === href && "bg-primary text-primary-foreground hover:text-primary-foreground"
+                )}
+            >
+                <Icon className="h-5 w-5" />
+                <span className="sr-only">{label}</span>
+            </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -101,25 +107,21 @@ function MobileSidebar() {
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetContent side="left" className="sm:max-w-xs p-0 bg-card">
-                 <SheetHeader>
+                 <SheetHeader className="p-4 border-b">
+                    <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
+                        <Logo className="h-8 w-8 text-primary" />
+                        <span className="font-bold text-lg">LeadTrack</span>
+                    </Link>
                     <SheetTitle className="sr-only">Main Menu</SheetTitle>
                 </SheetHeader>
-                <nav className="flex flex-col gap-6 text-lg font-medium p-6">
-                    <Link
-                        href="/"
-                        className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-9 md:w-9 md:text-base"
-                        onClick={() => setOpen(false)}
-                    >
-                        <ListChecks className="h-5 w-5 transition-all group-hover:scale-110" />
-                        <span className="sr-only">Tasks</span>
-                    </Link>
+                <nav className="flex flex-col gap-2 text-lg font-medium p-4">
                     {sidebarItems.map(item => (
                         <Link
                             key={item.href}
                             href={item.href}
                             className={cn(
-                                "flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground",
-                                pathname === item.href && "text-foreground"
+                                "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
+                                pathname === item.href && "bg-muted text-foreground"
                             )}
                             onClick={() => setOpen(false)}
                         >
@@ -135,8 +137,8 @@ function MobileSidebar() {
 
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button>
->(({ className, children, ...props }, ref) => {
+  Omit<React.ComponentProps<typeof Button>, "children">
+>(({ className, ...props }, ref) => {
   const { setOpen } = useSidebar()
 
   return (
@@ -148,7 +150,7 @@ const SidebarTrigger = React.forwardRef<
       onClick={() => setOpen(true)}
       {...props}
     >
-      {children}
+      <Menu className="h-5 w-5"/>
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

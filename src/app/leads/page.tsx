@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Users2 } from "lucide-react";
+import { Plus, Users2, Menu } from "lucide-react";
 import {
   collection,
   addDoc,
@@ -23,6 +23,7 @@ import { enrichLeadAction } from "@/app/actions";
 import { db } from "@/lib/firebase";
 import type { Lead } from "@/lib/types";
 import type { LeadFormValues } from "@/lib/schemas";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -186,7 +187,8 @@ export default function LeadsPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <Logo className="h-8 w-8 text-primary" />
+          <SidebarTrigger className="sm:hidden" />
+          <Logo className="h-8 w-8 text-primary hidden sm:block" />
           <h1 className="text-xl font-bold tracking-tight">All Leads</h1>
         </div>
         <Button onClick={handleAddClick}>
