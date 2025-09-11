@@ -9,7 +9,7 @@ import { Home, ListChecks, Brain, UserCheck, PanelLeft } from 'lucide-react'
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
   Tooltip,
   TooltipContent,
@@ -101,6 +101,9 @@ function MobileSidebar() {
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetContent side="left" className="sm:max-w-xs p-0 bg-card">
+                 <SheetHeader>
+                    <SheetTitle className="sr-only">Main Menu</SheetTitle>
+                </SheetHeader>
                 <nav className="flex flex-col gap-6 text-lg font-medium p-6">
                     <Link
                         href="/"
