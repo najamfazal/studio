@@ -24,6 +24,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -267,6 +268,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </div>
           <div className="flex-1 overflow-hidden">
             <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
+            <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'} className="mt-1">{lead.status}</Badge>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             <Button onClick={handleEditClick} variant="outline" size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2">
@@ -292,10 +294,13 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           <TabsContent value="summary">
              <div className="grid gap-2">
                 <Card>
-                    <CardHeader className="p-4">
+                    <CardHeader className="p-4 pb-2">
                         <CardTitle className="text-lg">Snapshot</CardTitle>
+                         <CardDescription className="text-xs">
+                          Last interaction: {lastInteractionDate ? format(lastInteractionDate, 'PP') : 'Never'}
+                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-2 gap-4 p-4 pt-0 text-sm">
+                    <CardContent className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 pt-2 text-sm">
                         <div className="space-y-1">
                             <p className="font-medium text-muted-foreground text-xs">Course</p>
                             <p>{lead.commitmentSnapshot?.course || 'Not specified'}</p>
@@ -312,18 +317,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             <p className="font-medium text-muted-foreground text-xs">Key Notes</p>
                             <p className="text-muted-foreground/80">{lead.commitmentSnapshot?.keyNotes || 'None'}</p>
                         </div>
-                    </CardContent>
-                </Card>
-
-                 <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="text-lg">Lead Status</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex items-center gap-4 p-4 pt-0">
-                       <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'}>{lead.status}</Badge>
-                       <p className="text-sm text-muted-foreground">
-                        Last interaction: {lastInteractionDate ? format(lastInteractionDate, 'PP') : 'Never'}
-                       </p>
                     </CardContent>
                 </Card>
              </div>
@@ -435,5 +428,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    

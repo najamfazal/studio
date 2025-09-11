@@ -67,6 +67,8 @@ export function LeadDialog({
     onSave(values);
   };
 
+  const isSubmitting = form.formState.isSubmitting;
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[425px]">
@@ -144,10 +146,10 @@ export function LeadDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting
-                  ? "Saving..."
-                  : "Save"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting
+                  ? (leadToEdit ? "Updating..." : "Saving...")
+                  : (leadToEdit ? "Update" : "Save")}
               </Button>
             </DialogFooter>
           </form>

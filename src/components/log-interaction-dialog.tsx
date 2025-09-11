@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -142,7 +143,7 @@ export function LogInteractionDialog({
                 onClick={() => handleQuickLog(value)}
                 disabled={isSubmitting}
               >
-                {label}
+                {isSubmitting ? 'Logging...' : label}
               </Button>
             ))}
           </div>
@@ -218,6 +219,7 @@ export function LogInteractionDialog({
             type="button"
             variant="outline"
             onClick={() => setIsOpen(false)}
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
