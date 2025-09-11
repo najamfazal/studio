@@ -205,7 +205,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const lastInteractionDate = toDate(lead.last_interaction_date);
 
   return (
-    <div className="flex flex-col min-h-screen bg-background relative sm:pl-0 pl-14">
+    <div className="flex flex-col min-h-screen bg-background relative">
        <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
            <SidebarTrigger className="sm:hidden -ml-2">

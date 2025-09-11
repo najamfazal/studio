@@ -186,7 +186,7 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background sm:pl-0 pl-14">
+    <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-4 sticky top-0 z-10">
         <div className="flex items-center gap-3 mb-4">
           <SidebarTrigger className="sm:hidden -ml-2">
