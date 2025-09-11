@@ -17,7 +17,7 @@ import { db } from "@/lib/firebase";
 import type { Lead, Interaction, Task } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -33,8 +33,10 @@ import { useToast } from "@/hooks/use-toast";
 import { LogInteractionDialog } from "@/components/log-interaction-dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useRouter } from "next/navigation";
+import { LeadDialog } from "@/components/lead-dialog";
+import type { LeadFormValues } from "@/lib/schemas";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -63,6 +65,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
   const [traits, setTraits] = useState<string[]>([]);
   const [insights, setInsights] = useState<string[]>([]);
@@ -142,6 +145,51 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     }
   };
 
+  const handleEditClick = () => {
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveLead = async (values: LeadFormValues) => {
+    if (!lead) return;
+    try {
+      const leadRef = doc(db, "leads", lead.id);
+      
+      const { course, ...leadDetails } = values;
+      const snapshotUpdate = { 'commitmentSnapshot.course': course };
+      
+      await updateDoc(leadRef, {
+        ...leadDetails,
+        ...snapshotUpdate
+      });
+
+      setLead(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          ...leadDetails,
+          commitmentSnapshot: {
+            ...prev.commitmentSnapshot,
+            course,
+          }
+        }
+      });
+      
+      toast({
+        title: "Lead Updated",
+        description: "The lead's details have been saved.",
+      });
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      console.error("Error saving lead:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save lead.",
+      });
+    }
+  };
+
+
   const updateField = async (fieldName: 'traits' | 'insights', value: string[]) => {
       if (!lead) return;
       try {
@@ -210,49 +258,56 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   return (
     <div className="flex flex-col min-h-screen bg-background relative">
-       <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 gap-3">
-          <SidebarTrigger />
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="hidden sm:inline-flex">
+       <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 gap-2">
+          <SidebarTrigger className="sm:hidden" />
+           <Button variant="ghost" size="icon" onClick={() => router.back()} className="hidden sm:inline-flex">
             <ArrowLeft />
           </Button>
           <div className="flex-1 overflow-hidden">
             <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
           </div>
-          <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
-            <Star className={cn("h-4 w-4", lead.onFollowList && "fill-current text-yellow-400", "sm:mr-2")}/>
-            <span className="hidden sm:inline">{lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}</span>
-            <span className="sr-only">Add to Follow List</span>
-          </Button>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Button onClick={handleEditClick} variant="outline" size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2">
+                <FilePenLine className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Edit</span>
+                <span className="sr-only">Edit Lead</span>
+            </Button>
+            <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
+              <Star className={cn("h-4 w-4", lead.onFollowList && "fill-current text-yellow-400", "sm:mr-2")}/>
+              <span className="hidden sm:inline">{lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}</span>
+              <span className="sr-only">Add to Follow List</span>
+            </Button>
+          </div>
       </header>
 
       <main className="flex-1 p-2 sm:p-4 pb-24">
-        <Tabs defaultValue="summary">
+        <Tabs defaultValue="summary" className="mt-0">
           <TabsList className="mb-2">
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="history">History & Intel</TabsTrigger>
           </TabsList>
           
           <TabsContent value="summary">
-             <div className="grid gap-4">
+             <div className="grid gap-2">
                 <Card>
                     <CardHeader className="p-4">
-                        <CardTitle className="text-lg">Commitment Snapshot</CardTitle>
+                        <CardTitle className="text-lg">Snapshot</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid sm:grid-cols-2 gap-4 p-4 pt-0 text-sm">
+                    <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 pt-0 text-sm">
                         <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground">Course</p>
+                            <p className="font-medium text-muted-foreground text-xs">Course</p>
                             <p>{lead.commitmentSnapshot?.course || 'Not specified'}</p>
                         </div>
                          <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground">Price</p>
+                            <p className="font-medium text-muted-foreground text-xs">Price</p>
                             <p>{lead.commitmentSnapshot?.price || 'Not specified'}</p>
                         </div>
                          <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground">Schedule</p>
+                            <p className="font-medium text-muted-foreground text-xs">Schedule</p>
                             <p>{lead.commitmentSnapshot?.schedule || 'Not specified'}</p>
                         </div>
                         <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground">Key Notes</p>
+                            <p className="font-medium text-muted-foreground text-xs">Key Notes</p>
                             <p className="text-muted-foreground/80">{lead.commitmentSnapshot?.keyNotes || 'None'}</p>
                         </div>
                     </CardContent>
@@ -291,8 +346,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             </div>
                             <div className="flex gap-2">
                                 <Input value={traitInput} onChange={e => setTraitInput(e.target.value)} placeholder="Add a trait..." onKeyDown={e => e.key === 'Enter' && handleAddTrait()} className="h-9 text-sm"/>
-                                <Button onClick={handleAddTrait} size="icon" className="sm:w-auto sm:px-4">
-                                  <Plus className="sm:mr-2"/>
+                                 <Button onClick={handleAddTrait} size="icon" className="sm:w-auto sm:px-4">
+                                  <Plus className="sm:mr-2 h-4 w-4"/>
                                   <span className="sr-only sm:not-sr-only">Add</span>
                                 </Button>
                             </div>
@@ -311,7 +366,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             <div className="flex gap-2">
                                 <Input value={insightInput} onChange={e => setInsightInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()} className="h-9 text-sm"/>
                                 <Button onClick={handleAddInsight} size="icon" className="sm:w-auto sm:px-4">
-                                   <Plus className="sm:mr-2"/>
+                                   <Plus className="sm:mr-2 h-4 w-4"/>
                                   <span className="sr-only sm:not-sr-only">Add</span>
                                 </Button>
                             </div>
@@ -369,8 +424,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
              window.location.reload();
         }}
       />
+      <LeadDialog
+        isOpen={isEditDialogOpen}
+        setIsOpen={setIsEditDialogOpen}
+        onSave={handleSaveLead}
+        leadToEdit={lead}
+      />
     </div>
   );
 }
-
-    

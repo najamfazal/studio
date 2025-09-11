@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect } from "react";
@@ -43,15 +44,21 @@ export function LeadDialog({
       name: "",
       email: "",
       phone: "",
+      course: "",
     },
   });
 
   useEffect(() => {
     if (isOpen) {
       if (leadToEdit) {
-        form.reset(leadToEdit);
+        form.reset({
+          name: leadToEdit.name,
+          email: leadToEdit.email,
+          phone: leadToEdit.phone,
+          course: leadToEdit.commitmentSnapshot?.course || "",
+        });
       } else {
-        form.reset({ name: "", email: "", phone: "" });
+        form.reset({ name: "", email: "", phone: "", course: "" });
       }
     }
   }, [isOpen, leadToEdit, form]);
@@ -111,6 +118,19 @@ export function LeadDialog({
                   <FormLabel>Phone</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. 123-456-7890" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="course"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Course</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Full-Stack Development" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
