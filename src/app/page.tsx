@@ -11,6 +11,7 @@ import {
   query,
   Timestamp,
   orderBy,
+  where,
 } from "firebase/firestore";
 import { AlertTriangle, Check, ListTodo } from "lucide-react";
 import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
@@ -62,7 +63,10 @@ export default function TasksPage() {
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+        const q = query(
+          collection(db, "tasks"),
+          orderBy("createdAt", "desc")
+        );
         const querySnapshot = await getDocs(q);
         const tasksData = querySnapshot.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as Task)
@@ -84,6 +88,20 @@ export default function TasksPage() {
   }, [toast]);
 
   const handleMarkComplete = async (taskId: string, completed: boolean) => {
+    // Find the task to get its nature
+    const taskToUpdate = tasks.find(t => t.id === taskId);
+    if (!taskToUpdate) return;
+    
+    // Prevent completing procedural tasks from the main list.
+    if (taskToUpdate.nature === 'Procedural') {
+        toast({
+            variant: "default",
+            title: "Action Required",
+            description: "Please complete procedural tasks from the lead's detail page.",
+        });
+        return;
+    }
+
     try {
       const taskRef = doc(db, "tasks", taskId);
       await updateDoc(taskRef, { completed });
@@ -106,6 +124,7 @@ export default function TasksPage() {
     }
   };
 
+
   const visibleTasks = useMemo(() => {
     return tasks
       .filter((task) => {
@@ -113,8 +132,11 @@ export default function TasksPage() {
         return dueDate && isSameDay(dueDate, selectedDate);
       })
       .sort((a, b) => {
-        const dateA = toDate(a.dueDate) ?? new Date();
-        const dateB = toDate(b.dueDate) ?? new Date();
+        if (a.completed !== b.completed) {
+            return a.completed ? 1 : -1;
+        }
+        const dateA = toDate(a.dueDate) ?? new Date(0);
+        const dateB = toDate(b.dueDate) ?? new Date(0);
         return dateA.getTime() - dateB.getTime();
       });
   }, [tasks, selectedDate]);
@@ -122,9 +144,10 @@ export default function TasksPage() {
   type Urgency = "hot" | "warm" | "cold" | "neutral";
 
   const getUrgency = (
-    dueDate: Date | null
+    dueDate: Date | null,
+    completed: boolean,
   ): { class: string; colorClass: string; name: Urgency } => {
-    if (!dueDate)
+    if (completed || !dueDate)
       return {
         class: "border-l-gray-400",
         colorClass: "loader-neutral",
@@ -189,7 +212,7 @@ export default function TasksPage() {
             {visibleTasks.map((task) => {
               const dueDate = toDate(task.dueDate);
               const { class: urgencyClass, colorClass: loaderColorClass } =
-                getUrgency(dueDate);
+                getUrgency(dueDate, task.completed);
               const isNavigating = activeTask === task.id;
 
               return (
@@ -199,13 +222,14 @@ export default function TasksPage() {
                     onClick={() => setActiveTask(task.id)}
                     className={cn(
                       "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
-                      "border-l-4 overflow-hidden", // Added overflow-hidden
-                      urgencyClass
+                      "border-l-4 overflow-hidden",
+                      urgencyClass,
+                       isNavigating && "pointer-events-none"
                     )}
                   >
                     <div className="flex items-center p-3">
                       <div className="flex-1">
-                        <p className="font-semibold text-base leading-tight">
+                        <p className={cn("font-semibold text-base leading-tight", task.completed && "line-through text-muted-foreground")}>
                           {task.description}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
@@ -216,27 +240,26 @@ export default function TasksPage() {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          if (!isNavigating)
-                            handleMarkComplete(task.id, !task.completed);
+                          handleMarkComplete(task.id, !task.completed);
                         }}
-                        disabled={isNavigating}
                         className={cn(
-                          "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors",
+                          "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors shrink-0",
                           task.completed
                             ? "bg-primary border-primary text-primary-foreground"
-                            : "border-muted-foreground/50 hover:border-primary"
+                            : "border-muted-foreground/50 hover:border-primary",
+                           task.nature === 'Procedural' && 'cursor-not-allowed opacity-50'
                         )}
                       >
                         {task.completed && <Check className="h-5 w-5" />}
                       </button>
                     </div>
-                    {isNavigating && (
+                     {isNavigating && (
                       <div
                         className={cn(
-                          "absolute bottom-0 h-1 w-full",
+                          "absolute bottom-0 h-1 w-full animate-loader",
                           loaderColorClass
                         )}
-                      ></div>
+                      />
                     )}
                   </Link>
                 </div>

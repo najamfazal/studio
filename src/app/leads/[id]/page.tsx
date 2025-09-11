@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, use } from "react";
@@ -17,7 +18,7 @@ import { db } from "@/lib/firebase";
 import type { Lead, Interaction, Task } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -187,7 +188,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   if (!lead) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-center">
+      <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
          <Users className="h-16 w-16 mb-4 text-muted-foreground"/>
         <h2 className="text-2xl font-semibold">Lead not found</h2>
         <p className="text-muted-foreground mt-2">
@@ -212,17 +213,17 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             </Link>
           </Button>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">{lead.name}</h1>
-            <p className="text-sm text-muted-foreground">{lead.email}</p>
+            <h1 className="text-xl font-bold tracking-tight truncate">{lead.name}</h1>
+            <p className="text-sm text-muted-foreground truncate">{lead.email}</p>
           </div>
         </div>
-         <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" >
-            <Star className={cn("mr-2", lead.onFollowList && "fill-yellow-400 text-yellow-500")}/>
+         <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0" >
+            <Star className={cn("mr-2 h-4 w-4", lead.onFollowList && "fill-yellow-400 text-yellow-500")}/>
             {lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}
           </Button>
       </header>
 
-      <main className="flex-1 p-4 sm:p-6 md:p-8">
+      <main className="flex-1 p-4 sm:p-6 md:p-8 pb-24">
         <Tabs defaultValue="summary">
           <TabsList className="mb-4">
             <TabsTrigger value="summary">Summary</TabsTrigger>
@@ -346,7 +347,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         </Tabs>
       </main>
       
-       <div className="sticky bottom-0 left-0 right-0 p-4 flex justify-end bg-gradient-to-t from-background to-transparent z-10">
+       <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-end bg-gradient-to-t from-background to-transparent z-10 md:relative md:bg-none">
         <Button
           size="lg"
           className="rounded-full shadow-lg"
