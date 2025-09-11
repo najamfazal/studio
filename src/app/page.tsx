@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import type { Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 // Helper to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -63,10 +64,7 @@ export default function TasksPage() {
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const q = query(
-          collection(db, "tasks"),
-          orderBy("createdAt", "desc")
-        );
+        const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
         const tasksData = querySnapshot.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as Task)
@@ -93,7 +91,7 @@ export default function TasksPage() {
     if (!taskToUpdate) return;
     
     // Prevent completing procedural tasks from the main list.
-    if (taskToUpdate.nature === 'Procedural') {
+    if (taskToUpdate.nature === 'Procedural' && !taskToUpdate.completed) {
         toast({
             variant: "default",
             title: "Action Required",
@@ -146,31 +144,38 @@ export default function TasksPage() {
   const getUrgency = (
     dueDate: Date | null,
     completed: boolean,
-  ): { class: string; colorClass: string; name: Urgency } => {
+  ): { class: string; name: Urgency } => {
     if (completed || !dueDate)
       return {
         class: "border-l-gray-400",
-        colorClass: "loader-neutral",
         name: "neutral",
       };
     if (isPast(dueDate) && !isToday(dueDate))
       return {
         class: "border-l-red-500",
-        colorClass: "loader-hot",
         name: "hot",
       };
     if (isToday(dueDate))
       return {
         class: "border-l-yellow-500",
-        colorClass: "loader-warm",
         name: "warm",
       };
     return {
       class: "border-l-blue-500",
-      colorClass: "loader-cold",
       name: "cold",
     };
   };
+  
+  const getLoaderClass = (urgency: Urgency) => {
+    const mapping = {
+      hot: 'loader-hot',
+      warm: 'loader-warm',
+      cold: 'loader-cold',
+      neutral: 'loader-neutral'
+    }
+    return mapping[urgency];
+  }
+
 
   if (isLoading) {
     return (
@@ -181,11 +186,17 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background sm:pl-0 pl-12">
+    <div className="flex flex-col min-h-screen bg-background sm:pl-0 pl-14">
       <header className="bg-card border-b p-4 sticky top-0 z-10">
         <div className="flex items-center gap-3 mb-4">
-          <ListTodo className="h-8 w-8 text-primary" />
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
+          <SidebarTrigger className="sm:hidden -ml-2">
+            <ListTodo className="h-8 w-8 text-primary" />
+          </SidebarTrigger>
+          <div className="hidden sm:flex items-center gap-3">
+             <ListTodo className="h-8 w-8 text-primary" />
+             <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
+          </div>
+           <h1 className="sm:hidden text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
         </div>
         <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4 hide-scrollbar">
           {weekDays.map((day) => (
@@ -211,7 +222,7 @@ export default function TasksPage() {
           <div className="space-y-3">
             {visibleTasks.map((task) => {
               const dueDate = toDate(task.dueDate);
-              const { class: urgencyClass, colorClass: loaderColorClass } =
+              const { class: urgencyClass, name: urgencyName } =
                 getUrgency(dueDate, task.completed);
               const isNavigating = activeTask === task.id;
 
@@ -247,7 +258,7 @@ export default function TasksPage() {
                           task.completed
                             ? "bg-primary border-primary text-primary-foreground"
                             : "border-muted-foreground/50 hover:border-primary",
-                           task.nature === 'Procedural' && 'cursor-not-allowed opacity-50'
+                           task.nature === 'Procedural' && !task.completed && 'cursor-not-allowed opacity-50'
                         )}
                       >
                         {task.completed && <Check className="h-5 w-5" />}
@@ -257,7 +268,7 @@ export default function TasksPage() {
                       <div
                         className={cn(
                           "absolute bottom-0 h-1 w-full",
-                          loaderColorClass
+                          getLoaderClass(urgencyName)
                         )}
                       />
                     )}

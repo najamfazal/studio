@@ -35,6 +35,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LogInteractionDialog } from "@/components/log-interaction-dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -204,10 +205,13 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const lastInteractionDate = toDate(lead.last_interaction_date);
 
   return (
-    <div className="flex flex-col min-h-screen bg-background relative">
+    <div className="flex flex-col min-h-screen bg-background relative sm:pl-0 pl-14">
        <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
+           <SidebarTrigger className="sm:hidden -ml-2">
+            <ArrowLeft />
+          </SidebarTrigger>
+          <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
             <Link href="/">
               <ArrowLeft />
             </Link>
@@ -370,5 +374,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    
