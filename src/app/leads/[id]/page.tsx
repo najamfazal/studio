@@ -259,10 +259,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   return (
     <div className="flex flex-col min-h-screen bg-background relative">
        <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 gap-2">
-          <SidebarTrigger className="sm:hidden" />
-           <Button variant="ghost" size="icon" onClick={() => router.back()} className="hidden sm:inline-flex">
-            <ArrowLeft />
-          </Button>
+          <div className="flex items-center gap-1">
+             <SidebarTrigger className="sm:hidden" />
+             <Button variant="ghost" size="icon" onClick={() => router.back()} className="hidden sm:inline-flex">
+              <ArrowLeft />
+            </Button>
+          </div>
           <div className="flex-1 overflow-hidden">
             <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
           </div>
@@ -293,7 +295,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     <CardHeader className="p-4">
                         <CardTitle className="text-lg">Snapshot</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 pt-0 text-sm">
+                    <CardContent className="grid grid-cols-2 gap-4 p-4 pt-0 text-sm">
                         <div className="space-y-1">
                             <p className="font-medium text-muted-foreground text-xs">Course</p>
                             <p>{lead.commitmentSnapshot?.course || 'Not specified'}</p>
@@ -407,11 +409,11 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
        <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-end bg-gradient-to-t from-background to-transparent z-10 md:relative md:bg-none">
         <Button
           size="lg"
-          className="rounded-full shadow-lg"
+          className="rounded-full shadow-lg h-14 w-14 sm:w-auto sm:px-6"
           onClick={() => setIsLogDialogOpen(true)}
         >
-          <Plus className="mr-2" />
-          Log Interaction
+          <Plus className="h-6 w-6 sm:mr-2" />
+          <span className="hidden sm:inline">Log Interaction</span>
         </Button>
       </div>
 
@@ -433,3 +435,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
