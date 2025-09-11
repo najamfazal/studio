@@ -185,7 +185,7 @@ export default function TasksPage() {
       <header className="bg-card border-b p-4 sticky top-0 z-10">
         <div className="flex items-center gap-3 mb-4">
           <ListTodo className="h-8 w-8 text-primary" />
-          <h1 className="text-xl font-bold tracking-tight">My Tasks</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
         </div>
         <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4">
           {weekDays.map((day) => (
@@ -193,14 +193,14 @@ export default function TasksPage() {
               key={day.toISOString()}
               onClick={() => setSelectedDate(day)}
               className={cn(
-                "flex flex-col items-center justify-center rounded-lg p-2 w-14 h-16 transition-colors duration-200 shrink-0",
+                "flex flex-col items-center justify-center rounded-lg p-2 w-12 h-14 sm:w-14 sm:h-16 transition-colors duration-200 shrink-0",
                 isSameDay(selectedDate, day)
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted hover:bg-muted-foreground/20"
               )}
             >
               <span className="text-xs font-medium">{format(day, "E")}</span>
-              <span className="text-lg font-bold">{format(day, "d")}</span>
+              <span className="text-base sm:text-lg font-bold">{format(day, "d")}</span>
             </button>
           ))}
         </div>
@@ -243,7 +243,7 @@ export default function TasksPage() {
                           handleMarkComplete(task.id, !task.completed);
                         }}
                         className={cn(
-                          "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors shrink-0",
+                          "flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-full border-2 transition-colors shrink-0",
                           task.completed
                             ? "bg-primary border-primary text-primary-foreground"
                             : "border-muted-foreground/50 hover:border-primary",
@@ -256,7 +256,7 @@ export default function TasksPage() {
                      {isNavigating && (
                       <div
                         className={cn(
-                          "absolute bottom-0 h-1 w-full animate-loader",
+                          "absolute bottom-0 h-1 w-full",
                           loaderColorClass
                         )}
                       />

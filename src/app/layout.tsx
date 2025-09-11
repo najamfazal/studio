@@ -23,7 +23,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased h-full">
         <div className="flex min-h-screen w-full">
-          <nav className="flex flex-col items-center gap-4 border-r bg-card px-2 sm:px-4 py-8">
+          <nav className="hidden sm:flex flex-col items-center gap-4 border-r bg-card px-2 sm:px-4 py-8">
             <Link
               href="/"
               className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
@@ -53,7 +53,7 @@ export default function RootLayout({
               <span className="sr-only">Recall Trainer</span>
             </Link>
           </nav>
-          <div className="flex-1">{children}</div>
+          <div className="flex-1 w-full">{children}</div>
         </div>
         <Toaster />
       </body>
