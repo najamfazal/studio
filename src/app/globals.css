@@ -86,22 +86,22 @@
 @layer utilities {
   .loader-hot {
     border-bottom-color: #ef4444; /* red-500 */
-    animation: loader 1.5s infinite;
+    animation: loader-progress 1.5s infinite;
   }
   .loader-warm {
     border-bottom-color: #eab308; /* yellow-500 */
-    animation: loader 1.5s infinite;
+    animation: loader-progress 1.5s infinite;
   }
   .loader-cold {
     border-bottom-color: #3b82f6; /* blue-500 */
-    animation: loader 1.5s infinite;
+    animation: loader-progress 1.5s infinite;
   }
   .loader-neutral {
      border-bottom-color: #a1a1aa; /* gray-400 */
-    animation: loader 1.5s infinite;
+    animation: loader-progress 1.5s infinite;
   }
 
-  @keyframes loader {
+  @keyframes loader-progress {
     0% {
       width: 0%;
       left: 0;
