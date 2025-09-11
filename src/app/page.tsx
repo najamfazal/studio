@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -168,39 +169,44 @@ export default function TasksPage() {
 
               return (
                  <div key={task.id} className="relative">
-                  <Link href={`/leads/${task.leadId}`} onClick={() => setActiveTask(task.id)} legacyBehavior>
-                    <a
-                      className={cn(
-                        "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
-                        "border-l-4",
-                        urgencyClass
-                      )}
-                    >
-                      <Card className="border-none shadow-none bg-transparent">
-                          <div className="flex items-center p-3">
-                            <div className="flex-1">
-                              <p className="font-semibold text-base leading-tight">{task.description}</p>
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {task.leadName}
-                              </p>
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if(!isNavigating) handleMarkComplete(task.id, !task.completed)
-                              }}
-                              disabled={isNavigating}
-                              className={cn(
-                                "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors",
-                                task.completed ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/50 hover:border-primary"
-                              )}
-                            >
-                            {task.completed && <Check className="h-5 w-5" />}
-                            </button>
-                          </div>
-                      </Card>
-                    </a>
+                  <Link
+                    href={`/leads/${task.leadId}`}
+                    onClick={() => setActiveTask(task.id)}
+                    className={cn(
+                      "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
+                      "border-l-4",
+                      urgencyClass
+                    )}
+                  >
+                    <Card className="border-none shadow-none bg-transparent">
+                      <div className="flex items-center p-3">
+                        <div className="flex-1">
+                          <p className="font-semibold text-base leading-tight">
+                            {task.description}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {task.leadName}
+                          </p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!isNavigating)
+                              handleMarkComplete(task.id, !task.completed);
+                          }}
+                          disabled={isNavigating}
+                          className={cn(
+                            "flex items-center justify-center h-8 w-8 rounded-full border-2 transition-colors",
+                            task.completed
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-muted-foreground/50 hover:border-primary"
+                          )}
+                        >
+                          {task.completed && <Check className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </Card>
                   </Link>
                    {isNavigating && (
                       <div className={cn(
