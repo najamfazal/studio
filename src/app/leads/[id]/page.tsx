@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useCallback } from "react";
 import {
   doc,
   getDoc,
@@ -72,12 +72,13 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [insights, setInsights] = useState<string[]>([]);
   const [traitInput, setTraitInput] = useState("");
   const [insightInput, setInsightInput] = useState("");
+  
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTogglingFollow, setIsTogglingFollow] = useState(false);
 
   const { toast } = useToast();
-
-  useEffect(() => {
-    const fetchLeadData = async () => {
-      setIsLoading(true);
+  
+  const fetchLeadData = useCallback(async () => {
       try {
         // Fetch lead
         const leadDocRef = doc(db, "leads", params.id);
@@ -90,6 +91,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           setInsights(leadData.insights || []);
         } else {
           toast({ variant: "destructive", title: "Lead not found" });
+          return;
         }
 
         // Fetch interactions
@@ -123,16 +125,22 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           title: "Error",
           description: "Failed to fetch lead data.",
         });
-      } finally {
-        setIsLoading(false);
       }
-    };
+    }, [params.id, toast]);
 
-    fetchLeadData();
-  }, [params.id, toast]);
+
+  useEffect(() => {
+    const loadData = async () => {
+        setIsLoading(true);
+        await fetchLeadData();
+        setIsLoading(false);
+    }
+    loadData();
+  }, [params.id, fetchLeadData]);
 
   const handleToggleFollowList = async () => {
     if (!lead) return;
+    setIsTogglingFollow(true);
     const newValue = !lead.onFollowList;
     try {
       const leadRef = doc(db, "leads", lead.id);
@@ -143,6 +151,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       });
     } catch (error) {
       toast({ variant: "destructive", title: "Error updating follow list status." });
+    } finally {
+        setIsTogglingFollow(false);
     }
   };
 
@@ -152,15 +162,15 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   const handleSaveLead = async (values: LeadFormValues) => {
     if (!lead) return;
+    setIsSaving(true);
     try {
       const leadRef = doc(db, "leads", lead.id);
       
       const { course, ...leadDetails } = values;
-      const snapshotUpdate = { 'commitmentSnapshot.course': course };
       
       await updateDoc(leadRef, {
         ...leadDetails,
-        ...snapshotUpdate
+       'commitmentSnapshot.course': course,
       });
 
       setLead(prev => {
@@ -187,6 +197,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         title: "Error",
         description: "Failed to save lead.",
       });
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -276,7 +288,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 <span className="hidden sm:inline">Edit</span>
                 <span className="sr-only">Edit Lead</span>
             </Button>
-            <Button onClick={handleToggleFollowList} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
+            <Button onClick={handleToggleFollowList} disabled={isTogglingFollow} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
               <Star className={cn("h-4 w-4", lead.onFollowList && "fill-current text-yellow-400", "sm:mr-2")}/>
               <span className="hidden sm:inline">{lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}</span>
               <span className="sr-only">Add to Follow List</span>
@@ -413,17 +425,15 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       <LogInteractionDialog 
         isOpen={isLogDialogOpen}
         setIsOpen={setIsLogDialogOpen}
-        leadId={params.id}
-        onLogSaved={() => {
-            // Trigger re-fetch, maybe better way later
-             window.location.reload();
-        }}
+        lead={lead}
+        onLogSaved={fetchLeadData}
       />
       <LeadDialog
         isOpen={isEditDialogOpen}
         setIsOpen={setIsEditDialogOpen}
         onSave={handleSaveLead}
         leadToEdit={lead}
+        isSaving={isSaving}
       />
     </div>
   );

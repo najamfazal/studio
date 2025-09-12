@@ -30,6 +30,7 @@ interface LeadDialogProps {
   setIsOpen: (open: boolean) => void;
   onSave: (values: LeadFormValues) => void;
   leadToEdit: Lead | null;
+  isSaving?: boolean;
 }
 
 export function LeadDialog({
@@ -37,6 +38,7 @@ export function LeadDialog({
   setIsOpen,
   onSave,
   leadToEdit,
+  isSaving,
 }: LeadDialogProps) {
   const form = useForm<LeadFormValues>({
     resolver: zodResolver(leadSchema),
@@ -67,7 +69,7 @@ export function LeadDialog({
     onSave(values);
   };
 
-  const isSubmitting = form.formState.isSubmitting;
+  const isSubmitting = form.formState.isSubmitting || isSaving;
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>

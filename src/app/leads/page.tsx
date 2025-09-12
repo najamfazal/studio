@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -30,6 +31,7 @@ export default function LeadsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -86,6 +88,7 @@ export default function LeadsPage() {
   };
 
   const handleSaveLead = async (values: LeadFormValues) => {
+    setIsSaving(true);
     try {
       if (editingLead) {
         // Update existing lead
@@ -133,6 +136,8 @@ export default function LeadsPage() {
         title: "Error",
         description: "Failed to save lead.",
       });
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -187,7 +192,7 @@ export default function LeadsPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <SidebarTrigger className="sm:hidden" />
+          <SidebarTrigger />
           <Logo className="h-8 w-8 text-primary hidden sm:block" />
           <h1 className="text-xl font-bold tracking-tight">All Leads</h1>
         </div>
@@ -229,6 +234,7 @@ export default function LeadsPage() {
         setIsOpen={setIsDialogOpen}
         onSave={handleSaveLead}
         leadToEdit={editingLead}
+        isSaving={isSaving}
       />
     </div>
   );

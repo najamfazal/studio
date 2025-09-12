@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { addDoc, collection } from "firebase/firestore";
+import { addDoc, collection, doc, updateDoc } from "firebase/firestore";
 import { Calendar as CalendarIcon, ThumbsDown, ThumbsUp, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 
@@ -26,14 +26,16 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { QuickLogType, InteractionOutcome } from "@/lib/types";
+import { QuickLogType, InteractionOutcome, Lead } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 interface LogInteractionDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  leadId: string;
+  lead: Lead | null;
   onLogSaved: () => void;
 }
 
@@ -51,15 +53,17 @@ const outcomeOptions: InteractionOutcome[] = [
     "Other",
 ];
 
-type Step = "initial" | "perception" | "outcome" | "details";
+type Step = "initial" | "perception" | "outcome" | "snapshotPrompt" | "snapshot" | "details";
 
 
 export function LogInteractionDialog({
   isOpen,
   setIsOpen,
-  leadId,
+  lead,
   onLogSaved,
 }: LogInteractionDialogProps) {
+  if (!lead) return null;
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>("initial");
 
@@ -67,6 +71,13 @@ export function LogInteractionDialog({
   const [outcome, setOutcome] = useState<InteractionOutcome | "">("");
   const [notes, setNotes] = useState("");
   const [followUpDate, setFollowUpDate] = useState<Date | undefined>();
+
+  const [snapshotData, setSnapshotData] = useState({
+      course: lead.commitmentSnapshot?.course || '',
+      price: lead.commitmentSnapshot?.price || '',
+      schedule: lead.commitmentSnapshot?.schedule || '',
+      keyNotes: lead.commitmentSnapshot?.keyNotes || '',
+  });
 
   const { toast } = useToast();
 
@@ -77,14 +88,25 @@ export function LogInteractionDialog({
     setFollowUpDate(undefined);
     setIsSubmitting(false);
     setCurrentStep("initial");
+    setSnapshotData({
+      course: lead.commitmentSnapshot?.course || '',
+      price: lead.commitmentSnapshot?.price || '',
+      schedule: lead.commitmentSnapshot?.schedule || '',
+      keyNotes: lead.commitmentSnapshot?.keyNotes || '',
+    })
   };
 
-  const handleSave = async (logData: any) => {
+  const handleSave = async (logData: any, newSnapshot?: any) => {
     setIsSubmitting(true);
     try {
+      if (newSnapshot) {
+        const leadRef = doc(db, "leads", lead.id);
+        await updateDoc(leadRef, { commitmentSnapshot: newSnapshot });
+      }
+
       await addDoc(collection(db, "interactions"), {
         ...logData,
-        leadId,
+        leadId: lead.id,
         createdAt: new Date().toISOString(),
       });
       toast({ title: "Interaction Logged" });
@@ -115,14 +137,27 @@ export function LogInteractionDialog({
     if (perception) logData.perception = perception;
     if (followUpDate) logData.followUpDate = followUpDate.toISOString();
 
-    handleSave(logData);
+    const snapshotHasChanged =
+      snapshotData.course !== (lead.commitmentSnapshot?.course || '') ||
+      snapshotData.price !== (lead.commitmentSnapshot?.price || '') ||
+      snapshotData.schedule !== (lead.commitmentSnapshot?.schedule || '') ||
+      snapshotData.keyNotes !== (lead.commitmentSnapshot?.keyNotes || '');
+
+    handleSave(logData, snapshotHasChanged ? snapshotData : undefined);
   }
 
   const handleBack = () => {
-    if (currentStep === "details") setCurrentStep("outcome");
+    if (currentStep === "details") setCurrentStep("snapshotPrompt");
+    else if (currentStep === "snapshot") setCurrentStep("snapshotPrompt");
+    else if (currentStep === "snapshotPrompt") setCurrentStep("outcome");
     else if (currentStep === "outcome") setCurrentStep("perception");
     else if (currentStep === "perception") setCurrentStep("initial");
   };
+
+  const handleSnapshotInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setSnapshotData(prev => ({...prev, [name]: value}));
+  }
 
   const renderStepContent = () => {
     switch (currentStep) {
@@ -172,7 +207,7 @@ export function LogInteractionDialog({
         return (
            <div className="space-y-4">
             <h3 className="font-semibold text-center">What was the outcome?</h3>
-            <Select onValueChange={(value) => { setOutcome(value as InteractionOutcome); setCurrentStep('details'); }} value={outcome}>
+            <Select onValueChange={(value) => { setOutcome(value as InteractionOutcome); setCurrentStep('snapshotPrompt'); }} value={outcome}>
                 <SelectTrigger className="h-12 text-base">
                     <SelectValue placeholder="Select outcome..." />
                 </SelectTrigger>
@@ -184,6 +219,44 @@ export function LogInteractionDialog({
             </Select>
            </div>
         );
+       case "snapshotPrompt":
+        return (
+          <div className="text-center space-y-4">
+            <h3 className="font-semibold">Update Commitment Snapshot?</h3>
+            <div className="flex justify-center gap-4">
+              <Button variant="outline" size="lg" onClick={() => { setCurrentStep('snapshot'); }}>
+                Yes, update
+              </Button>
+              <Button variant="default" size="lg" onClick={() => { setCurrentStep('details'); }}>
+                No, skip
+              </Button>
+            </div>
+          </div>
+        );
+      case "snapshot":
+        return (
+          <div className="space-y-3">
+             <div className="grid sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                    <Label htmlFor="course">Course</Label>
+                    <Input id="course" name="course" value={snapshotData.course} onChange={handleSnapshotInputChange} />
+                </div>
+                 <div className="space-y-1">
+                    <Label htmlFor="price">Price</Label>
+                    <Input id="price" name="price" value={snapshotData.price} onChange={handleSnapshotInputChange} />
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="schedule">Schedule</Label>
+                    <Input id="schedule" name="schedule" value={snapshotData.schedule} onChange={handleSnapshotInputChange} />
+                </div>
+             </div>
+             <div className="space-y-1">
+                <Label htmlFor="keyNotes">Key Notes</Label>
+                <Textarea id="keyNotes" name="keyNotes" value={snapshotData.keyNotes} onChange={handleSnapshotInputChange} rows={2}/>
+            </div>
+             <Button onClick={() => setCurrentStep('details')} className="w-full">Continue</Button>
+          </div>
+        )
       case "details":
         return (
           <div className="space-y-4">
