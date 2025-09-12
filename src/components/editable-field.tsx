@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Check, Loader2, Pencil, X } from "lucide-react";
+import { Check, Loader2, Pencil } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -53,6 +53,14 @@ export function EditableField({
     setIsEditing(false);
   };
 
+  const handleIconClick = () => {
+    if (isEditing) {
+        handleSave();
+    } else {
+        setIsEditing(true);
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (e.key === "Enter" && type === "input" && !e.shiftKey) {
       e.preventDefault();
@@ -69,12 +77,10 @@ export function EditableField({
     <div className="space-y-1">
       <p className="font-medium text-muted-foreground text-xs flex items-center justify-between">
         {label}
-        {!isEditing && (
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setIsEditing(true)}>
-                <Pencil className="h-3 w-3" />
-                <span className="sr-only">Edit {label}</span>
-            </Button>
-        )}
+         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleIconClick} disabled={isSaving}>
+            {isSaving ? <Loader2 className="animate-spin h-3 w-3" /> : (isEditing ? <Check className="h-4 w-4" /> : <Pencil className="h-3 w-3" />)}
+            <span className="sr-only">{isEditing ? `Save ${label}` : `Edit ${label}`}</span>
+        </Button>
       </p>
       {isEditing ? (
         <div className="flex gap-1 items-start">
@@ -86,22 +92,12 @@ export function EditableField({
             className="h-auto"
             rows={type === 'textarea' ? 3 : 1}
           />
-          <div className="flex gap-1">
-            <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={handleSave} disabled={isSaving}>
-              {isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : <Check className="h-4 w-4" />}
-            </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={handleCancel} disabled={isSaving}>
-              <X className="h-4 w-4"/>
-            </Button>
-          </div>
         </div>
       ) : (
-        <p className={cn("min-h-[2.25rem] pr-6", !value && 'text-muted-foreground/80')}>
+        <p className={cn("min-h-[2.25rem] pr-6 whitespace-pre-wrap", !value && 'text-muted-foreground/80')}>
             {value || `No ${label.toLowerCase()} set`}
         </p>
       )}
     </div>
   );
 }
-
-    

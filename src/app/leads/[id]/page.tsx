@@ -107,23 +107,45 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   const { toast } = useToast();
   
-  const fetchLeadData = useCallback(async (showToast = false) => {
-      try {
-        // Fetch lead
-        const leadDocRef = doc(db, "leads", params.id);
-        const leadDocSnap = await getDoc(leadDocRef);
+  const fetchLeadAndInteractions = useCallback(async () => {
+    try {
+      // Fetch lead
+      const leadDocRef = doc(db, "leads", params.id);
+      const leadDocSnap = await getDoc(leadDocRef);
 
-        if (leadDocSnap.exists()) {
-          const leadData = { id: leadDocSnap.id, ...leadDocSnap.data() } as Lead;
-          setLead(leadData);
-          setTraits(leadData.traits || []);
-          setInsights(leadData.insights || []);
-        } else {
-          toast({ variant: "destructive", title: "Lead not found" });
-          return;
-        }
+      if (leadDocSnap.exists()) {
+        const leadData = { id: leadDocSnap.id, ...leadDocSnap.data() } as Lead;
+        setLead(leadData);
+        setTraits(leadData.traits || []);
+        setInsights(leadData.insights || []);
+      } else {
+        toast({ variant: "destructive", title: "Lead not found" });
+        return;
+      }
 
-        // Fetch interactions
+      // Fetch interactions
+      const interactionsQuery = query(
+        collection(db, "interactions"),
+        where("leadId", "==", params.id),
+        orderBy("createdAt", "desc")
+      );
+      const interactionsSnapshot = await getDocs(interactionsQuery);
+      const interactionsData = interactionsSnapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as Interaction)
+      );
+      setInteractions(interactionsData);
+    } catch (error) {
+      console.error("Error fetching lead data:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to fetch lead data.",
+      });
+    }
+  }, [params.id, toast]);
+
+  const onInteractionLogged = useCallback(async () => {
+    try {
         const interactionsQuery = query(
           collection(db, "interactions"),
           where("leadId", "==", params.id),
@@ -134,30 +156,26 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           (doc) => ({ id: doc.id, ...doc.data() } as Interaction)
         );
         setInteractions(interactionsData);
-        if (showToast) {
-            toast({title: "Interactions Updated" })
-        }
-
-      } catch (error) {
-        console.error("Error fetching lead data:", error);
+        toast({title: "Interactions Updated" })
+    } catch (error) {
+       console.error("Error fetching interactions:", error);
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch lead data.",
+          description: "Failed to fetch new interactions.",
         });
-      }
-    }, [params.id, toast]);
+    }
+  }, [params.id, toast]);
 
 
   useEffect(() => {
     const loadData = async () => {
         setIsLoading(true);
-        await fetchLeadData();
+        await fetchLeadAndInteractions();
         setIsLoading(false);
     }
     loadData();
-  }, [params.id, fetchLeadData]);
-  
+  }, [params.id, fetchLeadAndInteractions]);
   
   const logInteraction = useCallback(async (interactionData: Partial<Interaction>, successMessage?: string) => {
     if (!lead) return;
@@ -167,13 +185,13 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         leadId: lead.id,
         createdAt: new Date().toISOString(),
       });
-      await fetchLeadData(true); // Refetch data instead of full reload
+      await onInteractionLogged();
       toast({ title: successMessage || "Interaction Logged" });
     } catch (error) {
       console.error("Error logging interaction:", error);
       toast({ variant: "destructive", title: "Logging Failed" });
     }
-  }, [lead, fetchLeadData, toast]);
+  }, [lead, onInteractionLogged, toast]);
 
 
   const handleToggleFollowList = async () => {
@@ -310,11 +328,15 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const handleFeedbackSelection = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
     setFeedback(prev => {
       const current = prev[category]?.perception;
+      // If the same button is clicked again, deselect it
       if (current === perception) {
         const { [category]: _, ...rest } = prev;
-        if(category === activeObjectionCategory) setActiveObjectionCategory(null);
+        if (category === activeObjectionCategory) {
+          setActiveObjectionCategory(null);
+        }
         return rest;
       }
+      // If a new perception is selected for the category
       setActiveObjectionCategory(perception === 'negative' ? category : null);
       return {
         ...prev,
@@ -346,9 +368,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       return;
     }
     setIsSubmittingFeedback(true);
-    setActiveObjectionCategory(null); // Retract chips on submit
     await logInteraction({ feedback }, "Feedback logged");
     setFeedback({});
+    setActiveObjectionCategory(null);
     setIsSubmittingFeedback(false);
   };
 
@@ -446,34 +468,34 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 </Card>
                 
                 <Card>
-                    <Collapsible open={isObjectionsOpen} onOpenChange={() => {}}>
+                    <Collapsible open={isObjectionsOpen} onOpenChange={setActiveObjectionCategory ? () => {} : undefined}>
                         <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
                             <CardTitle className="text-lg">Feedback</CardTitle>
-                            <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback}>
-                            {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                             <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback}>
+                                {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                             </Button>
                         </CardHeader>
                         <CardContent className="p-4 pt-0">
-                            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                             <div className="flex sm:gap-4 justify-around">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
-                                        <p className="font-medium text-muted-foreground text-xs capitalize">{category}</p>
+                                        <p className="font-medium text-muted-foreground text-sm capitalize">{category}</p>
                                         <div className="flex justify-center gap-2">
-                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp/></Button>
-                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown/></Button>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'} className="h-9 w-9 rounded-full" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-5 w-5"/></Button>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'} className="h-9 w-9 rounded-full" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-5 w-5"/></Button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                             <CollapsibleContent className="pt-4 mt-4 border-t border-dashed">
+                            <CollapsibleContent className="pt-4 mt-4 border-t border-dashed -mx-4 px-4">
                                 {activeObjectionCategory && (
-                                     <div className="flex flex-wrap gap-2">
+                                     <div className="flex flex-wrap gap-2 justify-center">
                                         {objectionChips[activeObjectionCategory].map(objection => (
                                             <Badge
                                                 key={objection}
                                                 variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
                                                 onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
-                                                className="cursor-pointer transition-colors"
+                                                className="cursor-pointer transition-colors text-sm"
                                             >
                                                 {objection}
                                             </Badge>
@@ -498,7 +520,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                     <SelectItem value="Visit">Visit</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Popover onOpenChange={() => setScheduleStep('date')}>
+                            <Popover onOpenChange={(open) => !open && setScheduleStep('date')}>
                                 <PopoverTrigger asChild>
                                 <Button
                                     variant={"outline"}
@@ -517,21 +539,18 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                                 onSelect={(d) => {
                                                     const existing = eventDetails.dateTime || new Date();
                                                     if (d) {
-                                                        d.setHours(getHours(existing));
-                                                        d.setMinutes(getMinutes(existing));
-                                                        setEventDetails(p => ({...p, dateTime: d}));
+                                                        const newDate = setMinutes(setHours(d, getHours(existing)), getMinutes(existing));
+                                                        setEventDetails(p => ({...p, dateTime: newDate}));
                                                         setScheduleStep('time');
                                                     }
                                                 }}
                                                 initialFocus
                                             />
-                                            <div className="flex flex-wrap gap-1 p-2 border-t">
+                                            <div className="flex flex-wrap gap-1 p-2 border-t justify-center">
                                                 {dateQuickPicks.map(qp => (
                                                     <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
-                                                        const newDate = addDays(new Date(), qp.days);
                                                         const existing = eventDetails.dateTime || new Date();
-                                                        newDate.setHours(getHours(existing));
-                                                        newDate.setMinutes(getMinutes(existing));
+                                                        const newDate = setMinutes(setHours(addDays(new Date(), qp.days), getHours(existing)), getMinutes(existing));
                                                         setEventDetails(p => ({...p, dateTime: newDate}));
                                                         setScheduleStep('time');
                                                     }}>{qp.label}</Button>
@@ -544,10 +563,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                             <p className="text-sm font-medium text-center mb-2">{eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select a date'}</p>
                                             <div className="space-y-3">
                                                 <div>
-                                                    <p className="text-xs font-medium text-muted-foreground mb-1">Hour</p>
+                                                    <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Hour</p>
                                                     <div className="grid grid-cols-6 gap-1">
                                                         {Array.from({length: 12}, (_, i) => i + 1).map(h => (
-                                                          <Button key={h} variant={((getHours(eventDetails.dateTime || 0) % 12) || 12) === h ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                          <Button key={h} variant={((getHours(eventDetails.dateTime || new Date()) % 12) || 12) === h ? 'default' : 'outline'} size="sm" onClick={() => {
                                                             const d = eventDetails.dateTime || new Date();
                                                             const currentAmPm = getHours(d) >= 12 ? 'pm' : 'am';
                                                             const newHour = currentAmPm === 'pm' && h < 12 ? h + 12 : (currentAmPm === 'am' && h === 12 ? 0 : h);
@@ -558,14 +577,14 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-2">
                                                    <div>
-                                                        <p className="text-xs font-medium text-muted-foreground mb-1">Period</p>
+                                                        <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Period</p>
                                                         <div className="grid grid-cols-2 gap-1">
-                                                            <Button variant={getHours(eventDetails.dateTime || 0) < 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                            <Button variant={getHours(eventDetails.dateTime || new Date()) < 12 ? 'default' : 'outline'} size="sm" onClick={() => {
                                                                 const d = eventDetails.dateTime || new Date();
                                                                 const h = getHours(d);
                                                                 if (h >= 12) setEventDetails(p => ({...p, dateTime: setHours(d, h - 12)}));
                                                             }}>AM</Button>
-                                                            <Button variant={getHours(eventDetails.dateTime || 0) >= 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                            <Button variant={getHours(eventDetails.dateTime || new Date()) >= 12 ? 'default' : 'outline'} size="sm" onClick={() => {
                                                                 const d = eventDetails.dateTime || new Date();
                                                                 const h = getHours(d);
                                                                 if (h < 12) setEventDetails(p => ({...p, dateTime: setHours(d, h + 12)}));
@@ -573,10 +592,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                                         </div>
                                                    </div>
                                                    <div>
-                                                        <p className="text-xs font-medium text-muted-foreground mb-1">Minute</p>
+                                                        <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Minute</p>
                                                         <div className="grid grid-cols-2 gap-1">
                                                             {['00', '15', '30', '45'].map(m => (
-                                                                <Button key={m} variant={getMinutes(eventDetails.dateTime || 0) === parseInt(m) ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                <Button key={m} variant={getMinutes(eventDetails.dateTime || new Date()) === parseInt(m) ? 'default' : 'outline'} size="sm" onClick={() => {
                                                                     const d = eventDetails.dateTime || new Date();
                                                                     setEventDetails(p => ({...p, dateTime: setMinutes(d, parseInt(m))}));
                                                                 }}>{m}</Button>
@@ -585,7 +604,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                                    </div>
                                                 </div>
                                             </div>
-                                            <Button onClick={() => setScheduleStep('date')} variant="link" size="sm" className="mt-2">Back to date</Button>
+                                            <Button onClick={() => setScheduleStep('date')} variant="link" size="sm" className="mt-2 p-0 h-auto">Back to date</Button>
                                         </div>
                                     )}
                                 </PopoverContent>
@@ -691,7 +710,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         isOpen={isLogDialogOpen}
         setIsOpen={setIsLogDialogOpen}
         lead={lead}
-        onLogSaved={() => fetchLeadData(true)}
+        onLogSaved={onInteractionLogged}
       />
       <LeadDialog
         isOpen={isEditDialogOpen}
@@ -703,7 +722,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    
-
-    
