@@ -64,6 +64,11 @@ export function EditableField({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSave();
+      return;
+    }
     if (e.key === "Enter" && type === "input" && !e.shiftKey) {
       e.preventDefault();
       handleSave();
@@ -105,5 +110,3 @@ export function EditableField({
     </div>
   );
 }
-
-    
