@@ -76,3 +76,5 @@ export type Interaction = {
   eventDetails?: InteractionEventDetails;
   notes?: string;
 };
+
+    

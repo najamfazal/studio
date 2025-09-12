@@ -64,6 +64,12 @@ const toDate = (dateValue: any): Date | null => {
   return null;
 };
 
+const objectionChips: Record<keyof Omit<InteractionFeedback, 'id'>, string[]> = {
+  content: ["Not relevant", "Too complex", "Needs more detail"],
+  schedule: ["Wrong time", "Too long", "Inconvenient"],
+  price: ["Too expensive", "No budget", "Better offers"],
+};
+
 const timeQuickPicks = ["11:00", "14:00", "17:00", "19:00"];
 
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
@@ -290,17 +296,37 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     }
   };
 
-  const handleFeedbackSelection = (category: keyof InteractionFeedback, perception: 'positive' | 'negative') => {
+  const handleFeedbackSelection = (category: keyof Omit<InteractionFeedback, 'id'>, perception: 'positive' | 'negative') => {
     setFeedback(prev => {
       const current = prev[category]?.perception;
+      // If the same perception is clicked again, deselect it
       if (current === perception) {
-        // Deselect if same perception is clicked again
         const { [category]: _, ...rest } = prev;
         return rest;
       }
+      // Set new perception and reset objections
       return {
         ...prev,
-        [category]: { perception }
+        [category]: { perception, objections: [] }
+      };
+    });
+  };
+
+  const handleObjectionSelection = (category: keyof Omit<InteractionFeedback, 'id'>, objection: string) => {
+    setFeedback(prev => {
+      if (!prev[category]) return prev;
+
+      const existingObjections = prev[category]!.objections || [];
+      const newObjections = existingObjections.includes(objection)
+        ? existingObjections.filter(o => o !== objection) // Deselect
+        : [...existingObjections, objection]; // Select
+
+      return {
+        ...prev,
+        [category]: {
+          ...prev[category]!,
+          objections: newObjections
+        }
       };
     });
   };
@@ -413,7 +439,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                           <Send className="h-4 w-4" />
                         </Button>
                     </CardHeader>
-                    <CardContent className="p-4 pt-0 grid grid-cols-3 gap-2">
+                    <CardContent className="p-4 pt-0 grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {(['content', 'schedule', 'price'] as const).map(category => (
                              <div key={category} className="space-y-2">
                                 <p className="font-medium text-muted-foreground text-xs capitalize">{category}</p>
@@ -421,6 +447,20 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                     <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp/></Button>
                                     <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown/></Button>
                                 </div>
+                                {feedback[category]?.perception === 'negative' && (
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                    {objectionChips[category].map(objection => (
+                                    <Badge
+                                        key={objection}
+                                        variant={feedback[category]?.objections?.includes(objection) ? "default" : "secondary"}
+                                        onClick={() => handleObjectionSelection(category, objection)}
+                                        className="cursor-pointer"
+                                    >
+                                        {objection}
+                                    </Badge>
+                                    ))}
+                                </div>
+                                )}
                             </div>
                         ))}
                     </CardContent>
@@ -588,3 +628,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
