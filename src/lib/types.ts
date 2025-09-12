@@ -57,7 +57,7 @@ export type InteractionFeedback = {
 export type InteractionOutcome = {
     info?: { notes?: string };
     inFuture?: { date?: string }; // ISO date string
-    event?: { type?: string, dateTime?: string }; // ISO date string
+    event?: { type: string, dateTime: string }; // ISO date string
 }
 
 export type QuickLogType = 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged';
@@ -73,12 +73,5 @@ export type Interaction = {
   // For detailed logs
   feedback?: InteractionFeedback;
   outcomes?: InteractionOutcome;
-
-  // --- LEGACY FIELDS ---
-  perception?: 'positive' | 'negative';
-  outcome?: 'Needs Info' | 'Schedule Follow-up' | 'Event Scheduled' | 'Other';
   notes?: string;
-  followUpDate?: string; // ISO date string
 };
-
-    

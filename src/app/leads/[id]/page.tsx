@@ -12,12 +12,13 @@ import {
   orderBy,
   updateDoc,
   Timestamp,
+  addDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Lead, Interaction } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Video, Building } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -32,13 +33,17 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { LogInteractionDialog } from "@/components/log-interaction-dialog";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useRouter } from "next/navigation";
 import { LeadDialog } from "@/components/lead-dialog";
 import type { LeadFormValues } from "@/lib/schemas";
 import { EditableField } from "@/components/editable-field";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -59,6 +64,8 @@ const toDate = (dateValue: any): Date | null => {
   return null;
 };
 
+const timeQuickPicks = ["11:00", "14:00", "17:00", "19:00"];
+
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
   const router = useRouter();
@@ -75,10 +82,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   
   const [isSaving, setIsSaving] = useState(false);
   const [isTogglingFollow, setIsTogglingFollow] = useState(false);
+  
+  const [eventDetails, setEventDetails] = useState<{type?: string, dateTime?: Date}>({});
 
   const { toast } = useToast();
   
-  const fetchLeadData = useCallback(async () => {
+  const fetchLeadData = useCallback(async (showToast = false) => {
       try {
         // Fetch lead
         const leadDocRef = doc(db, "leads", params.id);
@@ -105,6 +114,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           (doc) => ({ id: doc.id, ...doc.data() } as Interaction)
         );
         setInteractions(interactionsData);
+        if (showToast) {
+            toast({title: "Interactions Updated" })
+        }
 
       } catch (error) {
         console.error("Error fetching lead data:", error);
@@ -125,6 +137,23 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     }
     loadData();
   }, [params.id, fetchLeadData]);
+  
+  
+  const logInteraction = useCallback(async (interactionData: Partial<Interaction>) => {
+    if (!lead) return;
+    try {
+      await addDoc(collection(db, "interactions"), {
+        ...interactionData,
+        leadId: lead.id,
+        createdAt: new Date().toISOString(),
+      });
+      fetchLeadData(true);
+    } catch (error) {
+      console.error("Error logging interaction:", error);
+      toast({ variant: "destructive", title: "Logging Failed" });
+    }
+  }, [lead, fetchLeadData, toast]);
+
 
   const handleToggleFollowList = async () => {
     if (!lead) return;
@@ -157,17 +186,19 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       const { course, ...leadDetails } = values;
       
       const updateData: any = { ...leadDetails };
-      if (course) {
-        updateData['commitmentSnapshot.course'] = course;
-      }
       
       await updateDoc(leadRef, updateData);
+
+       const newSnapshotCourse = course || lead.commitmentSnapshot.course;
+      if (newSnapshotCourse) {
+        await updateDoc(leadRef, { 'commitmentSnapshot.course': newSnapshotCourse });
+      }
 
       setLead(prev => {
         if (!prev) return null;
         const newLead = { ...prev, ...leadDetails };
-        if (course) {
-          newLead.commitmentSnapshot.course = course;
+        if (newSnapshotCourse) {
+          newLead.commitmentSnapshot.course = newSnapshotCourse;
         }
         return newLead;
       });
@@ -177,7 +208,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         description: "The lead's details have been saved.",
       });
       setIsEditDialogOpen(false);
-    } catch (error) {
+    } catch (error)
+    {
       console.error("Error saving lead:", error);
       toast({
         variant: "destructive",
@@ -254,6 +286,23 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     }
   };
 
+  const handleFeedback = (category: 'content' | 'schedule' | 'price', perception: 'positive' | 'negative') => {
+    logInteraction({
+        feedback: { [category]: { perception } }
+    });
+  }
+
+  const handleScheduleEvent = () => {
+      if (!eventDetails.type || !eventDetails.dateTime) {
+          toast({variant: 'destructive', title: "Please select event type and date/time"});
+          return;
+      }
+      logInteraction({
+          outcomes: { event: { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString() } }
+      });
+      setEventDetails({});
+  };
+
 
   if (isLoading) {
     return (
@@ -315,7 +364,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </TabsList>
           
           <TabsContent value="summary">
-             <div className="grid gap-2">
+             <div className="grid gap-4">
                 <Card>
                     <CardHeader className="p-4 pb-2">
                         <CardTitle className="text-lg">Snapshot</CardTitle>
@@ -330,6 +379,79 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                         <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || 'None'} onSave={(v) => handleSnapshotUpdate('keyNotes', v)} type="textarea" />
                     </CardContent>
                 </Card>
+                
+                <Card>
+                    <CardHeader className="p-4 pb-3">
+                        <CardTitle className="text-lg">Feedback</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 grid grid-cols-3 gap-2">
+                        {(['content', 'schedule', 'price'] as const).map(category => (
+                             <div key={category} className="space-y-2">
+                                <p className="font-medium text-muted-foreground text-xs capitalize">{category}</p>
+                                <div className="flex gap-2">
+                                    <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => handleFeedback(category, 'positive')}><ThumbsUp/></Button>
+                                    <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => handleFeedback(category, 'negative')}><ThumbsDown/></Button>
+                                </div>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+                
+                 <Card>
+                    <CardHeader className="p-4 pb-3">
+                        <CardTitle className="text-lg">Schedule</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 space-y-3">
+                         <div className="flex gap-2">
+                            <Select onValueChange={(v) => setEventDetails(p => ({...p, type: v}))} value={eventDetails.type}>
+                                <SelectTrigger><SelectValue placeholder="Event type..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Online Meet/Demo">Online Meet/Demo</SelectItem>
+                                    <SelectItem value="Visit">Visit</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    variant={"outline"}
+                                    size="icon"
+                                    className={cn("h-10 w-10 shrink-0", !eventDetails.dateTime && "text-muted-foreground")}
+                                >
+                                    <CalendarClock className="h-4 w-4" />
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                        mode="single"
+                                        selected={eventDetails.dateTime}
+                                        onSelect={(d) => {
+                                            const existing = eventDetails.dateTime || new Date();
+                                            if (d) {
+                                                d.setHours(existing.getHours());
+                                                d.setMinutes(existing.getMinutes());
+                                               setEventDetails(p => ({...p, dateTime: d}));
+                                            }
+                                        }}
+                                        initialFocus
+                                    />
+                                    <div className="flex flex-wrap gap-1 p-2 border-t">
+                                    {timeQuickPicks.map(time => (
+                                        <Button key={time} variant="ghost" size="sm" onClick={() => {
+                                            const [h, m] = time.split(':');
+                                            const d = eventDetails.dateTime || new Date();
+                                            d.setHours(parseInt(h, 10), parseInt(m, 10));
+                                            setEventDetails(p => ({...p, dateTime: new Date(d)}))
+                                        }}>{format(new Date(`1970-01-01T${time}`), 'p')}</Button>
+                                    ))}
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                         </div>
+                         {eventDetails.dateTime && <p className="text-sm text-muted-foreground">Selected: {format(eventDetails.dateTime, "PPP p")}</p>}
+                         <Button onClick={handleScheduleEvent} className="w-full">Schedule Event</Button>
+                    </CardContent>
+                </Card>
+
              </div>
           </TabsContent>
 
@@ -352,7 +474,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             </div>
                             <div className="flex gap-2">
                                 <Input value={traitInput} onChange={e => setTraitInput(e.target.value)} placeholder="Add a trait..." onKeyDown={e => e.key === 'Enter' && handleAddTrait()} className="h-9 text-sm"/>
-                                 <Button onClick={handleAddTrait} size="icon" className="sm:w-auto sm:px-4">
+                                 <Button onClick={handleAddTrait} size="icon" className="sm:w-auto sm:px-4 shrink-0">
                                   <Plus className="sm:mr-2 h-4 w-4"/>
                                   <span className="sr-only sm:not-sr-only">Add</span>
                                 </Button>
@@ -371,7 +493,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             </div>
                             <div className="flex gap-2">
                                 <Input value={insightInput} onChange={e => setInsightInput(e.target.value)} placeholder="Add an insight..." onKeyDown={e => e.key === 'Enter' && handleAddInsight()} className="h-9 text-sm"/>
-                                <Button onClick={handleAddInsight} size="icon" className="sm:w-auto sm:px-4">
+                                <Button onClick={handleAddInsight} size="icon" className="sm:w-auto sm:px-4 shrink-0">
                                    <Plus className="sm:mr-2 h-4 w-4"/>
                                   <span className="sr-only sm:not-sr-only">Add</span>
                                 </Button>
@@ -395,7 +517,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                           {interactionDate ? format(interactionDate, 'PP p') : 'Invalid date'}
                                           {interaction.quickLogType && <Badge variant="secondary" className="ml-2">{interaction.quickLogType}</Badge>}
                                          </div>
-                                         <p className="text-muted-foreground mt-1">{interaction.notes || 'Quick Log'}</p>
+                                         <p className="text-muted-foreground mt-1">{interaction.notes || 'No notes'}</p>
                                      </div>
                                    );
                                })}
@@ -425,7 +547,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         isOpen={isLogDialogOpen}
         setIsOpen={setIsLogDialogOpen}
         lead={lead}
-        onLogSaved={fetchLeadData}
+        onLogSaved={() => fetchLeadData(true)}
       />
       <LeadDialog
         isOpen={isEditDialogOpen}
@@ -437,5 +559,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    
