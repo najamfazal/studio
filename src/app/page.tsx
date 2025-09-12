@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   collection,
@@ -11,9 +11,8 @@ import {
   query,
   Timestamp,
   orderBy,
-  where,
 } from "firebase/firestore";
-import { AlertTriangle, Check, ListTodo, Menu } from "lucide-react";
+import { AlertTriangle, Check, ListTodo, Menu, CalendarIcon } from "lucide-react";
 import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
 
 import {
@@ -22,6 +21,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
@@ -54,12 +56,6 @@ export default function TasksPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTask, setActiveTask] = useState<string | null>(null);
   const { toast } = useToast();
-
-  const weekDays = useMemo(() => {
-    const today = new Date();
-    const startDate = addDays(today, -3);
-    return Array.from({ length: 7 }, (_, i) => addDays(startDate, i));
-  }, []);
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -123,7 +119,7 @@ export default function TasksPage() {
   };
 
 
-  const visibleTasks = useMemo(() => {
+  const visibleTasks = useEffect(() => {
     return tasks
       .filter((task) => {
         const dueDate = toDate(task.dueDate);
@@ -188,30 +184,34 @@ export default function TasksPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-4 sticky top-0 z-10">
-        <div className="flex items-center gap-3 mb-4">
-          <SidebarTrigger className="sm:hidden" />
-           <div className="hidden sm:flex items-center gap-3">
-             <ListTodo className="h-8 w-8 text-primary" />
-             <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger />
+            <ListTodo className="h-8 w-8 text-primary hidden sm:block" />
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
           </div>
-           <h1 className="sm:hidden text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
-        </div>
-        <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4 hide-scrollbar">
-          {weekDays.map((day) => (
-            <button
-              key={day.toISOString()}
-              onClick={() => setSelectedDate(day)}
-              className={cn(
-                "flex flex-col items-center justify-center rounded-lg p-2 w-12 h-14 sm:w-14 sm:h-16 transition-colors duration-200 shrink-0",
-                isSameDay(selectedDate, day)
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted hover:bg-muted-foreground/20"
-              )}
-            >
-              <span className="text-xs font-medium">{format(day, "E")}</span>
-              <span className="text-base sm:text-lg font-bold">{format(day, "d")}</span>
-            </button>
-          ))}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn(
+                  "w-[200px] justify-start text-left font-normal",
+                  !selectedDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(day) => day && setSelectedDate(day)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         </div>
       </header>
 
