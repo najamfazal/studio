@@ -45,7 +45,7 @@ import { EditableField } from "@/components/editable-field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -141,8 +141,14 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
     try {
         let interactionsQuery;
+        const baseQuery = [
+            collection(db, "interactions"),
+            where("leadId", "==", params.id),
+            orderBy("createdAt", "desc"),
+            limit(INTERACTION_PAGE_SIZE)
+        ];
         if (loadMore && lastInteractionDoc) {
-            interactionsQuery = query(
+             interactionsQuery = query(
                 collection(db, "interactions"),
                 where("leadId", "==", params.id),
                 orderBy("createdAt", "desc"),
@@ -162,6 +168,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
         
         setHasMoreInteractions(newInteractions.length === INTERACTION_PAGE_SIZE);
+        
         setLastInteractionDoc(snapshot.docs[snapshot.docs.length - 1]);
         setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
 
@@ -198,19 +205,21 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
 
   const onInteractionLogged = useCallback(async () => {
-    setIsLoading(true);
+    // Reset interaction-specific states before refetching
+    setInteractions([]);
+    setLastInteractionDoc(null);
+
     await Promise.all([
       fetchInteractions(),
       fetchLeadData()
     ]);
-    setIsLoading(false);
   }, [fetchInteractions, fetchLeadData]);
 
 
   useEffect(() => {
     const loadData = async () => {
         setIsLoading(true);
-        await Promise.all([fetchLeadData(), fetchInteractions(), fetchSettings()]);
+        await Promise.all([fetchLeadData(), fetchInteractions(false), fetchSettings()]);
         setIsLoading(false);
     }
     loadData();
@@ -301,7 +310,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   };
 
 
-  const updateField = async (fieldName: 'traits' | 'insights', value: string[]) => {
+  const updateField = async (fieldName: 'traits' | 'insights' | 'phone', value: string[] | string) => {
       if (!lead) return;
       try {
           const leadRef = doc(db, "leads", lead.id);
@@ -495,13 +504,15 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           <TabsContent value="summary">
              <div className="grid gap-4">
                 <Card>
-                    <CardHeader className="p-4 pb-2">
+                    <CardHeader className="p-4 pb-2 relative">
                         <CardTitle className="text-lg">Snapshot</CardTitle>
                          <CardDescription className="text-xs">
                           Last interaction: {lastInteractionDate ? format(lastInteractionDate, 'PP') : 'Never'}
                        </CardDescription>
+                       <Badge className="absolute top-4 right-4">AFC Step: {lead.afc_step}</Badge>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 pt-2 text-sm">
+                        <EditableField label="Phone" value={lead.phone} onSave={(v) => updateField('phone', v)} />
                         <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
                         <EditableField label="Price" value={lead.commitmentSnapshot?.price || 'Not specified'} onSave={(v) => handleSnapshotUpdate('price', v)} inputType="number" />
                         <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || 'Not specified'} onSave={(v) => handleSnapshotUpdate('schedule', v)} type="textarea" />
@@ -510,7 +521,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 </Card>
                 
                 <Card>
-                    <Collapsible open={isObjectionsOpen} onOpenChange={(isOpen) => { if (!isOpen) setActiveObjectionCategory(null); }}>
+                    <Collapsible open={isObjectionsOpen}>
                         <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
                              <div className="flex items-center gap-2">
                                 <CardTitle className="text-lg">Feedback</CardTitle>
@@ -520,7 +531,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                              </Button>
                         </CardHeader>
                         <CardContent className="px-4 pt-0 pb-2">
-                             <div className="grid grid-cols-3 gap-2 sm:gap-4 justify-around">
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
                                         <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
@@ -537,21 +548,23 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                     </div>
                                 ))}
                             </div>
-                            <CollapsibleContent className="pt-3 mt-3 border-t">
-                                {activeObjectionCategory && (
-                                     <div className="flex flex-wrap gap-2 justify-center">
-                                        {(appSettings?.feedbackChips[activeObjectionCategory] || []).map(objection => (
-                                            <Badge
-                                                key={objection}
-                                                variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
-                                                onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
-                                                className="cursor-pointer transition-colors text-sm"
-                                            >
-                                                {objection}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                )}
+                            <CollapsibleContent>
+                                <div className="pt-3 mt-3 border-t">
+                                  {activeObjectionCategory && (
+                                       <div className="flex flex-wrap gap-2 justify-center">
+                                          {(appSettings?.feedbackChips[activeObjectionCategory] || []).map(objection => (
+                                              <Badge
+                                                  key={objection}
+                                                  variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
+                                                  onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
+                                                  className="cursor-pointer transition-colors text-sm"
+                                              >
+                                                  {objection}
+                                              </Badge>
+                                          ))}
+                                      </div>
+                                  )}
+                                </div>
                             </CollapsibleContent>
                         </CardContent>
                     </Collapsible>
@@ -796,7 +809,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    
-
-    
