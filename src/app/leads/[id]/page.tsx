@@ -18,7 +18,7 @@ import { db } from "@/lib/firebase";
 import type { Lead, Interaction, InteractionFeedback } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2 } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -43,6 +43,7 @@ import { EditableField } from "@/components/editable-field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
@@ -64,7 +65,9 @@ const toDate = (dateValue: any): Date | null => {
   return null;
 };
 
-const objectionChips: Record<keyof Omit<InteractionFeedback, 'id'>, string[]> = {
+type FeedbackCategory = keyof Omit<InteractionFeedback, 'id'>;
+
+const objectionChips: Record<FeedbackCategory, string[]> = {
   content: ["Not relevant", "Too complex", "Needs more detail"],
   schedule: ["Wrong time", "Too long", "Inconvenient"],
   price: ["Too expensive", "No budget", "Better offers"],
@@ -91,6 +94,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   const [feedback, setFeedback] = useState<InteractionFeedback>({});
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [activeObjectionCategory, setActiveObjectionCategory] = useState<FeedbackCategory | null>(null);
   
   const [eventDetails, setEventDetails] = useState<{type?: string, dateTime?: Date}>({});
 
@@ -296,15 +300,15 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     }
   };
 
-  const handleFeedbackSelection = (category: keyof Omit<InteractionFeedback, 'id'>, perception: 'positive' | 'negative') => {
+  const handleFeedbackSelection = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
     setFeedback(prev => {
       const current = prev[category]?.perception;
-      // If the same perception is clicked again, deselect it
       if (current === perception) {
         const { [category]: _, ...rest } = prev;
+        setActiveObjectionCategory(null);
         return rest;
       }
-      // Set new perception and reset objections
+      setActiveObjectionCategory(perception === 'negative' ? category : null);
       return {
         ...prev,
         [category]: { perception, objections: [] }
@@ -312,15 +316,13 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     });
   };
 
-  const handleObjectionSelection = (category: keyof Omit<InteractionFeedback, 'id'>, objection: string) => {
+  const handleObjectionSelection = (category: FeedbackCategory, objection: string) => {
     setFeedback(prev => {
       if (!prev[category]) return prev;
-
       const existingObjections = prev[category]!.objections || [];
       const newObjections = existingObjections.includes(objection)
-        ? existingObjections.filter(o => o !== objection) // Deselect
-        : [...existingObjections, objection]; // Select
-
+        ? existingObjections.filter(o => o !== objection)
+        : [...existingObjections, objection];
       return {
         ...prev,
         [category]: {
@@ -337,6 +339,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       return;
     }
     setIsSubmittingFeedback(true);
+    setActiveObjectionCategory(null); // Retract chips on submit
     await logInteraction({ feedback }, "Feedback logged");
     setFeedback({});
     setIsSubmittingFeedback(false);
@@ -354,6 +357,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       }, "Event Scheduled");
       setEventDetails({});
   };
+
+  const isObjectionsOpen = activeObjectionCategory !== null;
 
 
   if (isLoading) {
@@ -433,37 +438,43 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 </Card>
                 
                 <Card>
-                    <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
-                        <CardTitle className="text-lg">Feedback</CardTitle>
-                         <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback}>
-                          {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        </Button>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {(['content', 'schedule', 'price'] as const).map(category => (
-                             <div key={category} className="space-y-2">
-                                <p className="font-medium text-muted-foreground text-xs capitalize">{category}</p>
-                                <div className="flex gap-2">
-                                    <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp/></Button>
-                                    <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown/></Button>
-                                </div>
-                                {feedback[category]?.perception === 'negative' && (
-                                <div className="flex flex-wrap gap-1 pt-1">
-                                    {objectionChips[category].map(objection => (
-                                    <Badge
-                                        key={objection}
-                                        variant={feedback[category]?.objections?.includes(objection) ? "default" : "secondary"}
-                                        onClick={() => handleObjectionSelection(category, objection)}
-                                        className="cursor-pointer"
-                                    >
-                                        {objection}
-                                    </Badge>
-                                    ))}
-                                </div>
-                                )}
+                    <Collapsible open={isObjectionsOpen} onOpenChange={() => {}}>
+                        <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+                            <CardTitle className="text-lg">Feedback</CardTitle>
+                            <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback}>
+                            {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-0">
+                            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                                {(['content', 'schedule', 'price'] as const).map(category => (
+                                    <div key={category} className="space-y-2 text-center">
+                                        <p className="font-medium text-muted-foreground text-xs capitalize">{category}</p>
+                                        <div className="flex justify-center gap-2">
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp/></Button>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown/></Button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </CardContent>
+                             <CollapsibleContent className="pt-4 mt-4 border-t border-dashed">
+                                {activeObjectionCategory && (
+                                     <div className="flex flex-wrap gap-2">
+                                        {objectionChips[activeObjectionCategory].map(objection => (
+                                            <Badge
+                                                key={objection}
+                                                variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
+                                                onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
+                                                className="cursor-pointer transition-colors"
+                                            >
+                                                {objection}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                )}
+                            </CollapsibleContent>
+                        </CardContent>
+                    </Collapsible>
                 </Card>
                 
                  <Card>
