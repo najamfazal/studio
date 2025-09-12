@@ -18,7 +18,7 @@ import { db } from "@/lib/firebase";
 import type { Lead, Interaction, InteractionFeedback } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2 } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -156,8 +156,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         leadId: lead.id,
         createdAt: new Date().toISOString(),
       });
-      fetchLeadData(true);
-       toast({ title: successMessage || "Interaction Logged" });
+      await fetchLeadData(true); // Refetch data instead of full reload
+      toast({ title: successMessage || "Interaction Logged" });
     } catch (error) {
       console.error("Error logging interaction:", error);
       toast({ variant: "destructive", title: "Logging Failed" });
@@ -436,7 +436,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
                         <CardTitle className="text-lg">Feedback</CardTitle>
                          <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback}>
-                          <Send className="h-4 w-4" />
+                          {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         </Button>
                     </CardHeader>
                     <CardContent className="p-4 pt-0 grid grid-cols-1 sm:grid-cols-3 gap-4">
