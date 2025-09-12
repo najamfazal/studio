@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
@@ -33,7 +34,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { LogInteractionDialog } from "@/components/log-interaction-dialog";
-import { format, addDays } from "date-fns";
+import { format, addDays, setHours, setMinutes, getHours, getMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useRouter } from "next/navigation";
@@ -73,7 +74,12 @@ const objectionChips: Record<FeedbackCategory, string[]> = {
   price: ["Too expensive", "No budget", "Better offers"],
 };
 
-const timeQuickPicks = ["11:00", "14:00", "17:00", "19:00"];
+const dateQuickPicks = [
+    { label: "Tomorrow", days: 1 },
+    { label: "+3 days", days: 3 },
+    { label: "A week", days: 7 },
+    { label: "Next Month", days: 30 },
+]
 
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
@@ -97,6 +103,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [activeObjectionCategory, setActiveObjectionCategory] = useState<FeedbackCategory | null>(null);
   
   const [eventDetails, setEventDetails] = useState<{type?: string, dateTime?: Date}>({});
+  const [scheduleStep, setScheduleStep] = useState<'date' | 'time'>('date');
 
   const { toast } = useToast();
   
@@ -305,7 +312,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       const current = prev[category]?.perception;
       if (current === perception) {
         const { [category]: _, ...rest } = prev;
-        setActiveObjectionCategory(null);
+        if(category === activeObjectionCategory) setActiveObjectionCategory(null);
         return rest;
       }
       setActiveObjectionCategory(perception === 'negative' ? category : null);
@@ -356,6 +363,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           eventDetails: { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString() }
       }, "Event Scheduled");
       setEventDetails({});
+      setScheduleStep('date');
   };
 
   const isObjectionsOpen = activeObjectionCategory !== null;
@@ -490,7 +498,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                     <SelectItem value="Visit">Visit</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Popover>
+                            <Popover onOpenChange={() => setScheduleStep('date')}>
                                 <PopoverTrigger asChild>
                                 <Button
                                     variant={"outline"}
@@ -501,29 +509,85 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                 </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                        mode="single"
-                                        selected={eventDetails.dateTime}
-                                        onSelect={(d) => {
-                                            const existing = eventDetails.dateTime || new Date();
-                                            if (d) {
-                                                d.setHours(existing.getHours());
-                                                d.setMinutes(existing.getMinutes());
-                                               setEventDetails(p => ({...p, dateTime: d}));
-                                            }
-                                        }}
-                                        initialFocus
-                                    />
-                                    <div className="flex flex-wrap gap-1 p-2 border-t">
-                                    {timeQuickPicks.map(time => (
-                                        <Button key={time} variant="ghost" size="sm" onClick={() => {
-                                            const [h, m] = time.split(':');
-                                            const d = eventDetails.dateTime || new Date();
-                                            d.setHours(parseInt(h, 10), parseInt(m, 10));
-                                            setEventDetails(p => ({...p, dateTime: new Date(d)}))
-                                        }}>{format(new Date(`1970-01-01T${time}`), 'p')}</Button>
-                                    ))}
-                                    </div>
+                                    {scheduleStep === 'date' && (
+                                        <>
+                                            <Calendar
+                                                mode="single"
+                                                selected={eventDetails.dateTime}
+                                                onSelect={(d) => {
+                                                    const existing = eventDetails.dateTime || new Date();
+                                                    if (d) {
+                                                        d.setHours(getHours(existing));
+                                                        d.setMinutes(getMinutes(existing));
+                                                        setEventDetails(p => ({...p, dateTime: d}));
+                                                        setScheduleStep('time');
+                                                    }
+                                                }}
+                                                initialFocus
+                                            />
+                                            <div className="flex flex-wrap gap-1 p-2 border-t">
+                                                {dateQuickPicks.map(qp => (
+                                                    <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
+                                                        const newDate = addDays(new Date(), qp.days);
+                                                        const existing = eventDetails.dateTime || new Date();
+                                                        newDate.setHours(getHours(existing));
+                                                        newDate.setMinutes(getMinutes(existing));
+                                                        setEventDetails(p => ({...p, dateTime: newDate}));
+                                                        setScheduleStep('time');
+                                                    }}>{qp.label}</Button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                    {scheduleStep === 'time' && (
+                                        <div className="p-4">
+                                            <p className="text-sm font-medium text-center mb-2">{eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select a date'}</p>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground mb-1">Hour</p>
+                                                    <div className="grid grid-cols-6 gap-1">
+                                                        {Array.from({length: 12}, (_, i) => i + 1).map(h => (
+                                                          <Button key={h} variant={((getHours(eventDetails.dateTime || 0) % 12) || 12) === h ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                            const d = eventDetails.dateTime || new Date();
+                                                            const currentAmPm = getHours(d) >= 12 ? 'pm' : 'am';
+                                                            const newHour = currentAmPm === 'pm' && h < 12 ? h + 12 : (currentAmPm === 'am' && h === 12 ? 0 : h);
+                                                            setEventDetails(p => ({...p, dateTime: setHours(d, newHour)}));
+                                                          }}>{h}</Button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                   <div>
+                                                        <p className="text-xs font-medium text-muted-foreground mb-1">Period</p>
+                                                        <div className="grid grid-cols-2 gap-1">
+                                                            <Button variant={getHours(eventDetails.dateTime || 0) < 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                const d = eventDetails.dateTime || new Date();
+                                                                const h = getHours(d);
+                                                                if (h >= 12) setEventDetails(p => ({...p, dateTime: setHours(d, h - 12)}));
+                                                            }}>AM</Button>
+                                                            <Button variant={getHours(eventDetails.dateTime || 0) >= 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                const d = eventDetails.dateTime || new Date();
+                                                                const h = getHours(d);
+                                                                if (h < 12) setEventDetails(p => ({...p, dateTime: setHours(d, h + 12)}));
+                                                            }}>PM</Button>
+                                                        </div>
+                                                   </div>
+                                                   <div>
+                                                        <p className="text-xs font-medium text-muted-foreground mb-1">Minute</p>
+                                                        <div className="grid grid-cols-2 gap-1">
+                                                            {['00', '15', '30', '45'].map(m => (
+                                                                <Button key={m} variant={getMinutes(eventDetails.dateTime || 0) === parseInt(m) ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                    const d = eventDetails.dateTime || new Date();
+                                                                    setEventDetails(p => ({...p, dateTime: setMinutes(d, parseInt(m))}));
+                                                                }}>{m}</Button>
+                                                            ))}
+                                                        </div>
+                                                   </div>
+                                                </div>
+                                            </div>
+                                            <Button onClick={() => setScheduleStep('date')} variant="link" size="sm" className="mt-2">Back to date</Button>
+                                        </div>
+                                    )}
                                 </PopoverContent>
                             </Popover>
                          </div>
@@ -639,5 +703,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
 
     
