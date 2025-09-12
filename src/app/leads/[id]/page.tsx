@@ -261,7 +261,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     <div className="flex flex-col min-h-screen bg-background relative">
        <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 gap-2">
           <div className="flex items-center gap-1">
-             <SidebarTrigger className="sm:hidden" />
+             <SidebarTrigger />
              <Button variant="ghost" size="icon" onClick={() => router.back()} className="hidden sm:inline-flex">
               <ArrowLeft />
             </Button>
@@ -380,10 +380,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                    const interactionDate = toDate(interaction.createdAt);
                                    return (
                                      <div key={interaction.id} className="p-3 rounded-md bg-muted/50 text-sm">
-                                         <p className="font-semibold">
+                                         <div className="font-semibold">
                                           {interactionDate ? format(interactionDate, 'PP p') : 'Invalid date'}
                                           {interaction.outcome && <Badge variant="secondary" className="ml-2">{interaction.outcome}</Badge>}
-                                         </p>
+                                         </div>
                                          <p className="text-muted-foreground mt-1">{interaction.notes || 'Quick Log'}</p>
                                      </div>
                                    );
