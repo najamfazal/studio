@@ -13,6 +13,7 @@ interface EditableFieldProps {
   value: string;
   onSave: (value: string) => Promise<void>;
   type?: "input" | "textarea";
+  inputType?: string;
 }
 
 export function EditableField({
@@ -20,6 +21,7 @@ export function EditableField({
   value,
   onSave,
   type = "input",
+  inputType = "text",
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [currentValue, setCurrentValue] = useState(value);
@@ -91,6 +93,8 @@ export function EditableField({
             onKeyDown={handleKeyDown}
             className="h-auto"
             rows={type === 'textarea' ? 3 : 1}
+            type={type === 'input' ? inputType : undefined}
+            inputMode={inputType === 'number' ? 'decimal' : undefined}
           />
         </div>
       ) : (
@@ -101,3 +105,5 @@ export function EditableField({
     </div>
   );
 }
+
+    

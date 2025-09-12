@@ -461,7 +461,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 pt-2 text-sm">
                         <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
-                        <EditableField label="Price" value={lead.commitmentSnapshot?.price || 'Not specified'} onSave={(v) => handleSnapshotUpdate('price', v)} />
+                        <EditableField label="Price" value={lead.commitmentSnapshot?.price || 'Not specified'} onSave={(v) => handleSnapshotUpdate('price', v)} inputType="number" />
                         <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || 'Not specified'} onSave={(v) => handleSnapshotUpdate('schedule', v)} type="textarea" />
                         <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || 'None'} onSave={(v) => handleSnapshotUpdate('keyNotes', v)} type="textarea" />
                     </CardContent>
@@ -722,3 +722,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
