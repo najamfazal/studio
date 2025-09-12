@@ -128,63 +128,61 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     }
   }, [params.id, toast]);
 
-  const fetchInteractions = useCallback(async (loadMore = false) => {
-    let currentLastDoc = lastInteractionDoc;
-    if (!loadMore) {
-        setInteractions([]);
-        currentLastDoc = null;
-    }
-    
-    if (loadMore) {
-        setIsLoadingMore(true);
-    } else {
-        setIsLoading(true);
-    }
-
-    try {
-        let interactionsQuery;
-        const baseQuery = [
-            collection(db, "interactions"),
-            where("leadId", "==", params.id),
-            orderBy("createdAt", "desc"),
-            limit(INTERACTION_PAGE_SIZE)
-        ];
-        if (loadMore && currentLastDoc) {
-             interactionsQuery = query(
-                collection(db, "interactions"),
-                where("leadId", "==", params.id),
-                orderBy("createdAt", "desc"),
-                startAfter(currentLastDoc),
-                limit(INTERACTION_PAGE_SIZE)
-            );
-        } else {
-            interactionsQuery = query(
-                collection(db, "interactions"),
-                where("leadId", "==", params.id),
-                orderBy("createdAt", "desc"),
-                limit(INTERACTION_PAGE_SIZE)
-            );
+  const fetchInteractions = useCallback((loadMore = false) => {
+    return new Promise<void>(async (resolve) => {
+        let currentLastDoc = lastInteractionDoc;
+        if (!loadMore) {
+            setInteractions([]);
+            currentLastDoc = null;
         }
-
-        const snapshot = await getDocs(interactionsQuery);
-        const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
         
-        setHasMoreInteractions(newInteractions.length === INTERACTION_PAGE_SIZE);
-        
-        setLastInteractionDoc(snapshot.docs[snapshot.docs.length - 1]);
-        setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
-
-    } catch (error) {
-        console.error("Error fetching interactions:", error);
-        toast({ variant: "destructive", title: "Error fetching interactions." });
-    } finally {
         if (loadMore) {
-            setIsLoadingMore(false);
+            setIsLoadingMore(true);
         } else {
-            setIsLoading(false);
+            setIsLoading(true);
         }
-    }
+
+        try {
+            let interactionsQuery;
+            if (loadMore && currentLastDoc) {
+                 interactionsQuery = query(
+                    collection(db, "interactions"),
+                    where("leadId", "==", params.id),
+                    orderBy("createdAt", "desc"),
+                    startAfter(currentLastDoc),
+                    limit(INTERACTION_PAGE_SIZE)
+                );
+            } else {
+                interactionsQuery = query(
+                    collection(db, "interactions"),
+                    where("leadId", "==", params.id),
+                    orderBy("createdAt", "desc"),
+                    limit(INTERACTION_PAGE_SIZE)
+                );
+            }
+
+            const snapshot = await getDocs(interactionsQuery);
+            const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
+            
+            setHasMoreInteractions(newInteractions.length === INTERACTION_PAGE_SIZE);
+            
+            setLastInteractionDoc(snapshot.docs[snapshot.docs.length - 1]);
+            setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
+
+        } catch (error) {
+            console.error("Error fetching interactions:", error);
+            toast({ variant: "destructive", title: "Error fetching interactions." });
+        } finally {
+            if (loadMore) {
+                setIsLoadingMore(false);
+            } else {
+                setIsLoading(false);
+            }
+            resolve();
+        }
+    });
   }, [params.id, toast, lastInteractionDoc]);
+
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -451,7 +449,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       setIsSubmittingEvent(false);
   };
 
-  const isObjectionsOpen = Object.values(feedback).some(f => f?.perception === 'negative');
+  const isObjectionsOpen = activeObjectionCategory !== null;
 
 
   if (isLoading) {
@@ -532,10 +530,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             {(lead.phones || []).map((phone, index) => (
                                 <div key={index} className="flex items-center gap-2">
                                     <p className="flex-1">{phone}</p>
-                                    <a href={`tel:${phone.replace(/\D/g, "")}`}>
+                                    <a href={`tel:${phone.replace(/\\D/g, "")}`}>
                                         <Button variant="outline" size="icon" className="h-7 w-7"><Phone className="h-4 w-4" /></Button>
                                     </a>
-                                    <a href={`https://wa.me/${phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
+                                    <a href={`https://wa.me/${phone.replace(/\\D/g, "")}`} target="_blank" rel="noopener noreferrer">
                                         <Button variant="outline" size="icon" className="h-7 w-7"><MessageSquare className="h-4 w-4" /></Button>
                                     </a>
                                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemovePhoneNumber(phone)}><X className="h-4 w-4 text-destructive"/></Button>
@@ -571,17 +569,17 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
-                                        <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
-                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
-                                            <Separator orientation="vertical" className="h-6"/>
-                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
-                                        </div>
                                          <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
                                           {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
                                           {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
                                           {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
                                           {category}
                                         </p>
+                                        <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
+                                            <Separator orientation="vertical" className="h-6"/>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -846,5 +844,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    
