@@ -54,11 +54,10 @@ export type InteractionFeedback = {
     price?: { perception: 'positive' | 'negative', objections?: string[] };
 }
 
-export type InteractionOutcome = {
-    info?: { notes?: string };
-    inFuture?: { date?: string }; // ISO date string
-    event?: { type: string, dateTime: string }; // ISO date string
-}
+export type InteractionEventDetails = { 
+  type: string;
+  dateTime: string; // ISO date string
+};
 
 export type QuickLogType = 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged';
 
@@ -70,8 +69,10 @@ export type Interaction = {
   // For quick logs
   quickLogType?: QuickLogType;
 
-  // For detailed logs
+  // For detailed logs from the lead page
   feedback?: InteractionFeedback;
-  outcomes?: InteractionOutcome;
+  outcome?: string; // e.g. "Event Scheduled", "Needs Info"
+  followUpDate?: string; // ISO date string
+  eventDetails?: InteractionEventDetails;
   notes?: string;
 };

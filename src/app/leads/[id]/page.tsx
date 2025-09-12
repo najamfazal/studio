@@ -15,10 +15,10 @@ import {
   addDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Lead, Interaction } from "@/lib/types";
+import type { Lead, Interaction, InteractionFeedback } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Video, Building } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -82,6 +82,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   
   const [isSaving, setIsSaving] = useState(false);
   const [isTogglingFollow, setIsTogglingFollow] = useState(false);
+
+  const [feedback, setFeedback] = useState<InteractionFeedback>({});
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   
   const [eventDetails, setEventDetails] = useState<{type?: string, dateTime?: Date}>({});
 
@@ -139,7 +142,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   }, [params.id, fetchLeadData]);
   
   
-  const logInteraction = useCallback(async (interactionData: Partial<Interaction>) => {
+  const logInteraction = useCallback(async (interactionData: Partial<Interaction>, successMessage?: string) => {
     if (!lead) return;
     try {
       await addDoc(collection(db, "interactions"), {
@@ -148,6 +151,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         createdAt: new Date().toISOString(),
       });
       fetchLeadData(true);
+       toast({ title: successMessage || "Interaction Logged" });
     } catch (error) {
       console.error("Error logging interaction:", error);
       toast({ variant: "destructive", title: "Logging Failed" });
@@ -286,11 +290,32 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     }
   };
 
-  const handleFeedback = (category: 'content' | 'schedule' | 'price', perception: 'positive' | 'negative') => {
-    logInteraction({
-        feedback: { [category]: { perception } }
+  const handleFeedbackSelection = (category: keyof InteractionFeedback, perception: 'positive' | 'negative') => {
+    setFeedback(prev => {
+      const current = prev[category]?.perception;
+      if (current === perception) {
+        // Deselect if same perception is clicked again
+        const { [category]: _, ...rest } = prev;
+        return rest;
+      }
+      return {
+        ...prev,
+        [category]: { perception }
+      };
     });
-  }
+  };
+
+  const handleLogFeedback = async () => {
+    if (Object.keys(feedback).length === 0) {
+      toast({ variant: 'destructive', title: 'No feedback selected' });
+      return;
+    }
+    setIsSubmittingFeedback(true);
+    await logInteraction({ feedback }, "Feedback logged");
+    setFeedback({});
+    setIsSubmittingFeedback(false);
+  };
+
 
   const handleScheduleEvent = () => {
       if (!eventDetails.type || !eventDetails.dateTime) {
@@ -298,8 +323,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           return;
       }
       logInteraction({
-          outcomes: { event: { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString() } }
-      });
+          outcome: "Event Scheduled",
+          eventDetails: { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString() }
+      }, "Event Scheduled");
       setEventDetails({});
   };
 
@@ -381,16 +407,19 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 </Card>
                 
                 <Card>
-                    <CardHeader className="p-4 pb-3">
+                    <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
                         <CardTitle className="text-lg">Feedback</CardTitle>
+                         <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback}>
+                          <Send className="h-4 w-4" />
+                        </Button>
                     </CardHeader>
                     <CardContent className="p-4 pt-0 grid grid-cols-3 gap-2">
                         {(['content', 'schedule', 'price'] as const).map(category => (
                              <div key={category} className="space-y-2">
                                 <p className="font-medium text-muted-foreground text-xs capitalize">{category}</p>
                                 <div className="flex gap-2">
-                                    <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => handleFeedback(category, 'positive')}><ThumbsUp/></Button>
-                                    <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => handleFeedback(category, 'negative')}><ThumbsDown/></Button>
+                                    <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp/></Button>
+                                    <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'} className="h-9 w-9" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown/></Button>
                                 </div>
                             </div>
                         ))}

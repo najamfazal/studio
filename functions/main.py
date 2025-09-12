@@ -49,21 +49,60 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
         return
     lead_data = lead_doc.to_dict()
     
-    # --- Shared Logic ---
-    # 1. Mark open Interactive tasks as complete
+    # --- Shared Logic: Update last interaction date for ALL logs ---
+    lead_ref.update({"last_interaction_date": firestore.SERVER_TIMESTAMP})
+
+    # --- Type-Specific Logic ---
+    quick_log_type = interaction_data.get("quickLogType")
+    feedback_log = interaction_data.get("feedback")
+    outcome = interaction_data.get("outcome")
+
+    # --- 1. Feedback Log Processing (No AFC change) ---
+    if feedback_log:
+        print(f"Processing feedback log for lead {lead_id}. No tasks created.")
+        # Mark open interactive tasks as complete since feedback implies engagement
+        tasks_ref = db.collection("tasks")
+        open_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
+        for task in open_tasks_query:
+            if task.to_dict().get("nature") == "Interactive":
+                task.reference.update({"completed": True})
+                print(f"Completed interactive task {task.id} for lead {lead_id} due to new feedback.")
+        if not lead_data.get("hasEngaged"):
+            lead_ref.update({"hasEngaged": True})
+        return # End processing here
+
+    # --- 2. Event Scheduled Log Processing (No AFC change) ---
+    if outcome == "Event Scheduled":
+        create_task(lead_id, lead_data['name'], "Send calendar invite", "Procedural")
+        create_task(lead_id, lead_data['name'], "Confirm attendance 1 day prior", "Procedural")
+        # Mark open interactive tasks as complete
+        tasks_ref = db.collection("tasks")
+        open_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
+        for task in open_tasks_query:
+            if task.to_dict().get("nature") == "Interactive":
+                task.reference.update({"completed": True})
+                print(f"Completed interactive task {task.id} for lead {lead_id} due to event scheduling.")
+        if not lead_data.get("hasEngaged"):
+            lead_ref.update({"hasEngaged": True})
+        return # End processing here
+
+    # --- 3. Quick-Log & Standard Engagement Processing (AFC Logic) ---
+    # Any other log type implies engagement and will affect the AFC.
+    
+    # Mark open Interactive tasks as complete
     tasks_ref = db.collection("tasks")
     open_tasks_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
     for task in open_tasks_query:
         if task.to_dict().get("nature") == "Interactive":
             task.reference.update({"completed": True})
             print(f"Completed interactive task {task.id} for lead {lead_id}")
-    
-    # 2. Update last_interaction_date for all logs
-    lead_ref.update({"last_interaction_date": firestore.SERVER_TIMESTAMP})
 
-    quick_log_type = interaction_data.get("quickLogType")
-    
-    # --- Quick-Log Processing ---
+    # Set hasEngaged to true
+    if not lead_data.get("hasEngaged"):
+        lead_ref.update({"hasEngaged": True})
+        print(f"Lead {lead_id} hasEngaged set to true.")
+
+    # Process Quick Log specific state changes
     if quick_log_type:
         if quick_log_type in ["Enrolled", "Withdrawn"]:
             new_status = "Enrolled" if quick_log_type == "Enrolled" else "Withdrawn"
@@ -82,7 +121,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             if next_step in AFC_SCHEDULE:
                 lead_ref.update({"afc_step": next_step})
                 due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[next_step])
-                create_task(lead_id, lead_data['name'], f"{next_step}. Follow-up", "Interactive", due_date)
+                create_task(lead_id, lead_data['name'], f"Day {AFC_SCHEDULE[next_step]} Follow-up", "Interactive", due_date)
             else: # After 5th attempt
                 has_engaged = lead_data.get("hasEngaged", False)
                 new_status = "Cooling" if has_engaged else "Dormant"
@@ -90,29 +129,8 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
                 print(f"AFC cycle complete for {lead_id}. Status set to {new_status}.")
             return # End here for unresponsive, don't schedule 1st follow-up
 
-    # --- Reset Logic for All Other Interactions (Detailed Logs & "Unchanged") ---
-    # On any responsive log, set hasEngaged to true
-    if not lead_data.get("hasEngaged"):
-        lead_ref.update({"hasEngaged": True})
-        print(f"Lead {lead_id} hasEngaged set to true.")
-
-    # Process specific outcomes from detailed logs
-    outcome = interaction_data.get("outcome")
-    if outcome == "Needs Info":
-        lead_ref.update({"status": "Paused"})
-        create_task(lead_id, lead_data['name'], "Send requested information", "Procedural")
-    elif outcome == "Schedule Follow-up":
-        follow_up_date_str = interaction_data.get("followUpDate")
-        if follow_up_date_str:
-            follow_up_date = datetime.fromisoformat(follow_up_date_str.replace('Z', '+00:00'))
-            lead_ref.update({"status": "Snoozed"})
-            create_task(lead_id, lead_data['name'], f"Follow-up on {follow_up_date.strftime('%Y-%m-%d')}", "Interactive", follow_up_date)
-    elif outcome == "Event Scheduled":
-        create_task(lead_id, lead_data['name'], "Send calendar invite", "Procedural")
-        create_task(lead_id, lead_data['name'], "Confirm attendance 1 day prior", "Procedural")
-    
-    # After any responsive log ("Unchanged" or Detailed), reset the AFC
-    # 1. Delete any other pending "Follow-up" tasks to avoid duplicates
+    # --- AFC Reset Logic for "Unchanged" or other responsive logs ---
+    # Delete any other pending "Follow-up" tasks to avoid duplicates
     pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
     for task in pending_follow_ups_query:
         task_data = task.to_dict()
@@ -120,11 +138,11 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             print(f"Deleting pending follow-up task {task.id} to reset AFC.")
             task.reference.delete()
         
-    # 2. Reset AFC step and create a new 1st follow-up task for tomorrow
-    lead_ref.update({"afc_step": 0})
-    due_date = datetime.now() + timedelta(days=1)
-    create_task(lead_id, lead_data['name'], "1. Follow-up", "Interactive", due_date)
-    print(f"AFC reset for lead {lead_id}. New 1st follow-up task created.")
+    # Reset AFC step and create a new 1st follow-up task for tomorrow
+    lead_ref.update({"afc_step": 1}) # Start at step 1
+    due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
+    create_task(lead_id, lead_data['name'], f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
+    print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
 
 
 @scheduler_fn.on_schedule(schedule="30 9,17 * * *", timezone="Asia/Dubai")
@@ -142,9 +160,9 @@ def afcEngine(event: scheduler_fn.ScheduledEvent) -> None:
         tasks_query = db.collection("tasks").where("leadId", "==", lead.id).limit(1).stream()
         if not any(tasks_query):
             print(f"New lead {lead.id} has no tasks. Initializing AFC.")
-            lead.reference.update({"afc_step": 0})
-            due_date = now + timedelta(days=1)
-            create_task(lead.id, lead.to_dict()['name'], "1. Follow-up", "Interactive", due_date)
+            lead.reference.update({"afc_step": 1})
+            due_date = now + timedelta(days=AFC_SCHEDULE[1])
+            create_task(lead.id, lead.to_dict()['name'], f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
 
     # Find active leads who were missed by the system somehow
     active_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "<", one_day_ago)
@@ -152,9 +170,9 @@ def afcEngine(event: scheduler_fn.ScheduledEvent) -> None:
         tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1).stream()
         if not any(tasks_query):
             print(f"Orphaned lead {lead.id} has no tasks. Resetting AFC.")
-            lead.reference.update({"afc_step": 0})
-            due_date = now + timedelta(days=1)
-            create_task(lead.id, lead.to_dict()['name'], "1. Follow-up", "Interactive", due_date)
+            lead.reference.update({"afc_step": 1})
+            due_date = now + timedelta(days=AFC_SCHEDULE[1])
+            create_task(lead.id, lead.to_dict()['name'], f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
 
 
 @scheduler_fn.on_schedule(schedule="every 24 hours")
