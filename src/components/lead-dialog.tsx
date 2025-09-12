@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { leadSchema, type LeadFormValues } from "@/lib/schemas";
 import type { Lead } from "@/lib/types";
+import { Loader2 } from "lucide-react";
 
 interface LeadDialogProps {
   isOpen: boolean;
@@ -70,6 +71,7 @@ export function LeadDialog({
   };
 
   const isSubmitting = form.formState.isSubmitting || isSaving;
+  const canSubmit = form.formState.isValid;
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -148,9 +150,10 @@ export function LeadDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || !canSubmit}>
+                {isSubmitting && <Loader2 className="animate-spin" />}
                 {isSubmitting
-                  ? (leadToEdit ? "Updating..." : "Saving...")
+                  ? "Processing..."
                   : (leadToEdit ? "Update" : "Save")}
               </Button>
             </DialogFooter>

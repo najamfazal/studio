@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
@@ -14,12 +13,13 @@ import {
   updateDoc,
   Timestamp,
   addDoc,
+  limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Lead, Interaction, InteractionFeedback } from "@/lib/types";
+import type { Lead, Interaction, InteractionFeedback, AppSettings } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2, MessageSquareText, CalendarCheck, CircleDollarSign } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -46,7 +46,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
   if (!dateValue) return null;
@@ -59,7 +58,6 @@ const toDate = (dateValue: any): Date | null => {
       return date;
     }
   }
-  // Handle Firestore Timestamp-like objects from server-side rendering
   if (typeof dateValue === "object" && dateValue.seconds) {
     return new Timestamp(dateValue.seconds, dateValue.nanoseconds).toDate();
   }
@@ -68,12 +66,6 @@ const toDate = (dateValue: any): Date | null => {
 
 type FeedbackCategory = keyof Omit<InteractionFeedback, 'id'>;
 
-const objectionChips: Record<FeedbackCategory, string[]> = {
-  content: ["Not relevant", "Too complex", "Needs more detail"],
-  schedule: ["Wrong time", "Too long", "Inconvenient"],
-  price: ["Too expensive", "No budget", "Better offers"],
-};
-
 const dateQuickPicks = [
     { label: "Tomorrow", days: 1 },
     { label: "+3 days", days: 3 },
@@ -81,12 +73,17 @@ const dateQuickPicks = [
     { label: "Next Month", days: 30 },
 ]
 
+const INTERACTION_PAGE_SIZE = 3;
+
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
   const router = useRouter();
   const [lead, setLead] = useState<Lead | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [hasMoreInteractions, setHasMoreInteractions] = useState(true);
+  const [lastInteraction, setLastInteraction] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
@@ -103,13 +100,15 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [activeObjectionCategory, setActiveObjectionCategory] = useState<FeedbackCategory | null>(null);
   
   const [eventDetails, setEventDetails] = useState<{type?: string, dateTime?: Date}>({});
+  const [isSubmittingEvent, setIsSubmittingEvent] = useState(false);
   const [scheduleStep, setScheduleStep] = useState<'date' | 'time'>('date');
+
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   const { toast } = useToast();
   
-  const fetchLeadAndInteractions = useCallback(async () => {
+  const fetchLeadData = useCallback(async () => {
     try {
-      // Fetch lead
       const leadDocRef = doc(db, "leads", params.id);
       const leadDocSnap = await getDoc(leadDocRef);
 
@@ -120,62 +119,96 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         setInsights(leadData.insights || []);
       } else {
         toast({ variant: "destructive", title: "Lead not found" });
-        return;
       }
-
-      // Fetch interactions
-      const interactionsQuery = query(
-        collection(db, "interactions"),
-        where("leadId", "==", params.id),
-        orderBy("createdAt", "desc")
-      );
-      const interactionsSnapshot = await getDocs(interactionsQuery);
-      const interactionsData = interactionsSnapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as Interaction)
-      );
-      setInteractions(interactionsData);
     } catch (error) {
       console.error("Error fetching lead data:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to fetch lead data.",
-      });
+      toast({ variant: "destructive", title: "Error fetching lead." });
     }
   }, [params.id, toast]);
 
-  const onInteractionLogged = useCallback(async () => {
-    try {
-        const interactionsQuery = query(
-          collection(db, "interactions"),
-          where("leadId", "==", params.id),
-          orderBy("createdAt", "desc")
-        );
-        const interactionsSnapshot = await getDocs(interactionsQuery);
-        const interactionsData = interactionsSnapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as Interaction)
-        );
-        setInteractions(interactionsData);
-        toast({title: "Interactions Updated" })
-    } catch (error) {
-       console.error("Error fetching interactions:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch new interactions.",
-        });
+  const fetchInteractions = useCallback(async (loadMore = false) => {
+    if (!loadMore) {
+        setInteractions([]);
+        setLastInteraction(null);
     }
-  }, [params.id, toast]);
+    
+    if (loadMore) {
+        setIsLoadingMore(true);
+    } else {
+        setIsLoading(true);
+    }
+
+    try {
+        let interactionsQuery;
+        if (loadMore && lastInteraction) {
+            interactionsQuery = query(
+                collection(db, "interactions"),
+                where("leadId", "==", params.id),
+                orderBy("createdAt", "desc"),
+                limit(INTERACTION_PAGE_SIZE)
+            );
+        } else {
+            interactionsQuery = query(
+                collection(db, "interactions"),
+                where("leadId", "==", params.id),
+                orderBy("createdAt", "desc"),
+                limit(INTERACTION_PAGE_SIZE)
+            );
+        }
+
+        const snapshot = await getDocs(interactionsQuery);
+        const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
+        
+        setHasMoreInteractions(newInteractions.length === INTERACTION_PAGE_SIZE);
+        setLastInteraction(snapshot.docs[snapshot.docs.length - 1]);
+        setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
+
+    } catch (error) {
+        console.error("Error fetching interactions:", error);
+        toast({ variant: "destructive", title: "Error fetching interactions." });
+    } finally {
+        if (loadMore) {
+            setIsLoadingMore(false);
+        } else {
+            setIsLoading(false);
+        }
+    }
+  }, [params.id, lastInteraction, toast]);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+        const settingsDoc = await getDoc(doc(db, "settings", "appConfig"));
+        if (settingsDoc.exists()) {
+            setAppSettings({ id: settingsDoc.id, ...settingsDoc.data() } as AppSettings);
+        } else {
+            // Default settings if not found
+            setAppSettings({
+              courseNames: [],
+              commonTraits: [],
+              feedbackChips: { content: [], schedule: [], price: [] },
+            });
+        }
+    } catch (error) {
+        console.error("Error fetching settings:", error);
+        toast({variant: "destructive", title: "Could not load app settings."})
+    }
+}, [toast]);
+
+
+  const onInteractionLogged = useCallback(async () => {
+    await fetchInteractions();
+    await fetchLeadData(); 
+  }, [fetchInteractions, fetchLeadData]);
 
 
   useEffect(() => {
     const loadData = async () => {
         setIsLoading(true);
-        await fetchLeadAndInteractions();
+        await Promise.all([fetchLeadData(), fetchInteractions(), fetchSettings()]);
         setIsLoading(false);
     }
     loadData();
-  }, [params.id, fetchLeadAndInteractions]);
+  }, [params.id, fetchLeadData, fetchInteractions, fetchSettings]);
   
   const logInteraction = useCallback(async (interactionData: Partial<Interaction>, successMessage?: string) => {
     if (!lead) return;
@@ -328,7 +361,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const handleFeedbackSelection = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
     setFeedback(prev => {
       const current = prev[category]?.perception;
-      // If the same button is clicked again, deselect it
       if (current === perception) {
         const { [category]: _, ...rest } = prev;
         if (category === activeObjectionCategory) {
@@ -336,7 +368,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         }
         return rest;
       }
-      // If a new perception is selected for the category
       setActiveObjectionCategory(perception === 'negative' ? category : null);
       return {
         ...prev,
@@ -375,17 +406,19 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   };
 
 
-  const handleScheduleEvent = () => {
+  const handleScheduleEvent = async () => {
       if (!eventDetails.type || !eventDetails.dateTime) {
           toast({variant: 'destructive', title: "Please select event type and date/time"});
           return;
       }
-      logInteraction({
+      setIsSubmittingEvent(true);
+      await logInteraction({
           outcome: "Event Scheduled",
           eventDetails: { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString() }
       }, "Event Scheduled");
       setEventDetails({});
       setScheduleStep('date');
+      setIsSubmittingEvent(false);
   };
 
   const isObjectionsOpen = activeObjectionCategory !== null;
@@ -436,7 +469,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 <span className="sr-only">Edit Lead</span>
             </Button>
             <Button onClick={handleToggleFollowList} disabled={isTogglingFollow} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
-              <Star className={cn("h-4 w-4", lead.onFollowList && "fill-current text-yellow-400", "sm:mr-2")}/>
+              {isTogglingFollow ? <Loader2 className="h-4 w-4 animate-spin"/> : <Star className={cn("h-4 w-4", lead.onFollowList && "fill-current text-yellow-400", "sm:mr-2")}/>}
               <span className="hidden sm:inline">{lead.onFollowList ? 'On Follow List' : 'Add to Follow List'}</span>
               <span className="sr-only">Add to Follow List</span>
             </Button>
@@ -468,29 +501,37 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 </Card>
                 
                 <Card>
-                    <Collapsible open={isObjectionsOpen} onOpenChange={setActiveObjectionCategory ? () => {} : undefined}>
+                    <Collapsible open={isObjectionsOpen} onOpenChange={(isOpen) => { if (!isOpen) setActiveObjectionCategory(null); }}>
                         <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
-                            <CardTitle className="text-lg">Feedback</CardTitle>
-                             <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback}>
+                             <div className="flex items-center gap-2">
+                                <CardTitle className="text-lg">Feedback</CardTitle>
+                             </div>
+                             <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback || Object.keys(feedback).length === 0}>
                                 {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                            </Button>
+                             </Button>
                         </CardHeader>
-                        <CardContent className="p-4 pt-0">
-                             <div className="flex sm:gap-4 justify-around">
+                        <CardContent className="px-4 pt-0 pb-2">
+                             <div className="grid grid-cols-3 gap-2 sm:gap-4 justify-around">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
-                                        <p className="font-medium text-muted-foreground text-sm capitalize">{category}</p>
-                                        <div className="flex justify-center gap-2">
-                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'} className="h-9 w-9 rounded-full" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-5 w-5"/></Button>
-                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'} className="h-9 w-9 rounded-full" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-5 w-5"/></Button>
+                                        <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
+                                            <Separator orientation="vertical" className="h-5"/>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
                                         </div>
+                                        <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
+                                          {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
+                                          {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
+                                          {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
+                                          {category}
+                                        </p>
                                     </div>
                                 ))}
                             </div>
-                            <CollapsibleContent className="pt-4 mt-4 border-t border-dashed -mx-4 px-4">
+                            <CollapsibleContent className="pt-3 mt-3 border-t">
                                 {activeObjectionCategory && (
                                      <div className="flex flex-wrap gap-2 justify-center">
-                                        {objectionChips[activeObjectionCategory].map(objection => (
+                                        {(appSettings?.feedbackChips[activeObjectionCategory] || []).map(objection => (
                                             <Badge
                                                 key={objection}
                                                 variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
@@ -537,7 +578,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                                 mode="single"
                                                 selected={eventDetails.dateTime}
                                                 onSelect={(d) => {
-                                                    const existing = eventDetails.dateTime || new Date();
+                                                    const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 12+5), 0);
                                                     if (d) {
                                                         const newDate = setMinutes(setHours(d, getHours(existing)), getMinutes(existing));
                                                         setEventDetails(p => ({...p, dateTime: newDate}));
@@ -549,7 +590,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                             <div className="flex flex-wrap gap-1 p-2 border-t justify-center">
                                                 {dateQuickPicks.map(qp => (
                                                     <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
-                                                        const existing = eventDetails.dateTime || new Date();
+                                                        const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 12+5), 0);
                                                         const newDate = setMinutes(setHours(addDays(new Date(), qp.days), getHours(existing)), getMinutes(existing));
                                                         setEventDetails(p => ({...p, dateTime: newDate}));
                                                         setScheduleStep('time');
@@ -611,7 +652,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                             </Popover>
                          </div>
                          {eventDetails.dateTime && <p className="text-sm text-muted-foreground">Selected: {format(eventDetails.dateTime, "PPP p")}</p>}
-                         <Button onClick={handleScheduleEvent} className="w-full">Schedule Event</Button>
+                         <Button onClick={handleScheduleEvent} className="w-full" disabled={!eventDetails.type || !eventDetails.dateTime || isSubmittingEvent}>
+                          {isSubmittingEvent && <Loader2 className="animate-spin" />}
+                          {isSubmittingEvent ? "Scheduling..." : "Schedule Event"}
+                        </Button>
                     </CardContent>
                 </Card>
 
@@ -671,19 +715,39 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
                        {interactions.length > 0 ? (
-                           <div className="space-y-3">
+                           <div className="space-y-4">
                                {interactions.map(interaction => {
                                    const interactionDate = toDate(interaction.createdAt);
                                    return (
                                      <div key={interaction.id} className="p-3 rounded-md bg-muted/50 text-sm">
-                                         <div className="font-semibold">
-                                          {interactionDate ? format(interactionDate, 'PP p') : 'Invalid date'}
-                                          {interaction.quickLogType && <Badge variant="secondary" className="ml-2">{interaction.quickLogType}</Badge>}
+                                         <div className="font-semibold flex justify-between items-center">
+                                            <span>{interactionDate ? format(interactionDate, 'PP p') : 'Invalid date'}</span>
+                                            {interaction.quickLogType && <Badge variant="secondary">{interaction.quickLogType}</Badge>}
+                                            {interaction.outcome === 'Event Scheduled' && interaction.eventDetails && <Badge variant="secondary">{interaction.eventDetails.type}</Badge>}
                                          </div>
-                                         <p className="text-muted-foreground mt-1">{interaction.notes || 'No notes'}</p>
+                                        {interaction.notes && <p className="text-muted-foreground mt-1">{interaction.notes}</p>}
+                                        {interaction.outcome === 'Event Scheduled' && interaction.eventDetails?.dateTime && (
+                                            <p className="text-muted-foreground mt-1">Scheduled for: {format(toDate(interaction.eventDetails.dateTime)!, "PPP p")}</p>
+                                        )}
+                                        {interaction.feedback && (
+                                            <div className="mt-2 space-y-1 text-xs">
+                                                {Object.entries(interaction.feedback).map(([key, value]) => (
+                                                    <div key={key} className="flex items-center gap-2">
+                                                        <span className="font-medium capitalize">{key}:</span>
+                                                        <Badge variant={value.perception === 'positive' ? 'default' : 'destructive'} className="text-xs">{value.perception}</Badge>
+                                                        {value.objections && value.objections.length > 0 && <span className="text-muted-foreground">{value.objections.join(', ')}</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                      </div>
                                    );
                                })}
+                               {hasMoreInteractions && (
+                                 <Button onClick={() => fetchInteractions(true)} disabled={isLoadingMore} className="w-full mt-4">
+                                   {isLoadingMore ? <Loader2 className="animate-spin"/> : 'Load More'}
+                                 </Button>
+                               )}
                            </div>
                        ) : (
                            <p className="text-sm text-muted-foreground">No interactions logged yet.</p>
@@ -722,5 +786,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    

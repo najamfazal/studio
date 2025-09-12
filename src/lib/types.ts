@@ -71,10 +71,18 @@ export type Interaction = {
 
   // For detailed logs from the lead page
   feedback?: InteractionFeedback;
-  outcome?: string; // e.g. "Event Scheduled", "Needs Info"
-  followUpDate?: string; // ISO date string
+  outcome?: string; // e.g. "Event Scheduled"
   eventDetails?: InteractionEventDetails;
   notes?: string;
 };
 
-    
+export type AppSettings = {
+  id?: string;
+  courseNames: string[];
+  commonTraits: string[];
+  feedbackChips: {
+    content: string[];
+    schedule: string[];
+    price: string[];
+  }
+}
