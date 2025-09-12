@@ -198,8 +198,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
 
   const onInteractionLogged = useCallback(async () => {
-    await fetchInteractions();
-    await fetchLeadData(); 
+    setIsLoading(true);
+    await Promise.all([
+      fetchInteractions(),
+      fetchLeadData()
+    ]);
+    setIsLoading(false);
   }, [fetchInteractions, fetchLeadData]);
 
 
@@ -424,7 +428,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       setIsSubmittingEvent(false);
   };
 
-  const isObjectionsOpen = activeObjectionCategory !== null;
+  const isObjectionsOpen = Object.values(feedback).some(f => f?.perception === 'negative');
 
 
   if (isLoading) {
@@ -792,5 +796,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
 
     
