@@ -93,9 +93,14 @@ export default function LeadsPage() {
       if (editingLead) {
         // Update existing lead
         const leadRef = doc(db, "leads", editingLead.id);
-        const { phone, ...otherValues } = values;
-        const updateData = { ...otherValues, phones: [phone] };
+        const { phone, course, ...otherValues } = values;
+        
+        // Preserve other phone numbers, update the primary one
+        const otherPhones = (editingLead.phones || []).slice(1);
+        const updateData = { ...otherValues, phones: [phone, ...otherPhones], 'commitmentSnapshot.course': course };
+        
         await updateDoc(leadRef, updateData);
+        
         setLeads((prev) =>
           prev.map((lead) =>
             lead.id === editingLead.id ? { ...lead, ...updateData } : lead
@@ -107,7 +112,7 @@ export default function LeadsPage() {
         });
       } else {
         // Add new lead
-        const { phone, ...otherValues } = values;
+        const { phone, course, ...otherValues } = values;
         const newLeadData = { 
             ...otherValues,
             phones: [phone],
@@ -118,7 +123,9 @@ export default function LeadsPage() {
             onFollowList: false,
             traits: [],
             insights: [],
-            commitmentSnapshot: {},
+            commitmentSnapshot: {
+              course: course || ''
+            },
         };
         const docRef = await addDoc(collection(db, "leads"), newLeadData);
         const newLead: Lead = {

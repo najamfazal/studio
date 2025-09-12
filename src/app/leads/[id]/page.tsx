@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
@@ -105,7 +106,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [scheduleStep, setScheduleStep] = useState<'date' | 'time'>('date');
 
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
-  const [newPhoneNumber, setNewPhoneNumber] = useState("");
 
   const { toast } = useToast();
   
@@ -270,7 +270,11 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       
       const { course, phone, ...leadDetails } = values;
       
-      const updateData: any = { ...leadDetails, phones: [phone] };
+      // Update primary phone and keep others
+      const otherPhones = (lead.phones || []).filter(p => p !== (lead.phones?.[0] || ''));
+      const newPhones = [phone, ...otherPhones];
+
+      const updateData: any = { ...leadDetails, phones: newPhones };
       
       await updateDoc(leadRef, updateData);
 
@@ -293,6 +297,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         description: "The lead's details have been saved.",
       });
       setIsEditDialogOpen(false);
+      fetchLeadData(); // Re-fetch data to be sure
     } catch (error)
     {
       console.error("Error saving lead:", error);
@@ -318,20 +323,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           toast({ variant: "destructive", title: `Error updating ${fieldName}` });
       }
   };
-
-  const handleAddPhoneNumber = async () => {
-    if (!lead || !newPhoneNumber) return;
-    const newPhones = [...(lead.phones || []), newPhoneNumber];
-    await updateField('phones', newPhones);
-    setNewPhoneNumber("");
-  };
-
-  const handleRemovePhoneNumber = async (phoneToRemove: string) => {
-      if (!lead) return;
-      const newPhones = (lead.phones || []).filter(p => p !== phoneToRemove);
-      await updateField('phones', newPhones);
-  };
-
 
   const handleAddTrait = () => {
     if (traitInput && !traits.includes(traitInput)) {
@@ -526,7 +517,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     <CardContent className="p-4 pt-2 text-sm">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                         <div className="space-y-2 col-span-2">
-                            <p className="font-medium text-muted-foreground text-xs">Phone</p>
+                            <p className="font-medium text-muted-foreground text-xs">Phone(s)</p>
                             {(lead.phones || []).map((phone, index) => (
                                 <div key={index} className="flex items-center gap-2">
                                     <p className="flex-1">{phone}</p>
@@ -536,18 +527,16 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                     <a href={`https://wa.me/${phone.replace(/\\D/g, "")}`} target="_blank" rel="noopener noreferrer">
                                         <Button variant="outline" size="icon" className="h-7 w-7"><MessageSquare className="h-4 w-4" /></Button>
                                     </a>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemovePhoneNumber(phone)}><X className="h-4 w-4 text-destructive"/></Button>
                                 </div>
                             ))}
-                            <div className="flex gap-2">
-                                <Input value={newPhoneNumber} onChange={e => setNewPhoneNumber(e.target.value)} placeholder="Add a phone number..." className="h-9 text-sm"/>
-                                <Button onClick={handleAddPhoneNumber} size="icon" className="h-9 w-9 shrink-0"><Plus className="h-4 w-4"/></Button>
-                            </div>
+                             {(lead.phones || []).length === 0 && <p className="text-muted-foreground text-sm">No phone numbers.</p>}
                         </div>
 
                         <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
                         <EditableField label="Price" value={lead.commitmentSnapshot?.price || 'Not specified'} onSave={(v) => handleSnapshotUpdate('price', v)} inputType="number" />
-                        <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || 'Not specified'} onSave={(v) => handleSnapshotUpdate('schedule', v)} type="textarea" />
+                        <div className="col-span-2">
+                            <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || 'Not specified'} onSave={(v) => handleSnapshotUpdate('schedule', v)} type="textarea" />
+                        </div>
                         <div className="col-span-2">
                           <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || 'None'} onSave={(v) => handleSnapshotUpdate('keyNotes', v)} type="textarea" />
                         </div>
@@ -566,7 +555,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                              </Button>
                         </CardHeader>
                         <CardContent className="px-4 pt-0 pb-4">
-                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
                                          <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
@@ -844,3 +833,4 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+

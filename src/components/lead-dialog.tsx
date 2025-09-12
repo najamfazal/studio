@@ -134,7 +134,7 @@ export function LeadDialog({
               name="course"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Course</FormLabel>
+                  <FormLabel>Course of Interest</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. Full-Stack Development" {...field} />
                   </FormControl>
