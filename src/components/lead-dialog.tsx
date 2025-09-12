@@ -57,7 +57,7 @@ export function LeadDialog({
         form.reset({
           name: leadToEdit.name,
           email: leadToEdit.email,
-          phone: leadToEdit.phone,
+          phone: leadToEdit.phones?.[0] || "",
           course: leadToEdit.commitmentSnapshot?.course || "",
         });
       } else {

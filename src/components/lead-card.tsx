@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -29,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Lead } from "@/lib/types";
+import { enrichLeadAction } from "@/app/actions";
 
 interface LeadCardProps {
   lead: Lead;
@@ -90,12 +92,14 @@ export function LeadCard({
             {lead.email}
           </a>
         </div>
-        <div className="flex items-center gap-3">
-          <Phone className="h-4 w-4 text-muted-foreground" />
-          <a href={`tel:${lead.phone}`} className="text-sm">
-            {lead.phone}
-          </a>
-        </div>
+        {(lead.phones || []).length > 0 && (
+          <div className="flex items-center gap-3">
+            <Phone className="h-4 w-4 text-muted-foreground" />
+            <a href={`tel:${lead.phones[0]}`} className="text-sm">
+              {lead.phones[0]}
+            </a>
+          </div>
+        )}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-4">
         <Button onClick={handleEnrich} disabled={isEnriching} variant="outline">

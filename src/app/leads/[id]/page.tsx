@@ -20,7 +20,7 @@ import { db } from "@/lib/firebase";
 import type { Lead, Interaction, InteractionFeedback, AppSettings } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2, MessageSquareText, CalendarCheck, CircleDollarSign } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2, MessageSquareText, CalendarCheck, CircleDollarSign, Phone, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -105,6 +105,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [scheduleStep, setScheduleStep] = useState<'date' | 'time'>('date');
 
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [newPhoneNumber, setNewPhoneNumber] = useState("");
 
   const { toast } = useToast();
   
@@ -128,9 +129,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   }, [params.id, toast]);
 
   const fetchInteractions = useCallback(async (loadMore = false) => {
+    let currentLastDoc = lastInteractionDoc;
     if (!loadMore) {
         setInteractions([]);
-        setLastInteractionDoc(null);
+        currentLastDoc = null;
     }
     
     if (loadMore) {
@@ -147,12 +149,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             orderBy("createdAt", "desc"),
             limit(INTERACTION_PAGE_SIZE)
         ];
-        if (loadMore && lastInteractionDoc) {
+        if (loadMore && currentLastDoc) {
              interactionsQuery = query(
                 collection(db, "interactions"),
                 where("leadId", "==", params.id),
                 orderBy("createdAt", "desc"),
-                startAfter(lastInteractionDoc),
+                startAfter(currentLastDoc),
                 limit(INTERACTION_PAGE_SIZE)
             );
         } else {
@@ -205,10 +207,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
 
   const onInteractionLogged = useCallback(async () => {
-    // Reset interaction-specific states before refetching
-    setInteractions([]);
     setLastInteractionDoc(null);
-
     await Promise.all([
       fetchInteractions(),
       fetchLeadData()
@@ -271,9 +270,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     try {
       const leadRef = doc(db, "leads", lead.id);
       
-      const { course, ...leadDetails } = values;
+      const { course, phone, ...leadDetails } = values;
       
-      const updateData: any = { ...leadDetails };
+      const updateData: any = { ...leadDetails, phones: [phone] };
       
       await updateDoc(leadRef, updateData);
 
@@ -284,7 +283,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
       setLead(prev => {
         if (!prev) return null;
-        const newLead = { ...prev, ...leadDetails };
+        const newLead = { ...prev, ...updateData };
         if (newSnapshotCourse) {
           newLead.commitmentSnapshot.course = newSnapshotCourse;
         }
@@ -310,16 +309,31 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   };
 
 
-  const updateField = async (fieldName: 'traits' | 'insights' | 'phone', value: string[] | string) => {
+  const updateField = async (fieldName: 'traits' | 'insights' | 'phones', value: string[] | string) => {
       if (!lead) return;
       try {
           const leadRef = doc(db, "leads", lead.id);
           await updateDoc(leadRef, { [fieldName]: value });
+          setLead(prev => prev ? { ...prev, [fieldName]: value } : null);
           toast({ title: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} updated` });
       } catch (error) {
           toast({ variant: "destructive", title: `Error updating ${fieldName}` });
       }
   };
+
+  const handleAddPhoneNumber = async () => {
+    if (!lead || !newPhoneNumber) return;
+    const newPhones = [...(lead.phones || []), newPhoneNumber];
+    await updateField('phones', newPhones);
+    setNewPhoneNumber("");
+  };
+
+  const handleRemovePhoneNumber = async (phoneToRemove: string) => {
+      if (!lead) return;
+      const newPhones = (lead.phones || []).filter(p => p !== phoneToRemove);
+      await updateField('phones', newPhones);
+  };
+
 
   const handleAddTrait = () => {
     if (traitInput && !traits.includes(traitInput)) {
@@ -511,12 +525,35 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                        </CardDescription>
                        <Badge className="absolute top-4 right-4">AFC Step: {lead.afc_step}</Badge>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 pt-2 text-sm">
-                        <EditableField label="Phone" value={lead.phone} onSave={(v) => updateField('phone', v)} />
+                    <CardContent className="p-4 pt-2 text-sm">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        <div className="space-y-2 col-span-2">
+                            <p className="font-medium text-muted-foreground text-xs">Phone</p>
+                            {(lead.phones || []).map((phone, index) => (
+                                <div key={index} className="flex items-center gap-2">
+                                    <p className="flex-1">{phone}</p>
+                                    <a href={`tel:${phone.replace(/\D/g, "")}`}>
+                                        <Button variant="outline" size="icon" className="h-7 w-7"><Phone className="h-4 w-4" /></Button>
+                                    </a>
+                                    <a href={`https://wa.me/${phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
+                                        <Button variant="outline" size="icon" className="h-7 w-7"><MessageSquare className="h-4 w-4" /></Button>
+                                    </a>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemovePhoneNumber(phone)}><X className="h-4 w-4 text-destructive"/></Button>
+                                </div>
+                            ))}
+                            <div className="flex gap-2">
+                                <Input value={newPhoneNumber} onChange={e => setNewPhoneNumber(e.target.value)} placeholder="Add a phone number..." className="h-9 text-sm"/>
+                                <Button onClick={handleAddPhoneNumber} size="icon" className="h-9 w-9 shrink-0"><Plus className="h-4 w-4"/></Button>
+                            </div>
+                        </div>
+
                         <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
                         <EditableField label="Price" value={lead.commitmentSnapshot?.price || 'Not specified'} onSave={(v) => handleSnapshotUpdate('price', v)} inputType="number" />
                         <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || 'Not specified'} onSave={(v) => handleSnapshotUpdate('schedule', v)} type="textarea" />
-                        <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || 'None'} onSave={(v) => handleSnapshotUpdate('keyNotes', v)} type="textarea" />
+                        <div className="col-span-2">
+                          <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || 'None'} onSave={(v) => handleSnapshotUpdate('keyNotes', v)} type="textarea" />
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
                 
@@ -531,20 +568,20 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                              </Button>
                         </CardHeader>
                         <CardContent className="px-4 pt-0 pb-2">
-                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                             <div className="space-y-3">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
-                                    <div key={category} className="space-y-2 text-center">
-                                        <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
-                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
-                                            <Separator orientation="vertical" className="h-5"/>
-                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
-                                        </div>
+                                    <div key={category} className="space-y-2">
                                         <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
                                           {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
                                           {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
                                           {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
                                           {category}
                                         </p>
+                                        <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
+                                            <Separator orientation="vertical" className="h-6"/>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

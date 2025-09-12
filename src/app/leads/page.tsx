@@ -93,10 +93,12 @@ export default function LeadsPage() {
       if (editingLead) {
         // Update existing lead
         const leadRef = doc(db, "leads", editingLead.id);
-        await updateDoc(leadRef, values);
+        const { phone, ...otherValues } = values;
+        const updateData = { ...otherValues, phones: [phone] };
+        await updateDoc(leadRef, updateData);
         setLeads((prev) =>
           prev.map((lead) =>
-            lead.id === editingLead.id ? { ...lead, ...values } : lead
+            lead.id === editingLead.id ? { ...lead, ...updateData } : lead
           )
         );
         toast({
@@ -105,8 +107,10 @@ export default function LeadsPage() {
         });
       } else {
         // Add new lead
+        const { phone, ...otherValues } = values;
         const newLeadData = { 
-            ...values, 
+            ...otherValues,
+            phones: [phone],
             createdAt: new Date().toISOString(),
             status: 'Active',
             afc_step: 0,
@@ -142,7 +146,11 @@ export default function LeadsPage() {
   };
 
   const handleEnrich = async (leadToEnrich: Lead) => {
-    const result = await enrichLeadAction(leadToEnrich);
+    const result = await enrichLeadAction({
+      name: leadToEnrich.name,
+      email: leadToEnrich.email,
+      phone: leadToEnrich.phones[0] || "",
+    });
     if (result.success && result.additionalInformation) {
       try {
         const leadRef = doc(db, "leads", leadToEnrich.id);
@@ -239,5 +247,3 @@ export default function LeadsPage() {
     </div>
   );
 }
-
-    

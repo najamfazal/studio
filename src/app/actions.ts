@@ -1,9 +1,9 @@
+
 "use server";
 
 import { enrichLeadProfile } from "@/ai/flows/enrich-lead-profile";
-import type { Lead } from "@/lib/types";
 
-export async function enrichLeadAction(lead: Lead) {
+export async function enrichLeadAction(lead: {name: string, email: string, phone: string}) {
   try {
     const enrichedData = await enrichLeadProfile({
       name: lead.name,
