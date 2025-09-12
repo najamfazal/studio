@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   collection,
@@ -119,7 +119,7 @@ export default function TasksPage() {
   };
 
 
-  const visibleTasks = useEffect(() => {
+  const visibleTasks = useMemo(() => {
     return tasks
       .filter((task) => {
         const dueDate = toDate(task.dueDate);
