@@ -14,6 +14,7 @@ import {
   Timestamp,
   addDoc,
   limit,
+  startAfter,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Lead, Interaction, InteractionFeedback, AppSettings } from "@/lib/types";
@@ -33,7 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { LogInteractionDialog } from "@/components/log-interaction-dialog";
+import { QuickLogDialog } from "@/components/quick-log-dialog";
 import { format, addDays, setHours, setMinutes, getHours, getMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -44,7 +45,7 @@ import { EditableField } from "@/components/editable-field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -81,7 +82,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [lead, setLead] = useState<Lead | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [hasMoreInteractions, setHasMoreInteractions] = useState(true);
-  const [lastInteraction, setLastInteraction] = useState<any>(null);
+  const [lastInteractionDoc, setLastInteractionDoc] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
@@ -129,7 +130,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const fetchInteractions = useCallback(async (loadMore = false) => {
     if (!loadMore) {
         setInteractions([]);
-        setLastInteraction(null);
+        setLastInteractionDoc(null);
     }
     
     if (loadMore) {
@@ -140,11 +141,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
     try {
         let interactionsQuery;
-        if (loadMore && lastInteraction) {
+        if (loadMore && lastInteractionDoc) {
             interactionsQuery = query(
                 collection(db, "interactions"),
                 where("leadId", "==", params.id),
                 orderBy("createdAt", "desc"),
+                startAfter(lastInteractionDoc),
                 limit(INTERACTION_PAGE_SIZE)
             );
         } else {
@@ -160,7 +162,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
         
         setHasMoreInteractions(newInteractions.length === INTERACTION_PAGE_SIZE);
-        setLastInteraction(snapshot.docs[snapshot.docs.length - 1]);
+        setLastInteractionDoc(snapshot.docs[snapshot.docs.length - 1]);
         setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
 
     } catch (error) {
@@ -173,7 +175,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             setIsLoading(false);
         }
     }
-  }, [params.id, lastInteraction, toast]);
+  }, [params.id, toast, lastInteractionDoc]);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -208,7 +210,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         setIsLoading(false);
     }
     loadData();
-  }, [params.id, fetchLeadData, fetchInteractions, fetchSettings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id]);
   
   const logInteraction = useCallback(async (interactionData: Partial<Interaction>, successMessage?: string) => {
     if (!lead) return;
@@ -459,8 +462,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             </Button>
           </div>
           <div className="flex-1 overflow-hidden">
-            <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
-            <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'} className="mt-1">{lead.status}</Badge>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold tracking-tight leading-snug break-words line-clamp-2">{lead.name}</h1>
+              <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'} className="mt-1">{lead.status}</Badge>
+            </div>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             <Button onClick={handleEditClick} variant="outline" size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2">
@@ -578,7 +583,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                                 mode="single"
                                                 selected={eventDetails.dateTime}
                                                 onSelect={(d) => {
-                                                    const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 12+5), 0);
+                                                    const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
                                                     if (d) {
                                                         const newDate = setMinutes(setHours(d, getHours(existing)), getMinutes(existing));
                                                         setEventDetails(p => ({...p, dateTime: newDate}));
@@ -590,7 +595,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                             <div className="flex flex-wrap gap-1 p-2 border-t justify-center">
                                                 {dateQuickPicks.map(qp => (
                                                     <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
-                                                        const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 12+5), 0);
+                                                        const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
                                                         const newDate = setMinutes(setHours(addDays(new Date(), qp.days), getHours(existing)), getMinutes(existing));
                                                         setEventDetails(p => ({...p, dateTime: newDate}));
                                                         setScheduleStep('time');
@@ -653,8 +658,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                          </div>
                          {eventDetails.dateTime && <p className="text-sm text-muted-foreground">Selected: {format(eventDetails.dateTime, "PPP p")}</p>}
                          <Button onClick={handleScheduleEvent} className="w-full" disabled={!eventDetails.type || !eventDetails.dateTime || isSubmittingEvent}>
-                          {isSubmittingEvent && <Loader2 className="animate-spin" />}
-                          {isSubmittingEvent ? "Scheduling..." : "Schedule Event"}
+                          {isSubmittingEvent && <Loader2 className="animate-spin mr-2" />}
+                          {isSubmittingEvent ? "Processing..." : "Schedule Event"}
                         </Button>
                     </CardContent>
                 </Card>
@@ -745,7 +750,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                })}
                                {hasMoreInteractions && (
                                  <Button onClick={() => fetchInteractions(true)} disabled={isLoadingMore} className="w-full mt-4">
-                                   {isLoadingMore ? <Loader2 className="animate-spin"/> : 'Load More'}
+                                   {isLoadingMore ? <Loader2 className="animate-spin mr-2"/> : null}
+                                   {isLoadingMore ? 'Loading...' : 'Load More'}
                                  </Button>
                                )}
                            </div>
@@ -770,7 +776,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         </Button>
       </div>
 
-      <LogInteractionDialog 
+      <QuickLogDialog 
         isOpen={isLogDialogOpen}
         setIsOpen={setIsLogDialogOpen}
         lead={lead}
@@ -786,3 +792,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
