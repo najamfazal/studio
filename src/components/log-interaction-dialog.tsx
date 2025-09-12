@@ -3,8 +3,8 @@
 
 import { useState } from "react";
 import { addDoc, collection, doc, updateDoc } from "firebase/firestore";
-import { Calendar as CalendarIcon, ThumbsDown, ThumbsUp, ArrowLeft } from "lucide-react";
-import { format } from "date-fns";
+import { Calendar as CalendarIcon, Info, CalendarClock, CalendarPlus, ThumbsDown, ThumbsUp, ArrowLeft, Loader2, Circle, CheckCircle2 } from "lucide-react";
+import { addDays, format } from "date-fns";
 
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -26,11 +26,9 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { QuickLogType, InteractionOutcome, Lead } from "@/lib/types";
+import { QuickLogType, Lead, InteractionFeedback, InteractionOutcome } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
 
 interface LogInteractionDialogProps {
   isOpen: boolean;
@@ -46,15 +44,22 @@ const quickLogOptions: { value: QuickLogType; label: string }[] = [
   { value: "Unchanged", label: "Unchanged" },
 ];
 
-const outcomeOptions: InteractionOutcome[] = [
-    "Needs Info",
-    "Schedule Follow-up",
-    "Event Scheduled",
-    "Other",
+const objectionChips = {
+    content: ["Not relevant", "Too complex", "Needs more detail", "Unclear"],
+    schedule: ["Wrong time/day", "Too long", "Not flexible"],
+    price: ["Too expensive", "No budget", "Better offer elsewhere"],
+};
+
+const dateQuickPicks = [
+    { label: "Yesterday", days: -1 },
+    { label: "Tomorrow", days: 1 },
+    { label: "In 3 days", days: 3 },
+    { label: "In a week", days: 7 },
 ];
 
-type Step = "initial" | "perception" | "outcome" | "snapshotPrompt" | "snapshot" | "details";
+const timeQuickPicks = ["11:00", "14:00", "17:00", "19:00"];
 
+type Step = "initial" | "feedback" | "outcomes";
 
 export function LogInteractionDialog({
   isOpen,
@@ -67,43 +72,24 @@ export function LogInteractionDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>("initial");
 
-  const [perception, setPerception] = useState<"positive" | "negative" | null>(null);
-  const [outcome, setOutcome] = useState<InteractionOutcome | "">("");
-  const [notes, setNotes] = useState("");
-  const [followUpDate, setFollowUpDate] = useState<Date | undefined>();
+  // Step 1: Feedback State
+  const [feedback, setFeedback] = useState<InteractionFeedback>({});
 
-  const [snapshotData, setSnapshotData] = useState({
-      course: lead.commitmentSnapshot?.course || '',
-      price: lead.commitmentSnapshot?.price || '',
-      schedule: lead.commitmentSnapshot?.schedule || '',
-      keyNotes: lead.commitmentSnapshot?.keyNotes || '',
-  });
+  // Step 2: Outcomes State
+  const [outcomes, setOutcomes] = useState<InteractionOutcome>({});
 
   const { toast } = useToast();
 
   const resetForm = () => {
-    setPerception(null);
-    setOutcome("");
-    setNotes("");
-    setFollowUpDate(undefined);
     setIsSubmitting(false);
     setCurrentStep("initial");
-    setSnapshotData({
-      course: lead.commitmentSnapshot?.course || '',
-      price: lead.commitmentSnapshot?.price || '',
-      schedule: lead.commitmentSnapshot?.schedule || '',
-      keyNotes: lead.commitmentSnapshot?.keyNotes || '',
-    })
+    setFeedback({});
+    setOutcomes({});
   };
 
-  const handleSave = async (logData: any, newSnapshot?: any) => {
+  const handleSave = async (logData: any) => {
     setIsSubmitting(true);
     try {
-      if (newSnapshot) {
-        const leadRef = doc(db, "leads", lead.id);
-        await updateDoc(leadRef, { commitmentSnapshot: newSnapshot });
-      }
-
       await addDoc(collection(db, "interactions"), {
         ...logData,
         leadId: lead.id,
@@ -120,43 +106,91 @@ export function LogInteractionDialog({
         title: "Error",
         description: "Failed to log interaction.",
       });
-      setIsSubmitting(false);
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
   const handleQuickLog = (type: QuickLogType) => {
     handleSave({ quickLogType: type });
   };
-  
-  const handleDetailedLog = () => {
-    if (outcome === 'Schedule Follow-up' && !followUpDate) {
-        toast({ variant: 'destructive', title: 'Please select a follow-up date.'});
-        return;
-    }
-    const logData: any = { outcome, notes };
-    if (perception) logData.perception = perception;
-    if (followUpDate) logData.followUpDate = followUpDate.toISOString();
 
-    const snapshotHasChanged =
-      snapshotData.course !== (lead.commitmentSnapshot?.course || '') ||
-      snapshotData.price !== (lead.commitmentSnapshot?.price || '') ||
-      snapshotData.schedule !== (lead.commitmentSnapshot?.schedule || '') ||
-      snapshotData.keyNotes !== (lead.commitmentSnapshot?.keyNotes || '');
-
-    handleSave(logData, snapshotHasChanged ? snapshotData : undefined);
+  const handleDetailedLogSubmit = () => {
+    const logData: any = {
+      feedback: feedback,
+      outcomes: outcomes,
+    };
+    handleSave(logData);
   }
 
   const handleBack = () => {
-    if (currentStep === "details") setCurrentStep("snapshotPrompt");
-    else if (currentStep === "snapshot") setCurrentStep("snapshotPrompt");
-    else if (currentStep === "snapshotPrompt") setCurrentStep("outcome");
-    else if (currentStep === "outcome") setCurrentStep("perception");
-    else if (currentStep === "perception") setCurrentStep("initial");
+    if (currentStep === "outcomes") setCurrentStep("feedback");
+    else if (currentStep === "feedback") setCurrentStep("initial");
   };
 
-  const handleSnapshotInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setSnapshotData(prev => ({...prev, [name]: value}));
+  const toggleObjection = (category: 'content' | 'schedule' | 'price', objection: string) => {
+    setFeedback(prev => {
+        const existingObjections = prev[category]?.objections || [];
+        const newObjections = existingObjections.includes(objection)
+            ? existingObjections.filter(o => o !== objection)
+            : [...existingObjections, objection];
+        return {
+            ...prev,
+            [category]: {
+                ...prev[category],
+                objections: newObjections,
+            }
+        }
+    });
+  }
+
+  const renderFeedbackSection = (category: 'content' | 'schedule' | 'price', title: string) => (
+    <div className="space-y-2">
+        <h4 className="font-semibold text-sm">{title}</h4>
+        <div className="flex gap-2">
+             <Button
+                variant={feedback[category]?.perception === 'positive' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setFeedback(p => ({...p, [category]: {...p[category], perception: 'positive'}}))}
+            >
+                <ThumbsUp />
+            </Button>
+            <Button
+                variant={feedback[category]?.perception === 'negative' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setFeedback(p => ({...p, [category]: {...p[category], perception: 'negative'}}))}
+            >
+                <ThumbsDown />
+            </Button>
+        </div>
+        {feedback[category]?.perception === 'negative' && (
+            <div className="flex flex-wrap gap-2">
+                {objectionChips[category].map(obj => (
+                    <Button
+                        key={obj}
+                        variant={feedback[category]?.objections?.includes(obj) ? 'secondary' : 'outline'}
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => toggleObjection(category, obj)}
+                    >
+                        {obj}
+                    </Button>
+                ))}
+            </div>
+        )}
+    </div>
+  );
+
+  const toggleOutcome = (outcome: 'info' | 'inFuture' | 'event') => {
+      setOutcomes(prev => {
+          const newOutcomes = {...prev};
+          if (newOutcomes[outcome]) {
+              delete newOutcomes[outcome];
+          } else {
+              newOutcomes[outcome] = {};
+          }
+          return newOutcomes;
+      });
   }
 
   const renderStepContent = () => {
@@ -172,7 +206,7 @@ export function LogInteractionDialog({
                   onClick={() => handleQuickLog(value)}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Logging...' : label}
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : label}
                 </Button>
               ))}
             </div>
@@ -182,119 +216,116 @@ export function LogInteractionDialog({
                     <span className="bg-background px-2 text-muted-foreground">Or</span>
                 </div>
             </div>
-            <Button onClick={() => setCurrentStep('perception')} className="w-full" size="lg">
+            <Button onClick={() => setCurrentStep('feedback')} className="w-full" size="lg">
               Log a Detailed Interaction
             </Button>
           </div>
         );
-      case "perception":
+      case "feedback":
         return (
-          <div className="text-center space-y-4">
-            <h3 className="font-semibold">How was the interaction perceived?</h3>
-            <div className="flex justify-center gap-4">
-              <Button variant="outline" size="lg" className="h-20 w-20 flex-col gap-2" onClick={() => { setPerception('positive'); setCurrentStep('outcome'); }}>
-                <ThumbsUp className="h-8 w-8 text-green-500" />
-                <span>Positive</span>
-              </Button>
-              <Button variant="outline" size="lg" className="h-20 w-20 flex-col gap-2" onClick={() => { setPerception('negative'); setCurrentStep('outcome'); }}>
-                <ThumbsDown className="h-8 w-8 text-red-500" />
-                <span>Negative</span>
-              </Button>
+            <div className="space-y-4">
+                {renderFeedbackSection('content', 'Content Feedback')}
+                {renderFeedbackSection('schedule', 'Schedule Feedback')}
+                {renderFeedbackSection('price', 'Price Feedback')}
+                <Button onClick={() => setCurrentStep('outcomes')} className="w-full">Continue</Button>
             </div>
-          </div>
-        );
-      case "outcome":
-        return (
-           <div className="space-y-4">
-            <h3 className="font-semibold text-center">What was the outcome?</h3>
-            <Select onValueChange={(value) => { setOutcome(value as InteractionOutcome); setCurrentStep('snapshotPrompt'); }} value={outcome}>
-                <SelectTrigger className="h-12 text-base">
-                    <SelectValue placeholder="Select outcome..." />
-                </SelectTrigger>
-                <SelectContent>
-                    {outcomeOptions.map(opt => (
-                        <SelectItem key={opt} value={opt} className="text-base py-2">{opt}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-           </div>
-        );
-       case "snapshotPrompt":
-        return (
-          <div className="text-center space-y-4">
-            <h3 className="font-semibold">Update Commitment Snapshot?</h3>
-            <div className="flex justify-center gap-4">
-              <Button variant="outline" size="lg" onClick={() => { setCurrentStep('snapshot'); }}>
-                Yes, update
-              </Button>
-              <Button variant="default" size="lg" onClick={() => { setCurrentStep('details'); }}>
-                No, skip
-              </Button>
-            </div>
-          </div>
-        );
-      case "snapshot":
-        return (
-          <div className="space-y-3">
-             <div className="grid sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                    <Label htmlFor="course">Course</Label>
-                    <Input id="course" name="course" value={snapshotData.course} onChange={handleSnapshotInputChange} />
-                </div>
-                 <div className="space-y-1">
-                    <Label htmlFor="price">Price</Label>
-                    <Input id="price" name="price" value={snapshotData.price} onChange={handleSnapshotInputChange} />
-                </div>
-                <div className="space-y-1">
-                    <Label htmlFor="schedule">Schedule</Label>
-                    <Input id="schedule" name="schedule" value={snapshotData.schedule} onChange={handleSnapshotInputChange} />
-                </div>
-             </div>
-             <div className="space-y-1">
-                <Label htmlFor="keyNotes">Key Notes</Label>
-                <Textarea id="keyNotes" name="keyNotes" value={snapshotData.keyNotes} onChange={handleSnapshotInputChange} rows={2}/>
-            </div>
-             <Button onClick={() => setCurrentStep('details')} className="w-full">Continue</Button>
-          </div>
         )
-      case "details":
+      case "outcomes":
         return (
           <div className="space-y-4">
-             {outcome === "Schedule Follow-up" && (
+            <div className="grid grid-cols-3 gap-2">
+                <Button variant={outcomes.info ? 'default' : 'outline'} onClick={() => toggleOutcome('info')}><Info className="mr-2"/> Info</Button>
+                <Button variant={outcomes.inFuture ? 'default' : 'outline'} onClick={() => toggleOutcome('inFuture')}><CalendarPlus className="mr-2"/> In-Future</Button>
+                <Button variant={outcomes.event ? 'default' : 'outline'} onClick={() => toggleOutcome('event')}><CalendarClock className="mr-2"/> Event</Button>
+            </div>
+
+            {outcomes.info && (
+                <Textarea 
+                    placeholder="Add notes for 'Needs Info'..."
+                    value={outcomes.info.notes || ""}
+                    onChange={e => setOutcomes(p => ({...p, info: {...p.info, notes: e.target.value}}))}
+                />
+            )}
+
+            {outcomes.inFuture && (
                 <Popover>
                     <PopoverTrigger asChild>
                     <Button
                         variant={"outline"}
-                        className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !followUpDate && "text-muted-foreground"
-                        )}
+                        className={cn("w-full justify-start text-left font-normal", !outcomes.inFuture.date && "text-muted-foreground")}
                     >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {followUpDate ? format(followUpDate, "PPP") : <span>Pick a follow-up date</span>}
+                        {outcomes.inFuture.date ? format(new Date(outcomes.inFuture.date), "PPP") : <span>Pick a future date</span>}
                     </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
-                    <Calendar
-                        mode="single"
-                        selected={followUpDate}
-                        onSelect={setFollowUpDate}
-                        initialFocus
-                    />
+                        <div className="flex flex-wrap gap-1 p-2 border-b">
+                            {dateQuickPicks.map(({label, days}) => (
+                                <Button key={label} variant="ghost" size="sm" onClick={() => setOutcomes(p => ({...p, inFuture: {...p.inFuture, date: addDays(new Date(), days).toISOString()}}))}>{label}</Button>
+                            ))}
+                        </div>
+                        <Calendar
+                            mode="single"
+                            selected={outcomes.inFuture.date ? new Date(outcomes.inFuture.date) : undefined}
+                            onSelect={d => setOutcomes(p => ({...p, inFuture: {...p.inFuture, date: d?.toISOString()}}))}
+                            initialFocus
+                        />
                     </PopoverContent>
-              </Popover>
+                </Popover>
             )}
-            <Textarea 
-                placeholder="Add any relevant notes here..."
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={4}
-            />
+
+            {outcomes.event && (
+                <div className="space-y-2 p-2 border rounded-md">
+                    <Select onValueChange={v => setOutcomes(p => ({...p, event: {...p.event, type: v}}))} value={outcomes.event.type}>
+                        <SelectTrigger><SelectValue placeholder="Select event type..." /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Online Meet/Demo">Online Meet/Demo</SelectItem>
+                            <SelectItem value="Visit">Visit</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <Button
+                            variant={"outline"}
+                            className={cn("w-full justify-start text-left font-normal", !outcomes.event.dateTime && "text-muted-foreground")}
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {outcomes.event.dateTime ? format(new Date(outcomes.event.dateTime), "PPP p") : <span>Pick event date & time</span>}
+                        </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                             <Calendar
+                                mode="single"
+                                selected={outcomes.event.dateTime ? new Date(outcomes.event.dateTime) : undefined}
+                                onSelect={d => {
+                                    const existing = outcomes.event?.dateTime ? new Date(outcomes.event.dateTime) : new Date();
+                                    if (d) {
+                                        d.setHours(existing.getHours());
+                                        d.setMinutes(existing.getMinutes());
+                                        setOutcomes(p => ({...p, event: {...p.event, dateTime: d.toISOString()}}))
+                                    }
+                                }}
+                                initialFocus
+                            />
+                            <div className="flex flex-wrap gap-1 p-2 border-t">
+                               {timeQuickPicks.map(time => (
+                                   <Button key={time} variant="ghost" size="sm" onClick={() => {
+                                       const [h, m] = time.split(':');
+                                       const d = outcomes.event?.dateTime ? new Date(outcomes.event.dateTime) : new Date();
+                                       d.setHours(parseInt(h, 10), parseInt(m, 10));
+                                       setOutcomes(p => ({...p, event: {...p.event, dateTime: d.toISOString()}}))
+                                   }}>{format(new Date(`1970-01-01T${time}`), 'p')}</Button>
+                               ))}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                </div>
+            )}
+
           </div>
         );
     }
   };
-
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -315,19 +346,11 @@ export function LogInteractionDialog({
             )}
             <DialogTitle>Log Interaction</DialogTitle>
           </div>
-          <DialogDescription>
-            {currentStep === 'initial' 
-              ? "Record a new interaction with this lead."
-              : "Follow the steps to log your interaction."
-            }
-          </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-[150px] flex flex-col justify-center">
-            {renderStepContent()}
-        </div>
+        <div className="py-4">{renderStepContent()}</div>
 
-        {currentStep === 'details' && (
+        {currentStep === 'outcomes' && (
             <DialogFooter>
               <Button
                 type="button"
@@ -337,8 +360,8 @@ export function LogInteractionDialog({
               >
                 Cancel
               </Button>
-              <Button onClick={handleDetailedLog} disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Log"}
+              <Button onClick={handleDetailedLogSubmit} disabled={isSubmitting}>
+                {isSubmitting ? <> <Loader2 className="animate-spin mr-2"/> Saving...</> : "Save Log"}
               </Button>
             </DialogFooter>
         )}
@@ -346,3 +369,5 @@ export function LogInteractionDialog({
     </Dialog>
   );
 }
+
+    

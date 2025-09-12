@@ -1,3 +1,4 @@
+
 export type LeadStatus =
   | 'Active'
   | 'Paused'
@@ -47,11 +48,17 @@ export type Task = {
   nature: TaskNature;
 };
 
-export type InteractionOutcome =
-  | 'Needs Info'
-  | 'Schedule Follow-up'
-  | 'Event Scheduled'
-  | 'Other';
+export type InteractionFeedback = {
+    content?: { perception: 'positive' | 'negative', objections?: string[] };
+    schedule?: { perception: 'positive' | 'negative', objections?: string[] };
+    price?: { perception: 'positive' | 'negative', objections?: string[] };
+}
+
+export type InteractionOutcome = {
+    info?: { notes?: string };
+    inFuture?: { date?: string }; // ISO date string
+    event?: { type?: string, dateTime?: string }; // ISO date string
+}
 
 export type QuickLogType = 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged';
 
@@ -59,12 +66,19 @@ export type Interaction = {
   id: string;
   leadId: string;
   createdAt: string; // ISO date string
-  // For detailed logs
-  perception?: 'positive' | 'negative';
-  outcome?: InteractionOutcome;
-  notes?: string;
+  
   // For quick logs
   quickLogType?: QuickLogType;
-  // For scheduled follow-ups
+
+  // For detailed logs
+  feedback?: InteractionFeedback;
+  outcomes?: InteractionOutcome;
+
+  // --- LEGACY FIELDS ---
+  perception?: 'positive' | 'negative';
+  outcome?: 'Needs Info' | 'Schedule Follow-up' | 'Event Scheduled' | 'Other';
+  notes?: string;
   followUpDate?: string; // ISO date string
 };
+
+    

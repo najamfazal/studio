@@ -14,7 +14,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Lead, Interaction, Task } from "@/lib/types";
+import type { Lead, Interaction } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, Menu, FilePenLine } from "lucide-react";
@@ -38,6 +38,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useRouter } from "next/navigation";
 import { LeadDialog } from "@/components/lead-dialog";
 import type { LeadFormValues } from "@/lib/schemas";
+import { EditableField } from "@/components/editable-field";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -63,7 +64,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const router = useRouter();
   const [lead, setLead] = useState<Lead | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -105,18 +105,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           (doc) => ({ id: doc.id, ...doc.data() } as Interaction)
         );
         setInteractions(interactionsData);
-
-        // Fetch tasks
-        const tasksQuery = query(
-          collection(db, "tasks"),
-          where("leadId", "==", params.id),
-          orderBy("createdAt", "desc")
-        );
-        const tasksSnapshot = await getDocs(tasksQuery);
-        const tasksData = tasksSnapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as Task)
-        );
-        setTasks(tasksData);
 
       } catch (error) {
         console.error("Error fetching lead data:", error);
@@ -168,21 +156,20 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       
       const { course, ...leadDetails } = values;
       
-      await updateDoc(leadRef, {
-        ...leadDetails,
-       'commitmentSnapshot.course': course,
-      });
+      const updateData: any = { ...leadDetails };
+      if (course) {
+        updateData['commitmentSnapshot.course'] = course;
+      }
+      
+      await updateDoc(leadRef, updateData);
 
       setLead(prev => {
         if (!prev) return null;
-        return {
-          ...prev,
-          ...leadDetails,
-          commitmentSnapshot: {
-            ...prev.commitmentSnapshot,
-            course,
-          }
+        const newLead = { ...prev, ...leadDetails };
+        if (course) {
+          newLead.commitmentSnapshot.course = course;
         }
+        return newLead;
       });
       
       toast({
@@ -243,6 +230,30 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       setInsights(newInsights);
       updateField('insights', newInsights);
   };
+
+  const handleSnapshotUpdate = async (field: string, value: string) => {
+    if (!lead) return;
+    const fieldPath = `commitmentSnapshot.${field}`;
+    try {
+      const leadRef = doc(db, "leads", lead.id);
+      await updateDoc(leadRef, { [fieldPath]: value });
+      setLead(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          commitmentSnapshot: {
+            ...prev.commitmentSnapshot,
+            [field]: value
+          }
+        }
+      })
+      toast({ title: "Snapshot updated" });
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+      toast({ variant: 'destructive', title: `Failed to update ${field}`});
+    }
+  };
+
 
   if (isLoading) {
     return (
@@ -313,22 +324,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                        </CardDescription>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 pt-2 text-sm">
-                        <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground text-xs">Course</p>
-                            <p>{lead.commitmentSnapshot?.course || 'Not specified'}</p>
-                        </div>
-                         <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground text-xs">Price</p>
-                            <p>{lead.commitmentSnapshot?.price || 'Not specified'}</p>
-                        </div>
-                         <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground text-xs">Schedule</p>
-                            <p>{lead.commitmentSnapshot?.schedule || 'Not specified'}</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="font-medium text-muted-foreground text-xs">Key Notes</p>
-                            <p className="text-muted-foreground/80">{lead.commitmentSnapshot?.keyNotes || 'None'}</p>
-                        </div>
+                        <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
+                        <EditableField label="Price" value={lead.commitmentSnapshot?.price || 'Not specified'} onSave={(v) => handleSnapshotUpdate('price', v)} />
+                        <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || 'Not specified'} onSave={(v) => handleSnapshotUpdate('schedule', v)} type="textarea" />
+                        <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || 'None'} onSave={(v) => handleSnapshotUpdate('keyNotes', v)} type="textarea" />
                     </CardContent>
                 </Card>
              </div>
@@ -394,7 +393,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                      <div key={interaction.id} className="p-3 rounded-md bg-muted/50 text-sm">
                                          <div className="font-semibold">
                                           {interactionDate ? format(interactionDate, 'PP p') : 'Invalid date'}
-                                          {interaction.outcome && <Badge variant="secondary" className="ml-2">{interaction.outcome}</Badge>}
+                                          {interaction.quickLogType && <Badge variant="secondary" className="ml-2">{interaction.quickLogType}</Badge>}
                                          </div>
                                          <p className="text-muted-foreground mt-1">{interaction.notes || 'Quick Log'}</p>
                                      </div>
@@ -438,3 +437,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
