@@ -209,7 +209,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const onInteractionLogged = useCallback(async () => {
     setLastInteractionDoc(null);
     await Promise.all([
-      fetchInteractions(),
+      fetchInteractions(false),
       fetchLeadData()
     ]);
   }, [fetchInteractions, fetchLeadData]);
@@ -558,7 +558,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 </Card>
                 
                 <Card>
-                    <Collapsible open={isObjectionsOpen}>
+                    <Collapsible open={isObjectionsOpen} onOpenChange={(isOpen) => { if (!isOpen) setActiveObjectionCategory(null); }}>
                         <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
                              <div className="flex items-center gap-2">
                                 <CardTitle className="text-lg">Feedback</CardTitle>
@@ -567,21 +567,21 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                 {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                              </Button>
                         </CardHeader>
-                        <CardContent className="px-4 pt-0 pb-2">
-                             <div className="space-y-3">
+                        <CardContent className="px-4 pt-0 pb-4">
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
-                                    <div key={category} className="space-y-2">
-                                        <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
-                                          {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
-                                          {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
-                                          {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
-                                          {category}
-                                        </p>
+                                    <div key={category} className="space-y-2 text-center">
                                         <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
                                             <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
                                             <Separator orientation="vertical" className="h-6"/>
                                             <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
                                         </div>
+                                         <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
+                                          {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
+                                          {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
+                                          {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
+                                          {category}
+                                        </p>
                                     </div>
                                 ))}
                             </div>
@@ -846,3 +846,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    

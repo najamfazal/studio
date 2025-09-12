@@ -121,7 +121,7 @@ export function LeadDialog({
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone</FormLabel>
+                  <FormLabel>Primary Phone</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. 123-456-7890" {...field} />
                   </FormControl>
@@ -151,7 +151,7 @@ export function LeadDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting || !canSubmit}>
-                {isSubmitting && <Loader2 className="animate-spin" />}
+                {isSubmitting && <Loader2 className="animate-spin mr-2" />}
                 {isSubmitting
                   ? "Processing..."
                   : (leadToEdit ? "Update" : "Save")}
@@ -163,3 +163,5 @@ export function LeadDialog({
     </Dialog>
   );
 }
+
+    
