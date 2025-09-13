@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Plus, Settings, Trash2, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { produce } from 'immer';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 
@@ -35,7 +36,6 @@ export default function SettingsPage() {
             const settingsDoc = await getDoc(settingsDocRef);
             if (settingsDoc.exists()) {
                 const data = settingsDoc.data();
-                // Ensure all fields exist, providing defaults if they don't
                 const completeSettings: AppSettings = {
                     courseNames: data.courseNames || [],
                     commonTraits: data.commonTraits || [],
@@ -71,17 +71,20 @@ export default function SettingsPage() {
         fetchSettings();
     }, [fetchSettings]);
 
-    const handleSave = async (updatedSettings: Partial<AppSettings>) => {
+    const handleSave = async (updatePayload: Partial<AppSettings>, newSettingsState: AppSettings) => {
+        if (!settings) return;
+
+        // Optimistic UI update
+        setSettings(newSettingsState);
         setIsSaving(true);
+
         try {
             const settingsDocRef = doc(db, "settings", "appConfig");
-            await updateDoc(settingsDocRef, updatedSettings);
-            
-            // Re-fetch to ensure local state is in sync with DB
-            await fetchSettings();
-            
+            await updateDoc(settingsDocRef, updatePayload);
             toast({ title: "Settings Saved", description: "Your changes have been saved successfully." });
         } catch (error) {
+            // Revert on error
+            setSettings(settings);
             console.error("Error saving settings:", error);
             toast({ variant: "destructive", title: "Save Failed", description: "Could not save your changes." });
         } finally {
@@ -93,89 +96,87 @@ export default function SettingsPage() {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldToUpdate: string[] = [];
-        let updatePath = "";
+        let fieldKey: keyof AppSettings | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' = 'courseNames';
 
         if (field === 'courseNames') {
             if (!newCourseName) return;
             valueToAdd = newCourseName;
-            fieldToUpdate = settings.courseNames;
-            updatePath = 'courseNames';
+            fieldKey = 'courseNames';
             setNewCourseName("");
         } else if (field === 'commonTraits') {
             if (!newTrait) return;
             valueToAdd = newTrait;
-            fieldToUpdate = settings.commonTraits;
-            updatePath = 'commonTraits';
+            fieldKey = 'commonTraits';
             setNewTrait("");
         } else if (field === 'withdrawalReasons') {
             if (!newWithdrawalReason) return;
             valueToAdd = newWithdrawalReason;
-            fieldToUpdate = settings.withdrawalReasons;
-            updatePath = 'withdrawalReasons';
+            fieldKey = 'withdrawalReasons';
             setNewWithdrawalReason("");
         } else if (field.startsWith('feedbackChips.')) {
             const category = newFeedbackChip.category;
             if (!category || !newFeedbackChip.value) return;
             valueToAdd = newFeedbackChip.value;
-            fieldToUpdate = settings.feedbackChips[category];
-            updatePath = `feedbackChips.${category}`;
+            fieldKey = field;
             setNewFeedbackChip({ category: null, value: "" });
         }
 
-        if (fieldToUpdate.includes(valueToAdd)) {
-            toast({ variant: "destructive", title: "Item already exists." });
-            return;
+        const newSettings = produce(settings, draft => {
+            let list: string[];
+            if (fieldKey.startsWith('feedbackChips.')) {
+                const category = fieldKey.split('.')[1] as FeedbackCategory;
+                list = draft.feedbackChips[category];
+            } else {
+                list = draft[fieldKey as keyof AppSettings] as string[];
+            }
+            if (!list.includes(valueToAdd)) {
+                list.push(valueToAdd);
+            } else {
+                 toast({ variant: "destructive", title: "Item already exists." });
+            }
+        });
+
+        if (newSettings === settings) return; // No change was made
+
+        const updatePath = fieldKey;
+        const updatePayload: { [key: string]: any } = {};
+         if (updatePath.includes('.')) {
+            const [parent, child] = updatePath.split('.') as ['feedbackChips', FeedbackCategory];
+            updatePayload[parent] = { ...newSettings.feedbackChips };
+        } else {
+            updatePayload[updatePath] = newSettings[updatePath as keyof AppSettings];
         }
 
-        const updatedItems = [...fieldToUpdate, valueToAdd];
-        
-        const updatePayload: { [key: string]: any } = {};
-        
-        // Handle nested feedbackChips object
-        if (updatePath.includes('.')) {
-            const [parent, child] = updatePath.split('.');
-            updatePayload[parent] = { ...settings.feedbackChips, [child]: updatedItems };
-        } else {
-            updatePayload[updatePath] = updatedItems;
-        }
-        
-        handleSave(updatePayload);
+        handleSave(updatePayload, newSettings);
     };
 
     const handleRemoveItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | `feedbackChips.${FeedbackCategory}`, itemToRemove: string) => {
         if (!settings) return;
 
-        let fieldToUpdate: string[] = [];
-        let updatePath = "";
+        const newSettings = produce(settings, draft => {
+            let list: string[];
+            if (field.startsWith('feedbackChips.')) {
+                const category = field.split('.')[1] as FeedbackCategory;
+                list = draft.feedbackChips[category];
+            } else {
+                list = draft[field as keyof AppSettings] as string[];
+            }
+            const index = list.indexOf(itemToRemove);
+            if (index > -1) {
+                list.splice(index, 1);
+            }
+        });
 
-        if (field === 'courseNames') {
-            fieldToUpdate = settings.courseNames;
-            updatePath = 'courseNames';
-        } else if (field === 'commonTraits') {
-            fieldToUpdate = settings.commonTraits;
-            updatePath = 'commonTraits';
-        } else if (field === 'withdrawalReasons') {
-            fieldToUpdate = settings.withdrawalReasons;
-            updatePath = 'withdrawalReasons';
-        } else if (field.startsWith('feedbackChips.')) {
-            const category = field.split('.')[1] as FeedbackCategory;
-            fieldToUpdate = settings.feedbackChips[category];
-            updatePath = `feedbackChips.${category}`;
-        }
-        
-        const updatedItems = fieldToUpdate.filter(item => item !== itemToRemove);
-        
+        const updatePath = field;
         const updatePayload: { [key: string]: any } = {};
-        
         if (updatePath.includes('.')) {
-            const [parent, child] = updatePath.split('.');
-            updatePayload[parent] = { ...settings.feedbackChips, [child]: updatedItems };
+            const [parent, child] = updatePath.split('.') as ['feedbackChips', FeedbackCategory];
+            updatePayload[parent] = { ...newSettings.feedbackChips };
         } else {
-            updatePayload[updatePath] = updatedItems;
+            updatePayload[updatePath] = newSettings[updatePath as keyof AppSettings];
         }
-        
-        handleSave(updatePayload);
+
+        handleSave(updatePayload, newSettings);
     };
 
     if (isLoading) {
