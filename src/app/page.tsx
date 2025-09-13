@@ -226,51 +226,86 @@ export default function TasksPage() {
 
               return (
                 <div key={task.id} className="relative">
-                  <Link
-                    href={`/leads/${task.leadId}`}
-                    onClick={() => setActiveTask(task.id)}
-                    className={cn(
-                      "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
-                      "border-l-4 overflow-hidden",
-                      urgencyClass,
-                       isNavigating && "pointer-events-none"
-                    )}
-                  >
-                    <div className="flex items-center p-3">
-                      <div className="flex-1">
-                        <p className={cn("font-semibold text-base leading-tight", task.completed && "line-through text-muted-foreground")}>
-                          {task.description}
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {task.leadName}
-                        </p>
+                  {task.leadId ? (
+                    <Link
+                      href={`/leads/${task.leadId}`}
+                      onClick={() => setActiveTask(task.id)}
+                      className={cn(
+                        "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
+                        "border-l-4 overflow-hidden",
+                        urgencyClass,
+                        isNavigating && "pointer-events-none"
+                      )}
+                    >
+                       <div className="flex items-center p-3">
+                        <div className="flex-1">
+                          <p className={cn("font-semibold text-base leading-tight", task.completed && "line-through text-muted-foreground")}>
+                            {task.description}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {task.leadName}
+                          </p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleMarkComplete(task.id, !task.completed);
+                          }}
+                          className={cn(
+                            "flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-full border-2 transition-colors shrink-0",
+                            task.completed
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-muted-foreground/50 hover:border-primary",
+                            task.nature === 'Procedural' && !task.completed && 'cursor-not-allowed opacity-50'
+                          )}
+                        >
+                          {task.completed && <Check className="h-5 w-5" />}
+                        </button>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleMarkComplete(task.id, !task.completed);
-                        }}
-                        className={cn(
-                          "flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-full border-2 transition-colors shrink-0",
-                          task.completed
-                            ? "bg-primary border-primary text-primary-foreground"
-                            : "border-muted-foreground/50 hover:border-primary",
-                           task.nature === 'Procedural' && !task.completed && 'cursor-not-allowed opacity-50'
-                        )}
-                      >
-                        {task.completed && <Check className="h-5 w-5" />}
-                      </button>
+                      {isNavigating && (
+                        <div
+                          className={cn(
+                            "absolute bottom-0 h-1 w-full",
+                            getLoaderClass(urgencyName)
+                          )}
+                        />
+                      )}
+                    </Link>
+                  ) : (
+                     <div className={cn(
+                        "block rounded-lg border bg-card text-card-foreground shadow-sm",
+                        "border-l-4",
+                        urgencyClass
+                      )}>
+                        <div className="flex items-center p-3">
+                          <div className="flex-1">
+                            <p className={cn("font-semibold text-base leading-tight", task.completed && "line-through text-muted-foreground")}>
+                              {task.description}
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {task.leadName} (No linked lead)
+                            </p>
+                          </div>
+                           <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleMarkComplete(task.id, !task.completed);
+                            }}
+                            className={cn(
+                              "flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-full border-2 transition-colors shrink-0",
+                              task.completed
+                                ? "bg-primary border-primary text-primary-foreground"
+                                : "border-muted-foreground/50 hover:border-primary",
+                              task.nature === 'Procedural' && !task.completed && 'cursor-not-allowed opacity-50'
+                            )}
+                          >
+                            {task.completed && <Check className="h-5 w-5" />}
+                          </button>
+                        </div>
                     </div>
-                     {isNavigating && (
-                      <div
-                        className={cn(
-                          "absolute bottom-0 h-1 w-full",
-                          getLoaderClass(urgencyName)
-                        )}
-                      />
-                    )}
-                  </Link>
+                  )}
                 </div>
               );
             })}
