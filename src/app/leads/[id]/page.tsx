@@ -555,19 +555,19 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                              </Button>
                         </CardHeader>
                         <CardContent className="px-4 pt-0 pb-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-3 gap-2 sm:gap-3">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
                                          <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
                                           {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
                                           {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
                                           {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
-                                          {category}
+                                          <span className="hidden sm:inline">{category}</span>
                                         </p>
-                                        <div className="flex items-center justify-center gap-2 border rounded-full p-1 bg-muted/50">
-                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
-                                            <Separator orientation="vertical" className="h-6"/>
-                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-8 w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
+                                        <div className="flex items-center justify-center gap-1 sm:gap-2 border rounded-full p-0.5 sm:p-1 bg-muted/50">
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 sm:h-8 sm:w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
+                                            <Separator orientation="vertical" className="h-5 sm:h-6"/>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 sm:h-8 sm:w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
                                         </div>
                                     </div>
                                 ))}
@@ -833,4 +833,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
