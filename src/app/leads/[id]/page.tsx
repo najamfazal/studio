@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
@@ -523,7 +524,14 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                         </div>
 
                         <div className="col-span-1">
-                          <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
+                          <EditableField 
+                            label="Course" 
+                            value={lead.commitmentSnapshot?.course || ''} 
+                            onSave={(v) => handleSnapshotUpdate('course', v)} 
+                            type="select"
+                            selectOptions={appSettings?.courseNames || []}
+                            placeholder="Not specified"
+                          />
                         </div>
                         <div className="col-span-1 flex flex-col items-end">
                             <div className="w-full max-w-[150px] text-right">

@@ -7,14 +7,17 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 interface EditableFieldProps {
   label: string;
   value: string;
   onSave: (value: string) => Promise<void>;
-  type?: "input" | "textarea";
+  type?: "input" | "textarea" | "select";
   inputType?: string;
   displayFormatter?: (value: string) => React.ReactNode;
+  selectOptions?: string[];
+  placeholder?: string;
 }
 
 export function EditableField({
@@ -24,6 +27,8 @@ export function EditableField({
   type = "input",
   inputType = "text",
   displayFormatter,
+  selectOptions = [],
+  placeholder,
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [currentValue, setCurrentValue] = useState(value);
@@ -35,11 +40,11 @@ export function EditableField({
   }, [value]);
 
   useEffect(() => {
-    if (isEditing) {
+    if (isEditing && type !== 'select') {
       inputRef.current?.focus();
       inputRef.current?.select();
     }
-  }, [isEditing]);
+  }, [isEditing, type]);
 
   const handleSave = async () => {
     if (currentValue === value) {
@@ -57,7 +62,8 @@ export function EditableField({
     setIsEditing(false);
   };
 
-  const handleIconClick = () => {
+  const handleIconClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isEditing) {
         handleSave();
     } else {
@@ -83,17 +89,34 @@ export function EditableField({
   const InputComponent = type === "textarea" ? Textarea : Input;
   const isRightAligned = inputType === 'number';
 
-  return (
-    <div className="space-y-1">
-      <p className={cn("font-medium text-muted-foreground text-xs flex items-center", isRightAligned ? "justify-end" : "justify-between")}>
-        {!isRightAligned && label}
-         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleIconClick} disabled={isSaving}>
-            {isSaving ? <Loader2 className="animate-spin h-3 w-3" /> : (isEditing ? <Check className="h-4 w-4" /> : <Pencil className="h-3 w-3" />)}
-            <span className="sr-only">{isEditing ? `Save ${label}` : `Edit ${label}`}</span>
-        </Button>
-        {isRightAligned && label}
-      </p>
-      {isEditing ? (
+  const renderEditingState = () => {
+    if (type === 'select') {
+      return (
+         <Select
+            value={currentValue}
+            onValueChange={(val) => {
+                setCurrentValue(val);
+                onSave(val).then(() => setIsEditing(false));
+            }}
+            onOpenChange={(open) => {
+                if (!open) {
+                    setIsEditing(false);
+                }
+            }}
+            >
+            <SelectTrigger className="h-9 text-sm" onPointerDown={(e) => e.stopPropagation()}>
+                <SelectValue placeholder={placeholder || "Select..."} />
+            </SelectTrigger>
+            <SelectContent>
+                {selectOptions.map(option => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+      )
+    }
+
+    return (
         <div className="flex gap-1 items-start">
           <InputComponent
             ref={inputRef as any}
@@ -104,11 +127,41 @@ export function EditableField({
             rows={type === 'textarea' ? 3 : 1}
             type={type === 'input' ? inputType : undefined}
             inputMode={inputType === 'number' ? 'decimal' : undefined}
+            onBlur={handleSave}
           />
         </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1">
+      <div 
+        className={cn(
+            "font-medium text-muted-foreground text-xs flex items-center cursor-pointer", 
+            isRightAligned ? "justify-end" : "justify-between",
+            isEditing && "cursor-default"
+        )}
+        onClick={() => !isEditing && setIsEditing(true)}
+      >
+        {!isRightAligned && label}
+         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleIconClick} disabled={isSaving}>
+            {isSaving ? <Loader2 className="animate-spin h-3 w-3" /> : (isEditing && type !== 'select' ? <Check className="h-4 w-4" /> : <Pencil className="h-3 w-3" />)}
+            <span className="sr-only">{isEditing ? `Save ${label}` : `Edit ${label}`}</span>
+        </Button>
+        {isRightAligned && label}
+      </div>
+      {isEditing ? (
+        renderEditingState()
       ) : (
-        <div className={cn("min-h-[2.25rem] pr-6 whitespace-pre-wrap flex items-center", isRightAligned ? "justify-end" : "justify-start", !value && 'text-muted-foreground/80')}>
-             {displayFormatter ? displayFormatter(value) : (value || `No ${label.toLowerCase()} set`)}
+        <div 
+            onClick={() => setIsEditing(true)}
+            className={cn(
+                "min-h-[2.25rem] pr-6 whitespace-pre-wrap flex items-center cursor-pointer", 
+                isRightAligned ? "justify-end" : "justify-start", 
+                !value && 'text-muted-foreground/80'
+            )}
+        >
+             {displayFormatter ? displayFormatter(value) : (value || (placeholder || `No ${label.toLowerCase()} set`))}
         </div>
       )}
     </div>
