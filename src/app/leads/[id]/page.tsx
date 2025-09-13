@@ -266,32 +266,32 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     try {
       const leadRef = doc(db, "leads", lead.id);
       
-      const { course, ...leadDetails } = values;
+      const { phone, course, ...leadDetails } = values;
       
-      const updateData: any = { ...leadDetails };
+      // Preserve other phone numbers if they exist
+      const existingPhones = lead.phones || [];
+      const otherPhones = existingPhones.length > 1 ? existingPhones.slice(1) : [];
+
+      const updateData: any = { 
+          ...leadDetails,
+          phones: [phone, ...otherPhones] 
+      };
       
       await updateDoc(leadRef, updateData);
 
-       const newSnapshotCourse = course || lead.commitmentSnapshot.course;
+      const newSnapshotCourse = course || lead.commitmentSnapshot.course;
       if (newSnapshotCourse) {
         await updateDoc(leadRef, { 'commitmentSnapshot.course': newSnapshotCourse });
       }
 
-      setLead(prev => {
-        if (!prev) return null;
-        const newLead = { ...prev, ...updateData };
-        if (newSnapshotCourse) {
-          newLead.commitmentSnapshot.course = newSnapshotCourse;
-        }
-        return newLead;
-      });
+      // We need to re-fetch to get the latest state from DB
+      await fetchLeadData();
       
       toast({
         title: "Lead Updated",
         description: "The lead's details have been saved.",
       });
       setIsEditDialogOpen(false);
-      fetchLeadData(); // Re-fetch data to be sure
     } catch (error)
     {
       console.error("Error saving lead:", error);
@@ -434,7 +434,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       setIsSubmittingEvent(false);
   };
 
-  const isObjectionsOpen = activeObjectionCategory !== null;
+  const isObjectionsOpen = activeObjectionCategory !== null || (!!feedback.content?.objections?.length || !!feedback.schedule?.objections?.length || !!feedback.price?.objections?.length);
 
 
   if (isLoading) {
@@ -549,14 +549,15 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                              </Button>
                         </CardHeader>
                         <CardContent className="px-4 pt-0 pb-4">
-                            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                             <div className="grid grid-cols-3 gap-2 sm:gap-3">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
                                          <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
                                           {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
                                           {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
                                           {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
-                                          <span className="inline">{category}</span>
+                                          <span className="inline sm:hidden">{category.substring(0,3)}</span>
+                                           <span className="hidden sm:inline">{category}</span>
                                         </p>
                                         <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
                                             <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
