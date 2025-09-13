@@ -123,7 +123,7 @@ export function EditableField({
             value={currentValue}
             onChange={(e) => setCurrentValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className={cn("h-auto", isRightAligned && "text-right")}
+            className={cn("h-auto text-sm", isRightAligned && "text-right")}
             rows={type === 'textarea' ? 3 : 1}
             type={type === 'input' ? inputType : undefined}
             inputMode={inputType === 'number' ? 'decimal' : undefined}
@@ -156,7 +156,7 @@ export function EditableField({
         <div 
             onClick={() => setIsEditing(true)}
             className={cn(
-                "min-h-[2.25rem] pr-6 whitespace-pre-wrap flex items-center cursor-pointer", 
+                "min-h-[2.25rem] pr-6 whitespace-pre-wrap flex items-center cursor-pointer text-sm", 
                 isRightAligned ? "justify-end" : "justify-start", 
                 !value && 'text-muted-foreground/80'
             )}
