@@ -130,10 +130,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   const fetchInteractions = useCallback((loadMore = false) => {
     return new Promise<void>(async (resolve) => {
-        let currentLastDoc = lastInteractionDoc;
         if (!loadMore) {
             setInteractions([]);
-            currentLastDoc = null;
         }
         
         if (loadMore) {
@@ -144,12 +142,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
         try {
             let interactionsQuery;
-            if (loadMore && currentLastDoc) {
+            if (loadMore && lastInteractionDoc) {
                  interactionsQuery = query(
                     collection(db, "interactions"),
                     where("leadId", "==", params.id),
                     orderBy("createdAt", "desc"),
-                    startAfter(currentLastDoc),
+                    startAfter(lastInteractionDoc),
                     limit(INTERACTION_PAGE_SIZE)
                 );
             } else {
@@ -205,7 +203,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
 
   const onInteractionLogged = useCallback(async () => {
-    setLastInteractionDoc(null);
+    setLastInteractionDoc(null); // Reset for re-fetching from the start
     await Promise.all([
       fetchInteractions(false),
       fetchLeadData()
@@ -268,13 +266,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     try {
       const leadRef = doc(db, "leads", lead.id);
       
-      const { course, phone, ...leadDetails } = values;
+      const { course, ...leadDetails } = values;
       
-      // Update primary phone and keep others
-      const otherPhones = (lead.phones || []).filter(p => p !== (lead.phones?.[0] || ''));
-      const newPhones = [phone, ...otherPhones];
-
-      const updateData: any = { ...leadDetails, phones: newPhones };
+      const updateData: any = { ...leadDetails };
       
       await updateDoc(leadRef, updateData);
 
@@ -562,12 +556,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                           {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
                                           {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
                                           {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
-                                          <span className="hidden sm:inline">{category}</span>
+                                          <span className="inline">{category}</span>
                                         </p>
-                                        <div className="flex items-center justify-center gap-1 sm:gap-2 border rounded-full p-0.5 sm:p-1 bg-muted/50">
-                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 sm:h-8 sm:w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
-                                            <Separator orientation="vertical" className="h-5 sm:h-6"/>
-                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 sm:h-8 sm:w-8 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
+                                        <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
+                                            <Separator orientation="vertical" className="h-5"/>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
                                         </div>
                                     </div>
                                 ))}
@@ -833,3 +827,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
