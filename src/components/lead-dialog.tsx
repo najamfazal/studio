@@ -65,7 +65,7 @@ export function LeadDialog({
         form.reset({
           name: leadToEdit.name,
           email: leadToEdit.email,
-          phones: leadToEdit.phones?.length > 0 ? leadToEdit.phones : [{ number: "", type: "both" }],
+          phones: leadToEdit.phones?.length ? leadToEdit.phones.map(p => ({ number: p.number || '', type: p.type || 'both' })) : [{ number: "", type: "both" }],
           course: leadToEdit.commitmentSnapshot?.course || "",
         });
       } else {
