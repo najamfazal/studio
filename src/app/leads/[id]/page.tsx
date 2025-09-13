@@ -295,7 +295,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   };
 
 
-  const updateField = async (fieldName: 'traits' | 'insights' | 'phones', value: any) => {
+  const updateField = async (fieldName: 'traits' | 'insights', value: any) => {
       if (!lead) return;
       try {
           const leadRef = doc(db, "leads", lead.id);
@@ -570,8 +570,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                           {category === 'content' && <MessageSquareText className="h-3.5 w-3.5"/>}
                                           {category === 'schedule' && <CalendarCheck className="h-3.5 w-3.5"/>}
                                           {category === 'price' && <CircleDollarSign className="h-3.5 w-3.5"/>}
-                                          <span className="hidden sm:inline">{category}</span>
-                                          <span className="inline sm:hidden">{category}</span>
+                                          <span className="sm:inline">{category}</span>
                                         </p>
                                         <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
                                             <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
@@ -790,6 +789,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                                     <div key={key} className="flex items-center gap-2">
                                                         <span className="font-medium capitalize">{key}:</span>
                                                         <Badge variant={value.perception === 'positive' ? 'default' : 'destructive'} className="text-xs">{value.perception}</Badge>
+
                                                         {value.objections && value.objections.length > 0 && <span className="text-muted-foreground">{value.objections.join(', ')}</span>}
                                                     </div>
                                                 ))}
@@ -838,7 +838,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         onSave={handleSaveLead}
         leadToEdit={lead}
         isSaving={isSaving}
+        courseNames={appSettings?.courseNames || []}
       />
     </div>
   );
 }
+
+    

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, Users2, Menu } from "lucide-react";
 import {
   collection,
@@ -12,7 +12,8 @@ import {
   deleteDoc,
   query,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  getDoc
 } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import { enrichLeadAction } from "@/app/actions";
 import { db } from "@/lib/firebase";
-import type { Lead } from "@/lib/types";
+import type { Lead, AppSettings } from "@/lib/types";
 import type { LeadFormValues } from "@/lib/schemas";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -32,31 +33,47 @@ export default function LeadsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchLeads = async () => {
-      try {
-        const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
-        const leadsData = querySnapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as Lead)
-        );
-        setLeads(leadsData);
-      } catch (error) {
-        console.error("Error fetching leads:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch leads from the database.",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchLeads();
+  const fetchLeads = useCallback(async () => {
+    try {
+      const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const leadsData = querySnapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as Lead)
+      );
+      setLeads(leadsData);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to fetch leads from the database.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }, [toast]);
+  
+  const fetchSettings = useCallback(async () => {
+    try {
+        const settingsDoc = await getDoc(doc(db, "settings", "appConfig"));
+        if (settingsDoc.exists()) {
+            setAppSettings({ id: settingsDoc.id, ...settingsDoc.data() } as AppSettings);
+        } else {
+            setAppSettings({ courseNames: [], commonTraits: [], feedbackChips: { content: [], schedule: [], price: [] } });
+        }
+    } catch (error) {
+        console.error("Error fetching settings:", error);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    fetchLeads();
+    fetchSettings();
+  }, [fetchLeads, fetchSettings]);
 
   const handleAddClick = () => {
     setEditingLead(null);
@@ -95,9 +112,13 @@ export default function LeadsPage() {
         const leadRef = doc(db, "leads", editingLead.id);
         const { course, ...otherValues } = values;
         
-        const updateData = { ...otherValues, 'commitmentSnapshot.course': course };
+        const updateData = { 
+            ...otherValues, 
+            'commitmentSnapshot.course': course,
+            phones: values.phones
+        };
         
-        await updateDoc(leadRef, updateData);
+        await updateDoc(leadRef, updateData as any);
         
         setLeads((prev) =>
           prev.map((lead) =>
@@ -247,7 +268,10 @@ export default function LeadsPage() {
         onSave={handleSaveLead}
         leadToEdit={editingLead}
         isSaving={isSaving}
+        courseNames={appSettings?.courseNames || []}
       />
     </div>
   );
 }
+
+    

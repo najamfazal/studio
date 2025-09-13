@@ -35,6 +35,7 @@ interface LeadDialogProps {
   onSave: (values: LeadFormValues) => void;
   leadToEdit: Lead | null;
   isSaving?: boolean;
+  courseNames: string[];
 }
 
 export function LeadDialog({
@@ -43,6 +44,7 @@ export function LeadDialog({
   onSave,
   leadToEdit,
   isSaving,
+  courseNames,
 }: LeadDialogProps) {
   const form = useForm<LeadFormValues>({
     resolver: zodResolver(leadSchema),
@@ -189,9 +191,18 @@ export function LeadDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Course of Interest</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Full-Stack Development" {...field} />
-                  </FormControl>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a course" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {courseNames.map(name => (
+                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -217,3 +228,5 @@ export function LeadDialog({
     </Dialog>
   );
 }
+
+    
