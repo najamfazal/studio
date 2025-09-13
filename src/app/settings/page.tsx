@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -24,6 +25,7 @@ export default function SettingsPage() {
 
     const [newCourseName, setNewCourseName] = useState("");
     const [newTrait, setNewTrait] = useState("");
+    const [newWithdrawalReason, setNewWithdrawalReason] = useState("");
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
 
     const fetchSettings = useCallback(async () => {
@@ -32,11 +34,21 @@ export default function SettingsPage() {
             const settingsDocRef = doc(db, "settings", "appConfig");
             const settingsDoc = await getDoc(settingsDocRef);
             if (settingsDoc.exists()) {
-                setSettings({ id: settingsDoc.id, ...settingsDoc.data() } as AppSettings);
+                const data = settingsDoc.data();
+                // Ensure all fields exist, providing defaults if they don't
+                const completeSettings: AppSettings = {
+                    courseNames: data.courseNames || [],
+                    commonTraits: data.commonTraits || [],
+                    withdrawalReasons: data.withdrawalReasons || [],
+                    feedbackChips: data.feedbackChips || { content: [], schedule: [], price: [] },
+                    id: settingsDoc.id,
+                };
+                setSettings(completeSettings);
             } else {
                 const defaultSettings: AppSettings = {
                     courseNames: ["Example Course 1", "Example Course 2"],
                     commonTraits: ["Decisive", "Budget-conscious"],
+                    withdrawalReasons: ["Not interested", "Found alternative"],
                     feedbackChips: {
                         content: ["Not relevant", "Too complex"],
                         schedule: ["Wrong time", "Too long"],
@@ -59,12 +71,15 @@ export default function SettingsPage() {
         fetchSettings();
     }, [fetchSettings]);
 
-    const handleSave = async (updatedSettings: AppSettings) => {
+    const handleSave = async (updatedSettings: Partial<AppSettings>) => {
         setIsSaving(true);
         try {
             const settingsDocRef = doc(db, "settings", "appConfig");
-            await updateDoc(settingsDocRef, { ...updatedSettings });
-            setSettings(updatedSettings);
+            await updateDoc(settingsDocRef, updatedSettings);
+            
+            // Re-fetch to ensure local state is in sync with DB
+            await fetchSettings();
+            
             toast({ title: "Settings Saved", description: "Your changes have been saved successfully." });
         } catch (error) {
             console.error("Error saving settings:", error);
@@ -74,7 +89,7 @@ export default function SettingsPage() {
         }
     };
 
-    const handleAddItem = (field: 'courseNames' | 'commonTraits' | `feedbackChips.${FeedbackCategory}`) => {
+    const handleAddItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | `feedbackChips.${FeedbackCategory}`) => {
         if (!settings) return;
         
         let valueToAdd = "";
@@ -93,6 +108,12 @@ export default function SettingsPage() {
             fieldToUpdate = settings.commonTraits;
             updatePath = 'commonTraits';
             setNewTrait("");
+        } else if (field === 'withdrawalReasons') {
+            if (!newWithdrawalReason) return;
+            valueToAdd = newWithdrawalReason;
+            fieldToUpdate = settings.withdrawalReasons;
+            updatePath = 'withdrawalReasons';
+            setNewWithdrawalReason("");
         } else if (field.startsWith('feedbackChips.')) {
             const category = newFeedbackChip.category;
             if (!category || !newFeedbackChip.value) return;
@@ -109,21 +130,20 @@ export default function SettingsPage() {
 
         const updatedItems = [...fieldToUpdate, valueToAdd];
         
-        const updatedSettings = { ...settings };
-        const keys = updatePath.split('.');
-        let current: any = updatedSettings;
-        keys.forEach((key, index) => {
-            if (index === keys.length - 1) {
-                current[key] = updatedItems;
-            } else {
-                current = current[key];
-            }
-        });
-
-        handleSave(updatedSettings);
+        const updatePayload: { [key: string]: any } = {};
+        
+        // Handle nested feedbackChips object
+        if (updatePath.includes('.')) {
+            const [parent, child] = updatePath.split('.');
+            updatePayload[parent] = { ...settings.feedbackChips, [child]: updatedItems };
+        } else {
+            updatePayload[updatePath] = updatedItems;
+        }
+        
+        handleSave(updatePayload);
     };
 
-    const handleRemoveItem = (field: 'courseNames' | 'commonTraits' | `feedbackChips.${FeedbackCategory}`, itemToRemove: string) => {
+    const handleRemoveItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | `feedbackChips.${FeedbackCategory}`, itemToRemove: string) => {
         if (!settings) return;
 
         let fieldToUpdate: string[] = [];
@@ -135,6 +155,9 @@ export default function SettingsPage() {
         } else if (field === 'commonTraits') {
             fieldToUpdate = settings.commonTraits;
             updatePath = 'commonTraits';
+        } else if (field === 'withdrawalReasons') {
+            fieldToUpdate = settings.withdrawalReasons;
+            updatePath = 'withdrawalReasons';
         } else if (field.startsWith('feedbackChips.')) {
             const category = field.split('.')[1] as FeedbackCategory;
             fieldToUpdate = settings.feedbackChips[category];
@@ -143,18 +166,16 @@ export default function SettingsPage() {
         
         const updatedItems = fieldToUpdate.filter(item => item !== itemToRemove);
         
-        const updatedSettings = { ...settings };
-        const keys = updatePath.split('.');
-        let current: any = updatedSettings;
-        keys.forEach((key, index) => {
-            if (index === keys.length - 1) {
-                current[key] = updatedItems;
-            } else {
-                current = current[key];
-            }
-        });
-
-        handleSave(updatedSettings);
+        const updatePayload: { [key: string]: any } = {};
+        
+        if (updatePath.includes('.')) {
+            const [parent, child] = updatePath.split('.');
+            updatePayload[parent] = { ...settings.feedbackChips, [child]: updatedItems };
+        } else {
+            updatePayload[updatePath] = updatedItems;
+        }
+        
+        handleSave(updatePayload);
     };
 
     if (isLoading) {
@@ -186,7 +207,7 @@ export default function SettingsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Course Names</CardTitle>
-                            <CardDescription>Manage the list of available courses.</CardDescription>
+                            <CardDescription>Manage the list of available courses for the dropdown.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-2">
@@ -204,7 +225,6 @@ export default function SettingsPage() {
                                     <Input value={newCourseName} onChange={e => setNewCourseName(e.target.value)} placeholder="Add new course..." onKeyDown={e => e.key === 'Enter' && handleAddItem('courseNames')} />
                                     <Button onClick={() => handleAddItem('courseNames')} disabled={isSaving || !newCourseName}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
-                                        Add
                                     </Button>
                                 </div>
                             </div>
@@ -232,7 +252,33 @@ export default function SettingsPage() {
                                     <Input value={newTrait} onChange={e => setNewTrait(e.target.value)} placeholder="Add new trait..." onKeyDown={e => e.key === 'Enter' && handleAddItem('commonTraits')} />
                                     <Button onClick={() => handleAddItem('commonTraits')} disabled={isSaving || !newTrait}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
-                                        Add
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Withdrawal Reasons</CardTitle>
+                            <CardDescription>Manage the chips shown when a lead is marked as "Withdrawn".</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="space-y-2">
+                                <div className="flex flex-wrap gap-2">
+                                    {(settings.withdrawalReasons || []).map(reason => (
+                                        <Badge key={reason} variant="secondary" className="text-sm">
+                                            {reason}
+                                            <button onClick={() => handleRemoveItem('withdrawalReasons', reason)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
+                                                <X className="h-3 w-3"/>
+                                            </button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                    <Input value={newWithdrawalReason} onChange={e => setNewWithdrawalReason(e.target.value)} placeholder="Add new reason..." onKeyDown={e => e.key === 'Enter' && handleAddItem('withdrawalReasons')} />
+                                    <Button onClick={() => handleAddItem('withdrawalReasons')} disabled={isSaving || !newWithdrawalReason}>
+                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>
                             </div>
@@ -276,7 +322,6 @@ export default function SettingsPage() {
                                                 disabled={isSaving || newFeedbackChip.category !== category || !newFeedbackChip.value}
                                             >
                                                 {isSaving && newFeedbackChip.category === category ? <Loader2 className="animate-spin" /> : <Plus/>}
-                                                Add
                                             </Button>
                                         </div>
                                     </div>

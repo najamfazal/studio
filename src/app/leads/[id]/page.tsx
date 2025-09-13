@@ -1,5 +1,6 @@
 
 
+
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
@@ -75,7 +76,7 @@ const dateQuickPicks = [
     { label: "Next Month", days: 30 },
 ]
 
-const INTERACTION_PAGE_SIZE = 3;
+const INTERACTION_PAGE_SIZE = 5;
 const AED_TO_USD_RATE = 0.27;
 
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
@@ -187,6 +188,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             setAppSettings({
               courseNames: [],
               commonTraits: [],
+              withdrawalReasons: [],
               feedbackChips: { content: [], schedule: [], price: [] },
             });
         }
@@ -791,6 +793,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                                         {interaction.outcome === 'Event Scheduled' && interaction.eventDetails?.dateTime && (
                                             <p className="text-muted-foreground mt-1">Scheduled for: {format(toDate(interaction.eventDetails.dateTime)!, "PPP p")}</p>
                                         )}
+                                        {interaction.withdrawalReasons && interaction.withdrawalReasons.length > 0 && (
+                                            <p className="text-muted-foreground mt-1">Reasons: {interaction.withdrawalReasons.join(", ")}</p>
+                                        )}
                                         {interaction.feedback && (
                                             <div className="mt-2 space-y-1 text-xs">
                                                 {Object.entries(interaction.feedback).map(([key, value]) => (
@@ -839,6 +844,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         setIsOpen={setIsLogDialogOpen}
         lead={lead}
         onLogSaved={onInteractionLogged}
+        appSettings={appSettings}
       />
       <LeadDialog
         isOpen={isEditDialogOpen}
@@ -851,5 +857,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    

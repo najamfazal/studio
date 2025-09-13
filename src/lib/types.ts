@@ -73,6 +73,7 @@ export type Interaction = {
   
   // For quick logs
   quickLogType?: QuickLogType;
+  withdrawalReasons?: string[];
 
   // For detailed logs from the lead page
   feedback?: InteractionFeedback;
@@ -85,6 +86,7 @@ export type AppSettings = {
   id?: string;
   courseNames: string[];
   commonTraits: string[];
+  withdrawalReasons: string[];
   feedbackChips: {
     content: string[];
     schedule: string[];
