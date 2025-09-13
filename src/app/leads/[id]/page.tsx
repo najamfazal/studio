@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
@@ -76,6 +75,7 @@ const dateQuickPicks = [
 ]
 
 const INTERACTION_PAGE_SIZE = 3;
+const AED_TO_USD_RATE = 0.27;
 
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
@@ -130,14 +130,11 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   const fetchInteractions = useCallback((loadMore = false) => {
     return new Promise<void>(async (resolve) => {
-        if (!loadMore) {
-            setInteractions([]);
-        }
-        
         if (loadMore) {
             setIsLoadingMore(true);
         } else {
             setIsLoading(true);
+            setInteractions([]); // Clear on initial fetch
         }
 
         try {
@@ -171,12 +168,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             console.error("Error fetching interactions:", error);
             toast({ variant: "destructive", title: "Error fetching interactions." });
         } finally {
-            if (loadMore) {
-                setIsLoadingMore(false);
-            } else {
-                setIsLoading(false);
-            }
-            resolve();
+             setIsLoadingMore(false);
+             setIsLoading(false);
+             resolve();
         }
     });
   }, [params.id, toast, lastInteractionDoc]);
@@ -266,15 +260,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     try {
       const leadRef = doc(db, "leads", lead.id);
       
-      const { phone, course, ...leadDetails } = values;
+      const { course, ...leadDetails } = values;
       
-      // Preserve other phone numbers if they exist
-      const existingPhones = lead.phones || [];
-      const otherPhones = existingPhones.length > 1 ? existingPhones.slice(1) : [];
-
       const updateData: any = { 
-          ...leadDetails,
-          phones: [phone, ...otherPhones] 
+          ...leadDetails
       };
       
       await updateDoc(leadRef, updateData);
@@ -306,7 +295,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   };
 
 
-  const updateField = async (fieldName: 'traits' | 'insights' | 'phones', value: string[] | string) => {
+  const updateField = async (fieldName: 'traits' | 'insights' | 'phones', value: any) => {
       if (!lead) return;
       try {
           const leadRef = doc(db, "leads", lead.id);
@@ -434,7 +423,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       setIsSubmittingEvent(false);
   };
 
-  const isObjectionsOpen = activeObjectionCategory !== null || (!!feedback.content?.objections?.length || !!feedback.schedule?.objections?.length || !!feedback.price?.objections?.length);
+  const isObjectionsOpen = activeObjectionCategory !== null;
 
 
   if (isLoading) {
@@ -461,6 +450,9 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   }
   
   const lastInteractionDate = toDate(lead.last_interaction_date);
+  const priceInAED = parseFloat(lead.commitmentSnapshot?.price || "0");
+  const priceInUSD = priceInAED * AED_TO_USD_RATE;
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background relative">
@@ -510,24 +502,46 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     </CardHeader>
                     <CardContent className="p-4 pt-2 text-sm">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                        <div className="space-y-2 col-span-2">
+                         <div className="space-y-2 col-span-2">
                             <p className="font-medium text-muted-foreground text-xs">Phone(s)</p>
                             {(lead.phones || []).map((phone, index) => (
                                 <div key={index} className="flex items-center gap-2">
-                                    <p className="flex-1">{phone}</p>
-                                    <a href={`tel:${phone.replace(/\\D/g, "")}`}>
+                                    <p className="flex-1">{phone.number}</p>
+                                    {(phone.type === 'calling' || phone.type === 'both') && (
+                                    <a href={`tel:${phone.number.replace(/\\D/g, "")}`}>
                                         <Button variant="outline" size="icon" className="h-7 w-7"><Phone className="h-4 w-4" /></Button>
                                     </a>
-                                    <a href={`https://wa.me/${phone.replace(/\\D/g, "")}`} target="_blank" rel="noopener noreferrer">
+                                    )}
+                                    {(phone.type === 'chat' || phone.type === 'both') && (
+                                    <a href={`https://wa.me/${phone.number.replace(/\\D/g, "")}`} target="_blank" rel="noopener noreferrer">
                                         <Button variant="outline" size="icon" className="h-7 w-7"><MessageSquare className="h-4 w-4" /></Button>
                                     </a>
+                                    )}
                                 </div>
                             ))}
                              {(lead.phones || []).length === 0 && <p className="text-muted-foreground text-sm">No phone numbers.</p>}
                         </div>
 
-                        <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
-                        <EditableField label="Price" value={lead.commitmentSnapshot?.price || 'Not specified'} onSave={(v) => handleSnapshotUpdate('price', v)} inputType="number" />
+                        <div className="col-span-1">
+                          <EditableField label="Course" value={lead.commitmentSnapshot?.course || 'Not specified'} onSave={(v) => handleSnapshotUpdate('course', v)} />
+                        </div>
+                        <div className="col-span-1 flex flex-col items-end">
+                            <div className="w-full max-w-[150px] text-right">
+                                <EditableField 
+                                  label="Price" 
+                                  value={lead.commitmentSnapshot?.price || '0'} 
+                                  onSave={(v) => handleSnapshotUpdate('price', v)} 
+                                  inputType="number" 
+                                  displayFormatter={(val) => (
+                                    <div className="text-right">
+                                      <span className="font-semibold">{Number(val).toLocaleString()} AED</span>
+                                      <p className="text-xs text-muted-foreground">(~${(Number(val) * AED_TO_USD_RATE).toFixed(0)} USD)</p>
+                                    </div>
+                                  )}
+                                />
+                            </div>
+                        </div>
+
                         <div className="col-span-2">
                             <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || 'Not specified'} onSave={(v) => handleSnapshotUpdate('schedule', v)} type="textarea" />
                         </div>
@@ -552,12 +566,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                                 {(['content', 'schedule', 'price'] as const).map(category => (
                                     <div key={category} className="space-y-2 text-center">
-                                         <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1">
-                                          {category === 'content' && <MessageSquareText className="h-3 w-3"/>}
-                                          {category === 'schedule' && <CalendarCheck className="h-3 w-3"/>}
-                                          {category === 'price' && <CircleDollarSign className="h-3 w-3"/>}
-                                          <span className="inline sm:hidden">{category.substring(0,3)}</span>
-                                           <span className="hidden sm:inline">{category}</span>
+                                         <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1.5">
+                                          {category === 'content' && <MessageSquareText className="h-3.5 w-3.5"/>}
+                                          {category === 'schedule' && <CalendarCheck className="h-3.5 w-3.5"/>}
+                                          {category === 'price' && <CircleDollarSign className="h-3.5 w-3.5"/>}
+                                          <span className="hidden sm:inline">{category}</span>
+                                          <span className="inline sm:hidden">{category}</span>
                                         </p>
                                         <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
                                             <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
@@ -828,5 +842,3 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
-
-    

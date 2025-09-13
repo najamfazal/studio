@@ -14,6 +14,7 @@ interface EditableFieldProps {
   onSave: (value: string) => Promise<void>;
   type?: "input" | "textarea";
   inputType?: string;
+  displayFormatter?: (value: string) => React.ReactNode;
 }
 
 export function EditableField({
@@ -22,6 +23,7 @@ export function EditableField({
   onSave,
   type = "input",
   inputType = "text",
+  displayFormatter,
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [currentValue, setCurrentValue] = useState(value);
@@ -79,15 +81,17 @@ export function EditableField({
   };
 
   const InputComponent = type === "textarea" ? Textarea : Input;
+  const isRightAligned = inputType === 'number';
 
   return (
     <div className="space-y-1">
-      <p className="font-medium text-muted-foreground text-xs flex items-center justify-between">
-        {label}
+      <p className={cn("font-medium text-muted-foreground text-xs flex items-center", isRightAligned ? "justify-end" : "justify-between")}>
+        {!isRightAligned && label}
          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleIconClick} disabled={isSaving}>
             {isSaving ? <Loader2 className="animate-spin h-3 w-3" /> : (isEditing ? <Check className="h-4 w-4" /> : <Pencil className="h-3 w-3" />)}
             <span className="sr-only">{isEditing ? `Save ${label}` : `Edit ${label}`}</span>
         </Button>
+        {isRightAligned && label}
       </p>
       {isEditing ? (
         <div className="flex gap-1 items-start">
@@ -96,16 +100,16 @@ export function EditableField({
             value={currentValue}
             onChange={(e) => setCurrentValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="h-auto"
+            className={cn("h-auto", isRightAligned && "text-right")}
             rows={type === 'textarea' ? 3 : 1}
             type={type === 'input' ? inputType : undefined}
             inputMode={inputType === 'number' ? 'decimal' : undefined}
           />
         </div>
       ) : (
-        <p className={cn("min-h-[2.25rem] pr-6 whitespace-pre-wrap", !value && 'text-muted-foreground/80')}>
-            {value || `No ${label.toLowerCase()} set`}
-        </p>
+        <div className={cn("min-h-[2.25rem] pr-6 whitespace-pre-wrap flex items-center", isRightAligned ? "justify-end" : "justify-start", !value && 'text-muted-foreground/80')}>
+             {displayFormatter ? displayFormatter(value) : (value || `No ${label.toLowerCase()} set`)}
+        </div>
       )}
     </div>
   );

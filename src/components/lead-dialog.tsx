@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +24,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { leadSchema, type LeadFormValues } from "@/lib/schemas";
 import type { Lead } from "@/lib/types";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { cn } from "@/lib/utils";
+
 
 interface LeadDialogProps {
   isOpen: boolean;
@@ -46,9 +49,14 @@ export function LeadDialog({
     defaultValues: {
       name: "",
       email: "",
-      phone: "",
+      phones: [{ number: "", type: "both" }],
       course: "",
     },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "phones",
   });
 
   useEffect(() => {
@@ -57,11 +65,16 @@ export function LeadDialog({
         form.reset({
           name: leadToEdit.name,
           email: leadToEdit.email,
-          phone: leadToEdit.phones?.[0] || "",
+          phones: leadToEdit.phones?.length > 0 ? leadToEdit.phones : [{ number: "", type: "both" }],
           course: leadToEdit.commitmentSnapshot?.course || "",
         });
       } else {
-        form.reset({ name: "", email: "", phone: "", course: "" });
+        form.reset({
+          name: "",
+          email: "",
+          phones: [{ number: "", type: "both" }],
+          course: ""
+        });
       }
     }
   }, [isOpen, leadToEdit, form]);
@@ -116,19 +129,60 @@ export function LeadDialog({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Primary Phone</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. 123-456-7890" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div>
+              <FormLabel>Phone Numbers</FormLabel>
+              <div className="space-y-2 mt-2">
+              {fields.map((field, index) => (
+                <div key={field.id} className="flex gap-2 items-start">
+                   <FormField
+                      control={form.control}
+                      name={`phones.${index}.number`}
+                      render={({ field }) => (
+                          <FormItem className="flex-1">
+                              <FormControl>
+                                  <Input placeholder="e.g. 123-456-7890" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name={`phones.${index}.type`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="w-[100px]">
+                                <SelectValue placeholder="Type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="both">Both</SelectItem>
+                              <SelectItem value="calling">Calling</SelectItem>
+                              <SelectItem value="chat">Chat</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )}
+                    />
+                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className={cn(fields.length === 1 && "invisible")}>
+                    <Trash2 className="h-4 w-4 text-destructive"/>
+                  </Button>
+                </div>
+              ))}
+              </div>
+               <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => append({ number: "", type: "both" })}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Add Phone
+                </Button>
+            </div>
+            
             <FormField
               control={form.control}
               name="course"
@@ -163,5 +217,3 @@ export function LeadDialog({
     </Dialog>
   );
 }
-
-    

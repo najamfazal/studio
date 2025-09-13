@@ -93,11 +93,9 @@ export default function LeadsPage() {
       if (editingLead) {
         // Update existing lead
         const leadRef = doc(db, "leads", editingLead.id);
-        const { phone, course, ...otherValues } = values;
+        const { course, ...otherValues } = values;
         
-        // Preserve other phone numbers, update the primary one
-        const otherPhones = (editingLead.phones || []).slice(1);
-        const updateData = { ...otherValues, phones: [phone, ...otherPhones], 'commitmentSnapshot.course': course };
+        const updateData = { ...otherValues, 'commitmentSnapshot.course': course };
         
         await updateDoc(leadRef, updateData);
         
@@ -112,10 +110,9 @@ export default function LeadsPage() {
         });
       } else {
         // Add new lead
-        const { phone, course, ...otherValues } = values;
+        const { course, ...otherValues } = values;
         const newLeadData = { 
             ...otherValues,
-            phones: [phone],
             createdAt: new Date().toISOString(),
             status: 'Active',
             afc_step: 0,
@@ -156,7 +153,7 @@ export default function LeadsPage() {
     const result = await enrichLeadAction({
       name: leadToEnrich.name,
       email: leadToEnrich.email,
-      phone: leadToEnrich.phones[0] || "",
+      phone: leadToEnrich.phones[0]?.number || "",
     });
     if (result.success && result.additionalInformation) {
       try {

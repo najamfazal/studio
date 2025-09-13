@@ -15,11 +15,16 @@ export type CommitmentSnapshot = {
   keyNotes?: string;
 };
 
+export type PhoneNumber = {
+  number: string;
+  type: 'calling' | 'chat' | 'both';
+}
+
 export type Lead = {
   id: string;
   name: string;
   email: string;
-  phones: string[];
+  phones: PhoneNumber[];
   additionalInformation?: string;
   lastEnriched?: string; // ISO date string
   createdAt?: string; // ISO date string
@@ -38,7 +43,7 @@ export type Lead = {
 export type TaskNature = 'Procedural' | 'Interactive';
 
 export type Task = {
-  id: string;
+  id:string;
   leadId: string;
   leadName: string;
   description: string;

@@ -95,8 +95,8 @@ export function LeadCard({
         {(lead.phones || []).length > 0 && (
           <div className="flex items-center gap-3">
             <Phone className="h-4 w-4 text-muted-foreground" />
-            <a href={`tel:${lead.phones[0]}`} className="text-sm">
-              {lead.phones[0]}
+            <a href={`tel:${lead.phones[0].number}`} className="text-sm">
+              {lead.phones[0].number}
             </a>
           </div>
         )}
