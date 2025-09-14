@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Users2, Filter, Search, X, Wand2, Loader2 } from "lucide-react";
+import { Plus, Users2, Filter, Search, X } from "lucide-react";
 import {
   collection,
   addDoc,
@@ -12,7 +12,6 @@ import {
   deleteDoc,
   query,
   orderBy,
-  serverTimestamp,
   getDoc,
   where,
   QueryConstraint
@@ -23,7 +22,7 @@ import { LeadCard } from "@/components/lead-card";
 import { LeadDialog } from "@/components/lead-dialog";
 import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
-import { enrichLeadAction, migrateLeadsToContactsAction } from "@/app/actions";
+import { enrichLeadAction } from "@/app/actions";
 import { db } from "@/lib/firebase";
 import type { Lead, AppSettings, LeadStatus } from "@/lib/types";
 import type { LeadFormValues } from "@/lib/schemas";
@@ -45,7 +44,6 @@ export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilters, setStatusFilters] = useState<LeadStatus[]>(['Active']);
-  const [isMigrating, setIsMigrating] = useState(false);
 
   const { toast } = useToast();
 
@@ -56,7 +54,7 @@ export default function ContactsPage() {
       if (statusFilters.length > 0) {
         constraints.push(where("status", "in", statusFilters));
       }
-      const q = query(collection(db, "leads"), ...constraints);
+      const q = query(collection(db, "contacts"), ...constraints);
       const querySnapshot = await getDocs(q);
       const leadsData = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as Lead)
@@ -109,7 +107,7 @@ export default function ContactsPage() {
   const handleDelete = async (leadId: string) => {
     if (!window.confirm("Are you sure you want to delete this contact?")) return;
     try {
-      await deleteDoc(doc(db, "leads", leadId));
+      await deleteDoc(doc(db, "contacts", leadId));
       setLeads((prev) => prev.filter((lead) => lead.id !== leadId));
       toast({
         title: "Contact Deleted",
@@ -130,7 +128,7 @@ export default function ContactsPage() {
     try {
       if (editingLead) {
         // Update existing lead
-        const leadRef = doc(db, "leads", editingLead.id);
+        const leadRef = doc(db, "contacts", editingLead.id);
         const { course, ...otherValues } = values;
         
         const updateData = { 
@@ -168,7 +166,7 @@ export default function ContactsPage() {
               course: course || ''
             },
         };
-        const docRef = await addDoc(collection(db, "leads"), newLeadData);
+        const docRef = await addDoc(collection(db, "contacts"), newLeadData);
         const newLead: Lead = {
           id: docRef.id,
           ...newLeadData,
@@ -201,7 +199,7 @@ export default function ContactsPage() {
     });
     if (result.success && result.additionalInformation) {
       try {
-        const leadRef = doc(db, "leads", leadToEnrich.id);
+        const leadRef = doc(db, "contacts", leadToEnrich.id);
         const enrichedData = {
           additionalInformation: result.additionalInformation,
           lastEnriched: new Date().toISOString(),
@@ -236,25 +234,6 @@ export default function ContactsPage() {
     }
   };
   
-  const handleMigration = async () => {
-    setIsMigrating(true);
-    const result = await migrateLeadsToContactsAction();
-    if (result.success) {
-      toast({
-        title: "Migration Complete",
-        description: result.message,
-      });
-      fetchLeads(); // Refresh the list after migration
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Migration Failed",
-        description: result.error,
-      });
-    }
-    setIsMigrating(false);
-  };
-
   const filteredLeads = useMemo(() => {
     if (!debouncedSearchTerm) {
       return leads;
@@ -275,13 +254,13 @@ export default function ContactsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="bg-card border-b p-4 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-10 gap-4">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+      <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-10 gap-2">
+        <div className="flex items-center gap-2">
           <SidebarTrigger />
           <Logo className="h-8 w-8 text-primary hidden sm:block" />
-          <h1 className="text-xl font-bold tracking-tight">Contacts</h1>
+          <h1 className="text-xl font-bold tracking-tight hidden sm:block">Contacts</h1>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 flex-1">
           <div className="relative flex-1">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
              <Input 
@@ -298,9 +277,9 @@ export default function ContactsPage() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                    <Filter className="mr-2 h-4 w-4" />
-                    Filter
+                <Button variant="outline" size="sm" className="w-10 p-0 sm:w-auto sm:px-4">
+                    <Filter className="h-4 w-4" />
+                    <span className="hidden sm:inline sm:ml-2">Filter</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -323,14 +302,10 @@ export default function ContactsPage() {
                 ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={handleAddClick} className="whitespace-nowrap">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Contact
+          <Button onClick={handleAddClick} size="sm" className="w-10 p-0 sm:w-auto sm:px-4 whitespace-nowrap">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline sm:ml-2">Add Contact</span>
           </Button>
-           <Button onClick={handleMigration} variant="ghost" size="icon" disabled={isMigrating} title="Fix Old Data">
-                {isMigrating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                <span className="sr-only">Fix old data</span>
-            </Button>
         </div>
       </header>
 
@@ -354,7 +329,7 @@ export default function ContactsPage() {
               No contacts found
             </h2>
             <p className="mt-2 max-w-xs">
-              Try adjusting your search or filters, or click the "Fix Data" button (<Wand2 className="inline h-4 w-4" />) if you have old data.
+              Try adjusting your search or filters, or add a new contact to get started.
             </p>
           </div>
         )}
@@ -372,3 +347,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    
