@@ -17,10 +17,10 @@ import {
   startAfter,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Lead, Interaction, InteractionFeedback, AppSettings } from "@/lib/types";
+import type { Lead, Interaction, InteractionFeedback, AppSettings, QuickLogType } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2, MessageSquareText, CalendarCheck, CircleDollarSign, Phone, MessageSquare } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2, MessageSquareText, CalendarCheck, CircleDollarSign, Phone, MessageSquare, BookOpen, Clock, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -34,7 +34,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { QuickLogDialog } from "@/components/quick-log-dialog";
 import { format, addDays, setHours, setMinutes, getHours, getMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -46,6 +45,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -77,6 +86,15 @@ const dateQuickPicks = [
 const INTERACTION_PAGE_SIZE = 5;
 const AED_TO_USD_RATE = 0.27;
 
+const quickLogOptions: { value: QuickLogType; label: string }[] = [
+    { value: "Initiated", label: "Initiated" },
+    { value: "Unchanged", label: "Unchanged" },
+    { value: "Unresponsive", label: "Unresponsive" },
+    { value: "Enrolled", label: "Enrolled" },
+    { value: "Withdrawn", label: "Withdrawn" },
+];
+
+
 export default function LeadDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
   const router = useRouter();
@@ -86,7 +104,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [lastInteractionDoc, setLastInteractionDoc] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
   const [traits, setTraits] = useState<string[]>([]);
@@ -106,6 +123,11 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [scheduleStep, setScheduleStep] = useState<'date' | 'time'>('date');
 
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  
+  const [isWithdrawnAlertOpen, setIsWithdrawnAlertOpen] = useState(false);
+  const [selectedWithdrawalReasons, setSelectedWithdrawalReasons] = useState<string[]>([]);
+  const [isSubmittingQuickLog, setIsSubmittingQuickLog] = useState(false);
+
 
   const { toast } = useToast();
   
@@ -120,11 +142,11 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         setTraits(leadData.traits || []);
         setInsights(leadData.insights || []);
       } else {
-        toast({ variant: "destructive", title: "Lead not found" });
+        toast({ variant: "destructive", title: "Contact not found" });
       }
     } catch (error) {
-      console.error("Error fetching lead data:", error);
-      toast({ variant: "destructive", title: "Error fetching lead." });
+      console.error("Error fetching contact data:", error);
+      toast({ variant: "destructive", title: "Error fetching contact." });
     }
   }, [params.id, toast]);
 
@@ -184,6 +206,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         } else {
             // Default settings if not found
             setAppSettings({
+              relationshipTypes: ['Lead', 'Learner'],
               courseNames: [],
               commonTraits: [],
               withdrawalReasons: [],
@@ -278,17 +301,17 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       await fetchLeadData();
       
       toast({
-        title: "Lead Updated",
-        description: "The lead's details have been saved.",
+        title: "Contact Updated",
+        description: "The contact's details have been saved.",
       });
       setIsEditDialogOpen(false);
     } catch (error)
     {
-      console.error("Error saving lead:", error);
+      console.error("Error saving contact:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to save lead.",
+        description: "Failed to save contact.",
       });
     } finally {
         setIsSaving(false);
@@ -424,6 +447,26 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       setIsSubmittingEvent(false);
   };
 
+  const handleQuickLogClick = (type: QuickLogType) => {
+      if (type === 'Withdrawn') {
+          setIsWithdrawnAlertOpen(true);
+      } else {
+          setIsSubmittingQuickLog(true);
+          logInteraction({ quickLogType: type }, `Logged '${type}'`).finally(() => setIsSubmittingQuickLog(false));
+      }
+  };
+
+  const handleLogWithdrawn = async () => {
+      setIsSubmittingQuickLog(true);
+      await logInteraction({
+          quickLogType: 'Withdrawn',
+          withdrawalReasons: selectedWithdrawalReasons,
+      }, 'Logged Withdrawn');
+      setIsSubmittingQuickLog(false);
+      setIsWithdrawnAlertOpen(false);
+      setSelectedWithdrawalReasons([]);
+  };
+
   const isObjectionsOpen = activeObjectionCategory !== null;
 
 
@@ -439,12 +482,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
          <Users className="h-16 w-16 mb-4 text-muted-foreground"/>
-        <h2 className="text-2xl font-semibold">Lead not found</h2>
+        <h2 className="text-2xl font-semibold">Contact not found</h2>
         <p className="text-muted-foreground mt-2">
-          The lead you are looking for does not exist or has been deleted.
+          The contact you are looking for does not exist or has been deleted.
         </p>
         <Button asChild className="mt-4">
-            <Link href="/leads"><ArrowLeft className="mr-2"/> Back to Leads</Link>
+            <Link href="/leads"><ArrowLeft className="mr-2"/> Back to Contacts</Link>
         </Button>
       </div>
     );
@@ -474,7 +517,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
             <Button onClick={handleEditClick} variant="outline" size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2">
                 <FilePenLine className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Edit</span>
-                <span className="sr-only">Edit Lead</span>
+                <span className="sr-only">Edit Contact</span>
             </Button>
             <Button onClick={handleToggleFollowList} disabled={isTogglingFollow} variant={lead.onFollowList ? "default" : "outline"} size="sm" className="shrink-0 sm:w-auto w-10 p-0 sm:px-4 sm:py-2" >
               {isTogglingFollow ? <Loader2 className="h-4 w-4 animate-spin"/> : <Star className={cn("h-4 w-4", lead.onFollowList && "fill-current text-yellow-400", "sm:mr-2")}/>}
@@ -484,7 +527,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </div>
       </header>
 
-      <main className="flex-1 p-2 sm:p-4 pb-24">
+      <main className="flex-1 p-2 sm:p-4">
         <Tabs defaultValue="summary" className="mt-0">
           <TabsList className="mb-2">
             <TabsTrigger value="summary">Summary</TabsTrigger>
@@ -503,6 +546,16 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     </CardHeader>
                     <CardContent className="p-4 pt-2 text-sm">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        <div className="col-span-2">
+                           <EditableField 
+                            label="Relationship" 
+                            value={lead.relationship || 'Lead'} 
+                            onSave={(v) => updateField('relationship', v)} 
+                            type="select"
+                            selectOptions={appSettings?.relationshipTypes || ['Lead', 'Learner']}
+                            placeholder="Set relationship"
+                          />
+                        </div>
                          <div className="space-y-2 col-span-2">
                             <p className="font-medium text-muted-foreground text-xs">Phone(s)</p>
                             {(lead.phones || []).map((phone, index) => (
@@ -561,167 +614,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                 </Card>
                 
                 <Card>
-                    <Collapsible open={isObjectionsOpen} onOpenChange={(isOpen) => { if (!isOpen) setActiveObjectionCategory(null); }}>
-                        <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
-                             <div className="flex items-center gap-2">
-                                <CardTitle className="text-lg">Feedback</CardTitle>
-                             </div>
-                             <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback || Object.keys(feedback).length === 0}>
-                                {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                             </Button>
-                        </CardHeader>
-                        <CardContent className="px-4 pt-0 pb-4">
-                             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                                {(['content', 'schedule', 'price'] as const).map(category => (
-                                    <div key={category} className="space-y-2 text-center">
-                                         <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1.5">
-                                          {category === 'content' && <MessageSquareText className="h-3.5 w-3.5"/>}
-                                          {category === 'schedule' && <CalendarCheck className="h-3.5 w-3.5"/>}
-                                          {category === 'price' && <CircleDollarSign className="h-3.5 w-3.5"/>}
-                                          <span className="sm:inline">{category}</span>
-                                        </p>
-                                        <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
-                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
-                                            <Separator orientation="vertical" className="h-5"/>
-                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <CollapsibleContent>
-                                <div className="pt-3 mt-3 border-t">
-                                  {activeObjectionCategory && (
-                                       <div className="flex flex-wrap gap-2 justify-center">
-                                          {(appSettings?.feedbackChips[activeObjectionCategory] || []).map(objection => (
-                                              <Badge
-                                                  key={objection}
-                                                  variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
-                                                  onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
-                                                  className="cursor-pointer transition-colors text-sm"
-                                              >
-                                                  {objection}
-                                              </Badge>
-                                          ))}
-                                      </div>
-                                  )}
-                                </div>
-                            </CollapsibleContent>
-                        </CardContent>
-                    </Collapsible>
-                </Card>
-                
-                 <Card>
-                    <CardHeader className="p-4 pb-3">
-                        <CardTitle className="text-lg">Schedule</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 space-y-3">
-                         <div className="flex gap-2">
-                            <Select onValueChange={(v) => setEventDetails(p => ({...p, type: v}))} value={eventDetails.type}>
-                                <SelectTrigger><SelectValue placeholder="Event type..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Online Meet/Demo">Online Meet/Demo</SelectItem>
-                                    <SelectItem value="Visit">Visit</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Popover onOpenChange={(open) => !open && setScheduleStep('date')}>
-                                <PopoverTrigger asChild>
-                                <Button
-                                    variant={"outline"}
-                                    size="icon"
-                                    className={cn("h-10 w-10 shrink-0", !eventDetails.dateTime && "text-muted-foreground")}
-                                >
-                                    <CalendarClock className="h-4 w-4" />
-                                </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    {scheduleStep === 'date' && (
-                                        <>
-                                            <Calendar
-                                                mode="single"
-                                                selected={eventDetails.dateTime}
-                                                onSelect={(d) => {
-                                                    const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
-                                                    if (d) {
-                                                        const newDate = setMinutes(setHours(d, getHours(existing)), getMinutes(existing));
-                                                        setEventDetails(p => ({...p, dateTime: newDate}));
-                                                        setScheduleStep('time');
-                                                    }
-                                                }}
-                                                initialFocus
-                                            />
-                                            <div className="flex flex-wrap gap-1 p-2 border-t justify-center">
-                                                {dateQuickPicks.map(qp => (
-                                                    <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
-                                                        const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
-                                                        const newDate = setMinutes(setHours(addDays(new Date(), qp.days), getHours(existing)), getMinutes(existing));
-                                                        setEventDetails(p => ({...p, dateTime: newDate}));
-                                                        setScheduleStep('time');
-                                                    }}>{qp.label}</Button>
-                                                ))}
-                                            </div>
-                                        </>
-                                    )}
-                                    {scheduleStep === 'time' && (
-                                        <div className="p-4">
-                                            <p className="text-sm font-medium text-center mb-2">{eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select a date'}</p>
-                                            <div className="space-y-3">
-                                                <div>
-                                                    <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Hour</p>
-                                                    <div className="grid grid-cols-6 gap-1">
-                                                        {Array.from({length: 12}, (_, i) => i + 1).map(h => (
-                                                          <Button key={h} variant={((getHours(eventDetails.dateTime || new Date()) % 12) || 12) === h ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                            const d = eventDetails.dateTime || new Date();
-                                                            const currentAmPm = getHours(d) >= 12 ? 'pm' : 'am';
-                                                            const newHour = currentAmPm === 'pm' && h < 12 ? h + 12 : (currentAmPm === 'am' && h === 12 ? 0 : h);
-                                                            setEventDetails(p => ({...p, dateTime: setHours(d, newHour)}));
-                                                          }}>{h}</Button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                   <div>
-                                                        <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Period</p>
-                                                        <div className="grid grid-cols-2 gap-1">
-                                                            <Button variant={getHours(eventDetails.dateTime || new Date()) < 12 ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                                const d = eventDetails.dateTime || new Date();
-                                                                const h = getHours(d);
-                                                                if (h >= 12) setEventDetails(p => ({...p, dateTime: setHours(d, h - 12)}));
-                                                            }}>AM</Button>
-                                                            <Button variant={getHours(eventDetails.dateTime || new Date()) >= 12 ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                                const d = eventDetails.dateTime || new Date();
-                                                                const h = getHours(d);
-                                                                if (h < 12) setEventDetails(p => ({...p, dateTime: setHours(d, h + 12)}));
-                                                            }}>PM</Button>
-                                                        </div>
-                                                   </div>
-                                                   <div>
-                                                        <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Minute</p>
-                                                        <div className="grid grid-cols-2 gap-1">
-                                                            {['00', '15', '30', '45'].map(m => (
-                                                                <Button key={m} variant={getMinutes(eventDetails.dateTime || new Date()) === parseInt(m) ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                                    const d = eventDetails.dateTime || new Date();
-                                                                    setEventDetails(p => ({...p, dateTime: setMinutes(d, parseInt(m))}));
-                                                                }}>{m}</Button>
-                                                            ))}
-                                                        </div>
-                                                   </div>
-                                                </div>
-                                            </div>
-                                            <Button onClick={() => setScheduleStep('date')} variant="link" size="sm" className="mt-2 p-0 h-auto">Back to date</Button>
-                                        </div>
-                                    )}
-                                </PopoverContent>
-                            </Popover>
-                         </div>
-                         {eventDetails.dateTime && <p className="text-sm text-muted-foreground">Selected: {format(eventDetails.dateTime, "PPP p")}</p>}
-                         <Button onClick={handleScheduleEvent} className="w-full" disabled={!eventDetails.type || !eventDetails.dateTime || isSubmittingEvent}>
-                          {isSubmittingEvent && <Loader2 className="animate-spin mr-2" />}
-                          {isSubmittingEvent ? "Processing..." : "Schedule Event"}
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                <Card>
                     <CardHeader className="p-4">
                         <CardTitle className="text-lg">Intel</CardTitle>
                     </CardHeader>
@@ -771,6 +663,185 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
           <TabsContent value="history">
              <div className="grid gap-4">
+                
+                <Card>
+                    <CardHeader className="p-4 flex flex-col gap-4">
+                        <CardTitle className="text-lg">Log Activity</CardTitle>
+                        <div className="flex flex-wrap gap-2">
+                            {quickLogOptions.map(opt => (
+                                <Button key={opt.value} variant="outline" size="sm" onClick={() => handleQuickLogClick(opt.value)} disabled={isSubmittingQuickLog}>
+                                    {isSubmittingQuickLog && <Loader2 className="animate-spin mr-2 h-4 w-4"/>}
+                                    {opt.label}
+                                </Button>
+                            ))}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 space-y-4">
+                        <Card>
+                           <Collapsible open={isObjectionsOpen} onOpenChange={(isOpen) => { if (!isOpen) setActiveObjectionCategory(null); }}>
+                               <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <BookOpen className="h-5 w-5 text-primary"/>
+                                        <CardTitle className="text-lg">Log Feedback</CardTitle>
+                                    </div>
+                                    <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback || Object.keys(feedback).length === 0}>
+                                        {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                    </Button>
+                               </CardHeader>
+                               <CardContent className="px-4 pt-0 pb-4">
+                                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                                        {(['content', 'schedule', 'price'] as const).map(category => (
+                                            <div key={category} className="space-y-2 text-center">
+                                                <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1.5">
+                                                {category === 'content' && <MessageSquareText className="h-3.5 w-3.5"/>}
+                                                {category === 'schedule' && <CalendarCheck className="h-3.5 w-3.5"/>}
+                                                {category === 'price' && <CircleDollarSign className="h-3.5 w-3.5"/>}
+                                                <span className="sm:inline">{category}</span>
+                                                </p>
+                                                <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
+                                                    <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
+                                                    <Separator orientation="vertical" className="h-5"/>
+                                                    <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <CollapsibleContent>
+                                        <div className="pt-3 mt-3 border-t">
+                                        {activeObjectionCategory && (
+                                            <div className="flex flex-wrap gap-2 justify-center">
+                                                {(appSettings?.feedbackChips[activeObjectionCategory] || []).map(objection => (
+                                                    <Badge
+                                                        key={objection}
+                                                        variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
+                                                        onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
+                                                        className="cursor-pointer transition-colors text-sm"
+                                                    >
+                                                        {objection}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        )}
+                                        </div>
+                                    </CollapsibleContent>
+                               </CardContent>
+                           </Collapsible>
+                        </Card>
+
+                        <Card>
+                            <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                   <Clock className="h-5 w-5 text-primary"/>
+                                   <CardTitle className="text-lg">Schedule Event</CardTitle>
+                                </div>
+                                <Button onClick={handleScheduleEvent} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingEvent || !eventDetails.type || !eventDetails.dateTime}>
+                                  {isSubmittingEvent ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4"/>}
+                                </Button>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0 space-y-3">
+                                <div className="flex gap-2">
+                                    <Select onValueChange={(v) => setEventDetails(p => ({...p, type: v}))} value={eventDetails.type}>
+                                        <SelectTrigger><SelectValue placeholder="Event type..." /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Online Meet/Demo">Online Meet/Demo</SelectItem>
+                                            <SelectItem value="Visit">Visit</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Popover onOpenChange={(open) => !open && setScheduleStep('date')}>
+                                        <PopoverTrigger asChild>
+                                        <Button
+                                            variant={"outline"}
+                                            size="icon"
+                                            className={cn("h-10 w-10 shrink-0", !eventDetails.dateTime && "text-muted-foreground")}
+                                        >
+                                            <CalendarClock className="h-4 w-4" />
+                                        </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            {scheduleStep === 'date' && (
+                                                <>
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={eventDetails.dateTime}
+                                                        onSelect={(d) => {
+                                                            const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
+                                                            if (d) {
+                                                                const newDate = setMinutes(setHours(d, getHours(existing)), getMinutes(existing));
+                                                                setEventDetails(p => ({...p, dateTime: newDate}));
+                                                                setScheduleStep('time');
+                                                            }
+                                                        }}
+                                                        initialFocus
+                                                    />
+                                                    <div className="flex flex-wrap gap-1 p-2 border-t justify-center">
+                                                        {dateQuickPicks.map(qp => (
+                                                            <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
+                                                                const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
+                                                                const newDate = setMinutes(setHours(addDays(new Date(), qp.days), getHours(existing)), getMinutes(existing));
+                                                                setEventDetails(p => ({...p, dateTime: newDate}));
+                                                                setScheduleStep('time');
+                                                            }}>{qp.label}</Button>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            )}
+                                            {scheduleStep === 'time' && (
+                                                <div className="p-4">
+                                                    <p className="text-sm font-medium text-center mb-2">{eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select a date'}</p>
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Hour</p>
+                                                            <div className="grid grid-cols-6 gap-1">
+                                                                {Array.from({length: 12}, (_, i) => i + 1).map(h => (
+                                                                <Button key={h} variant={((getHours(eventDetails.dateTime || new Date()) % 12) || 12) === h ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                    const d = eventDetails.dateTime || new Date();
+                                                                    const currentAmPm = getHours(d) >= 12 ? 'pm' : 'am';
+                                                                    const newHour = currentAmPm === 'pm' && h < 12 ? h + 12 : (currentAmPm === 'am' && h === 12 ? 0 : h);
+                                                                    setEventDetails(p => ({...p, dateTime: setHours(d, newHour)}));
+                                                                }}>{h}</Button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                                <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Period</p>
+                                                                <div className="grid grid-cols-2 gap-1">
+                                                                    <Button variant={getHours(eventDetails.dateTime || new Date()) < 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                        const d = eventDetails.dateTime || new Date();
+                                                                        const h = getHours(d);
+                                                                        if (h >= 12) setEventDetails(p => ({...p, dateTime: setHours(d, h - 12)}));
+                                                                    }}>AM</Button>
+                                                                    <Button variant={getHours(eventDetails.dateTime || new Date()) >= 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                        const d = eventDetails.dateTime || new Date();
+                                                                        const h = getHours(d);
+                                                                        if (h < 12) setEventDetails(p => ({...p, dateTime: setHours(d, h + 12)}));
+                                                                    }}>PM</Button>
+                                                                </div>
+                                                        </div>
+                                                        <div>
+                                                                <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Minute</p>
+                                                                <div className="grid grid-cols-2 gap-1">
+                                                                    {['00', '15', '30', '45'].map(m => (
+                                                                        <Button key={m} variant={getMinutes(eventDetails.dateTime || new Date()) === parseInt(m) ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                            const d = eventDetails.dateTime || new Date();
+                                                                            setEventDetails(p => ({...p, dateTime: setMinutes(d, parseInt(m))}));
+                                                                        }}>{m}</Button>
+                                                                    ))}
+                                                                </div>
+                                                        </div>
+                                                        </div>
+                                                    </div>
+                                                    <Button onClick={() => setScheduleStep('date')} variant="link" size="sm" className="mt-2 p-0 h-auto">Back to date</Button>
+                                                </div>
+                                            )}
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                {eventDetails.dateTime && <p className="text-sm text-muted-foreground">Selected: {format(eventDetails.dateTime, "PPP p")}</p>}
+                            </CardContent>
+                        </Card>
+                    </CardContent>
+                </Card>
                 
                 <Card>
                     <CardHeader className="p-4">
@@ -826,25 +897,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </TabsContent>
         </Tabs>
       </main>
-      
-       <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-end bg-gradient-to-t from-background to-transparent z-10 md:relative md:bg-none">
-        <Button
-          size="lg"
-          className="rounded-full shadow-lg h-14 w-14 sm:w-auto sm:px-6"
-          onClick={() => setIsLogDialogOpen(true)}
-        >
-          <Plus className="h-6 w-6 sm:mr-2" />
-          <span className="hidden sm:inline">Log Interaction</span>
-        </Button>
-      </div>
 
-      <QuickLogDialog 
-        isOpen={isLogDialogOpen}
-        setIsOpen={setIsLogDialogOpen}
-        lead={lead}
-        onLogSaved={onInteractionLogged}
-        appSettings={appSettings}
-      />
       <LeadDialog
         isOpen={isEditDialogOpen}
         setIsOpen={setIsEditDialogOpen}
@@ -852,7 +905,38 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         leadToEdit={lead}
         isSaving={isSaving}
         courseNames={appSettings?.courseNames || []}
+        relationshipTypes={appSettings?.relationshipTypes || []}
       />
+      
+      <AlertDialog open={isWithdrawnAlertOpen} onOpenChange={setIsWithdrawnAlertOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Log "Withdrawn"</AlertDialogTitle>
+              <AlertDialogDescription>
+                Select the reason(s) this contact has withdrawn. This helps in tracking trends.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="flex flex-wrap gap-2 justify-center py-4">
+               {(appSettings?.withdrawalReasons || []).map(reason => (
+                  <Badge
+                    key={reason}
+                    variant={selectedWithdrawalReasons.includes(reason) ? 'default' : 'secondary'}
+                    onClick={() => setSelectedWithdrawalReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])}
+                    className="cursor-pointer text-sm"
+                  >
+                    {reason}
+                  </Badge>
+                ))}
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setSelectedWithdrawalReasons([])}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleLogWithdrawn} disabled={isSubmittingQuickLog || selectedWithdrawalReasons.length === 0}>
+                {isSubmittingQuickLog && <Loader2 className="animate-spin mr-2" />}
+                Log Withdrawn
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

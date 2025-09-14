@@ -28,6 +28,7 @@ interface QuickLogDialogProps {
 }
 
 const quickLogOptions: { value: QuickLogType; label: string }[] = [
+  { value: "Initiated", label: "Initiated" },
   { value: "Enrolled", label: "Enrolled" },
   { value: "Unresponsive", label: "Unresponsive" },
   { value: "Unchanged", label: "Unchanged" },
@@ -183,3 +184,5 @@ export function QuickLogDialog({
     </Dialog>
   );
 }
+
+    

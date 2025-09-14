@@ -1,10 +1,11 @@
+
 "use client"
 
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings } from 'lucide-react'
+import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays } from 'lucide-react'
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -20,7 +21,8 @@ import { Logo } from "../icons"
 
 const sidebarItems = [
     { href: '/', icon: ListChecks, label: 'Tasks' },
-    { href: '/leads', icon: Home, label: 'Leads' },
+    { href: '/leads', icon: Home, label: 'Contacts' },
+    { href: '/events', icon: CalendarDays, label: 'Events' },
     { href: '/follow-list', icon: UserCheck, label: 'Follow List' },
     { href: '/recall-trainer', icon: Brain, label: 'Recall Trainer' },
     { href: '/settings', icon: Settings, label: 'Settings' },
@@ -147,7 +149,7 @@ const SidebarTrigger = React.forwardRef<
       ref={ref}
       variant="ghost"
       size="icon"
-      className={cn(className)}
+      className={cn("sm:hidden", className)}
       onClick={() => setOpen(true)}
       {...props}
     >
@@ -163,3 +165,5 @@ export {
   Sidebar,
   SidebarTrigger,
 }
+
+    

@@ -6,7 +6,9 @@ export type LeadStatus =
   | 'Cooling'
   | 'Dormant'
   | 'Enrolled'
-  | 'Withdrawn';
+  | 'Withdrawn'
+  | 'Archived'
+  | 'Graduated';
 
 export type CommitmentSnapshot = {
   price?: string;
@@ -31,6 +33,7 @@ export type Lead = {
   
   // New Fields
   status: LeadStatus;
+  relationship: string; // e.g. Lead, Learner
   afc_step: number; // 0-5
   last_interaction_date?: string; // ISO date string
   hasEngaged: boolean;
@@ -44,7 +47,7 @@ export type TaskNature = 'Procedural' | 'Interactive';
 
 export type Task = {
   id:string;
-  leadId: string;
+  leadId: string | null; // Can be null for manual tasks
   leadName: string;
   description: string;
   completed: boolean;
@@ -62,9 +65,11 @@ export type InteractionFeedback = {
 export type InteractionEventDetails = { 
   type: string;
   dateTime: string; // ISO date string
+  status?: 'Scheduled' | 'Completed' | 'Cancelled';
+  rescheduledFrom?: string; // ISO string of original date
 };
 
-export type QuickLogType = 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged';
+export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged';
 
 export type Interaction = {
   id: string;
@@ -84,6 +89,7 @@ export type Interaction = {
 
 export type AppSettings = {
   id?: string;
+  relationshipTypes: string[];
   courseNames: string[];
   commonTraits: string[];
   withdrawalReasons: string[];
@@ -93,3 +99,5 @@ export type AppSettings = {
     price: string[];
   }
 }
+
+    

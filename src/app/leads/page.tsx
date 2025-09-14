@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Users2, Menu } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Plus, Users2, Filter, Search, X } from "lucide-react";
 import {
   collection,
   addDoc,
@@ -13,7 +13,9 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  getDoc
+  getDoc,
+  where,
+  QueryConstraint
 } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
@@ -23,38 +25,53 @@ import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import { enrichLeadAction } from "@/app/actions";
 import { db } from "@/lib/firebase";
-import type { Lead, AppSettings } from "@/lib/types";
+import type { Lead, AppSettings, LeadStatus } from "@/lib/types";
 import type { LeadFormValues } from "@/lib/schemas";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useDebounce } from "@/hooks/use-debounce";
 
-export default function LeadsPage() {
+const ALL_STATUSES: LeadStatus[] = ['Active', 'Paused', 'Snoozed', 'Cooling', 'Dormant', 'Enrolled', 'Withdrawn', 'Archived', 'Graduated'];
+
+export default function ContactsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  
+  const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const [statusFilters, setStatusFilters] = useState<LeadStatus[]>(['Active']);
+
   const { toast } = useToast();
 
   const fetchLeads = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
+      const constraints: QueryConstraint[] = [orderBy("createdAt", "desc")];
+      if (statusFilters.length > 0) {
+        constraints.push(where("status", "in", statusFilters));
+      }
+      const q = query(collection(db, "leads"), ...constraints);
       const querySnapshot = await getDocs(q);
       const leadsData = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as Lead)
       );
       setLeads(leadsData);
     } catch (error) {
-      console.error("Error fetching leads:", error);
+      console.error("Error fetching contacts:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to fetch leads from the database.",
+        description: "Failed to fetch contacts from the database.",
       });
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, statusFilters]);
   
   const fetchSettings = useCallback(async () => {
     try {
@@ -62,7 +79,7 @@ export default function LeadsPage() {
         if (settingsDoc.exists()) {
             setAppSettings({ id: settingsDoc.id, ...settingsDoc.data() } as AppSettings);
         } else {
-            setAppSettings({ courseNames: [], commonTraits: [], feedbackChips: { content: [], schedule: [], price: [] } });
+            setAppSettings({ relationshipTypes: ['Lead', 'Learner'], courseNames: [], commonTraits: [], feedbackChips: { content: [], schedule: [], price: [] } });
         }
     } catch (error) {
         console.error("Error fetching settings:", error);
@@ -72,8 +89,11 @@ export default function LeadsPage() {
 
   useEffect(() => {
     fetchLeads();
+  }, [fetchLeads]);
+
+  useEffect(() => {
     fetchSettings();
-  }, [fetchLeads, fetchSettings]);
+  }, [fetchSettings]);
 
   const handleAddClick = () => {
     setEditingLead(null);
@@ -86,20 +106,20 @@ export default function LeadsPage() {
   };
 
   const handleDelete = async (leadId: string) => {
-    if (!window.confirm("Are you sure you want to delete this lead?")) return;
+    if (!window.confirm("Are you sure you want to delete this contact?")) return;
     try {
       await deleteDoc(doc(db, "leads", leadId));
       setLeads((prev) => prev.filter((lead) => lead.id !== leadId));
       toast({
-        title: "Lead Deleted",
-        description: "The lead has been removed successfully.",
+        title: "Contact Deleted",
+        description: "The contact has been removed successfully.",
       });
     } catch (error) {
-      console.error("Error deleting lead:", error);
+      console.error("Error deleting contact:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete lead.",
+        description: "Failed to delete contact.",
       });
     }
   };
@@ -115,7 +135,8 @@ export default function LeadsPage() {
         const updateData = { 
             ...otherValues, 
             'commitmentSnapshot.course': course,
-            phones: values.phones
+            phones: values.phones,
+            relationship: values.relationship,
         };
         
         await updateDoc(leadRef, updateData as any);
@@ -126,8 +147,8 @@ export default function LeadsPage() {
           )
         );
         toast({
-          title: "Lead Updated",
-          description: "The lead's details have been saved.",
+          title: "Contact Updated",
+          description: "The contact's details have been saved.",
         });
       } else {
         // Add new lead
@@ -136,6 +157,7 @@ export default function LeadsPage() {
             ...otherValues,
             createdAt: new Date().toISOString(),
             status: 'Active',
+            relationship: values.relationship || 'Lead',
             afc_step: 0,
             hasEngaged: false,
             onFollowList: false,
@@ -152,18 +174,18 @@ export default function LeadsPage() {
         };
         setLeads((prev) => [newLead, ...prev]);
         toast({
-          title: "Lead Added",
-          description: "A new lead has been created successfully.",
+          title: "Contact Added",
+          description: "A new contact has been created successfully.",
         });
       }
       setIsDialogOpen(false);
       setEditingLead(null);
     } catch (error) {
-      console.error("Error saving lead:", error);
+      console.error("Error saving contact:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to save lead.",
+        description: "Failed to save contact.",
       });
     } finally {
         setIsSaving(false);
@@ -193,11 +215,11 @@ export default function LeadsPage() {
           )
         );
         toast({
-          title: "Lead Enriched!",
-          description: "AI has added new information to the lead.",
+          title: "Contact Enriched!",
+          description: "AI has added new information to the contact.",
         });
       } catch (error) {
-        console.error("Error updating enriched lead:", error);
+        console.error("Error updating enriched contact:", error);
         toast({
           variant: "destructive",
           title: "Update Failed",
@@ -213,7 +235,17 @@ export default function LeadsPage() {
     }
   };
 
-  if (isLoading) {
+  const filteredLeads = useMemo(() => {
+    if (!debouncedSearchTerm) {
+      return leads;
+    }
+    return leads.filter(lead =>
+      lead.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+    );
+  }, [leads, debouncedSearchTerm]);
+
+
+  if (isLoading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Logo className="h-12 w-12 animate-spin text-primary" />
@@ -223,22 +255,65 @@ export default function LeadsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-3">
+      <header className="bg-card border-b p-4 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-10 gap-4">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <SidebarTrigger />
           <Logo className="h-8 w-8 text-primary hidden sm:block" />
-          <h1 className="text-xl font-bold tracking-tight">All Leads</h1>
+          <h1 className="text-xl font-bold tracking-tight">Contacts</h1>
         </div>
-        <Button onClick={handleAddClick}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Lead
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1">
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+             <Input 
+                placeholder="Search contacts..." 
+                className="pl-9"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+             />
+             {searchTerm && (
+                <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearchTerm('')}>
+                    <X className="h-4 w-4"/>
+                </Button>
+             )}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filter
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {ALL_STATUSES.map(status => (
+                    <DropdownMenuCheckboxItem
+                        key={status}
+                        checked={statusFilters.includes(status)}
+                        onCheckedChange={(checked) => {
+                            setStatusFilters(prev => 
+                                checked 
+                                    ? [...prev, status] 
+                                    : prev.filter(s => s !== status)
+                            )
+                        }}
+                    >
+                        {status}
+                    </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={handleAddClick} className="whitespace-nowrap">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Contact
+          </Button>
+        </div>
       </header>
 
       <main className="flex-1 p-4 sm:p-6 md:p-8">
-        {leads.length > 0 ? (
+        {filteredLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {leads.map((lead) => (
+            {filteredLeads.map((lead) => (
               <LeadCard
                 key={lead.id}
                 lead={lead}
@@ -252,11 +327,10 @@ export default function LeadsPage() {
           <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <Users2 className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
-              No leads yet
+              No contacts found
             </h2>
             <p className="mt-2 max-w-xs">
-              Click the &quot;Add Lead&quot; button to create your first contact and
-              start tracking.
+              Try adjusting your search or filters, or add a new contact to get started.
             </p>
           </div>
         )}
@@ -269,6 +343,7 @@ export default function LeadsPage() {
         leadToEdit={editingLead}
         isSaving={isSaving}
         courseNames={appSettings?.courseNames || []}
+        relationshipTypes={appSettings?.relationshipTypes || []}
       />
     </div>
   );

@@ -36,6 +36,7 @@ interface LeadDialogProps {
   leadToEdit: Lead | null;
   isSaving?: boolean;
   courseNames: string[];
+  relationshipTypes: string[];
 }
 
 export function LeadDialog({
@@ -45,6 +46,7 @@ export function LeadDialog({
   leadToEdit,
   isSaving,
   courseNames,
+  relationshipTypes,
 }: LeadDialogProps) {
   const form = useForm<LeadFormValues>({
     resolver: zodResolver(leadSchema),
@@ -53,6 +55,7 @@ export function LeadDialog({
       email: "",
       phones: [{ number: "", type: "both" }],
       course: "",
+      relationship: "Lead",
     },
   });
 
@@ -69,13 +72,15 @@ export function LeadDialog({
           email: leadToEdit.email,
           phones: leadToEdit.phones?.length ? leadToEdit.phones.map(p => ({ number: p.number || '', type: p.type || 'both' })) : [{ number: "", type: "both" }],
           course: leadToEdit.commitmentSnapshot?.course || "",
+          relationship: leadToEdit.relationship || 'Lead',
         });
       } else {
         form.reset({
           name: "",
           email: "",
           phones: [{ number: "", type: "both" }],
-          course: ""
+          course: "",
+          relationship: "Lead",
         });
       }
     }
@@ -92,11 +97,11 @@ export function LeadDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{leadToEdit ? "Edit Lead" : "Add New Lead"}</DialogTitle>
+          <DialogTitle>{leadToEdit ? "Edit Contact" : "Add New Contact"}</DialogTitle>
           <DialogDescription>
             {leadToEdit
-              ? "Update the details for this lead."
-              : "Enter the details for the new lead."}
+              ? "Update the details for this contact."
+              : "Enter the details for the new contact."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -187,11 +192,34 @@ export function LeadDialog({
             
             <FormField
               control={form.control}
+              name="relationship"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Relationship</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a relationship type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {relationshipTypes.map(name => (
+                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="course"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Course of Interest</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a course" />

@@ -58,7 +58,10 @@ export function LeadCard({
        <CardHeader className="flex flex-row items-start justify-between">
         <Link href={`/leads/${lead.id}`} className="flex-1">
             <CardTitle className="text-xl hover:underline">{lead.name}</CardTitle>
-            <CardDescription>{lead.status || 'Active'}</CardDescription>
+            <div className="flex items-center gap-2 mt-1">
+                <CardDescription>{lead.status || 'Active'}</CardDescription>
+                <Badge variant="outline">{lead.relationship || 'Lead'}</Badge>
+            </div>
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -114,3 +117,5 @@ export function LeadCard({
     </Card>
   );
 }
+
+    

@@ -11,8 +11,9 @@ import {
   query,
   Timestamp,
   orderBy,
+  addDoc,
 } from "firebase/firestore";
-import { AlertTriangle, Check, ListTodo, Menu, CalendarIcon } from "lucide-react";
+import { AlertTriangle, Check, ListTodo, Menu, CalendarIcon, Plus } from "lucide-react";
 import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
 
 import {
@@ -30,6 +31,15 @@ import { db } from "@/lib/firebase";
 import type { Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 // Helper to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -57,8 +67,13 @@ export default function TasksPage() {
   const [activeTask, setActiveTask] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchTasks = async () => {
+  const [isManualTaskOpen, setIsManualTaskOpen] = useState(false);
+  const [manualTaskDescription, setManualTaskDescription] = useState("");
+  const [manualTaskDueDate, setManualTaskDueDate] = useState<Date | undefined>(new Date());
+  const [isSavingManualTask, setIsSavingManualTask] = useState(false);
+
+  const fetchTasks = async () => {
+      setIsLoading(true);
       try {
         const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
@@ -78,6 +93,8 @@ export default function TasksPage() {
       }
     };
 
+
+  useEffect(() => {
     fetchTasks();
   }, [toast]);
 
@@ -103,13 +120,46 @@ export default function TasksPage() {
       });
     }
   };
+  
+  const handleAddManualTask = async () => {
+    if (!manualTaskDescription.trim()) {
+      toast({ variant: "destructive", title: "Description cannot be empty." });
+      return;
+    }
+    setIsSavingManualTask(true);
+    try {
+      const newTask = {
+        description: manualTaskDescription,
+        dueDate: manualTaskDueDate,
+        completed: false,
+        createdAt: new Date(),
+        nature: "Procedural",
+        leadId: null, // No linked lead
+        leadName: "Personal Task",
+      };
+      const docRef = await addDoc(collection(db, "tasks"), newTask);
+      setTasks(prev => [{...newTask, id: docRef.id} as Task, ...prev]);
+      toast({ title: "Manual task added!" });
+      setIsManualTaskOpen(false);
+      setManualTaskDescription("");
+      setManualTaskDueDate(new Date());
+    } catch (error) {
+       console.error("Error adding manual task:", error);
+       toast({ variant: "destructive", title: "Failed to add task." });
+    } finally {
+        setIsSavingManualTask(false);
+    }
+  }
 
 
   const visibleTasks = useMemo(() => {
     return tasks
       .filter((task) => {
         const dueDate = toDate(task.dueDate);
-        return dueDate && isSameDay(dueDate, selectedDate);
+        if (!dueDate) return false;
+        // Show tasks with no due date only on the 'today' view if they are not completed
+        if (!task.dueDate && isToday(selectedDate)) return !task.completed;
+        return isSameDay(dueDate, selectedDate);
       })
       .sort((a, b) => {
         if (a.completed !== b.completed) {
@@ -176,28 +226,34 @@ export default function TasksPage() {
             <ListTodo className="h-8 w-8 text-primary hidden sm:block" />
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant={"outline"}
-                className={cn(
-                  "w-auto justify-start text-left font-normal",
-                  !selectedDate && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-0 sm:mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">{selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(day) => day && setSelectedDate(day)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsManualTaskOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Task
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "w-auto justify-start text-left font-normal",
+                    !selectedDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-0 sm:mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">{selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(day) => day && setSelectedDate(day)}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       </header>
 
@@ -269,7 +325,7 @@ export default function TasksPage() {
                               {task.description}
                             </p>
                             <p className="text-sm text-muted-foreground mt-1">
-                              {task.leadName} (No linked lead)
+                              {task.leadName || "Manual Task"}
                             </p>
                           </div>
                            <button
@@ -306,6 +362,49 @@ export default function TasksPage() {
           </div>
         )}
       </main>
+      
+       <Dialog open={isManualTaskOpen} onOpenChange={setIsManualTaskOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a Manual Task</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+             <Textarea 
+                placeholder="What do you need to do?" 
+                value={manualTaskDescription}
+                onChange={(e) => setManualTaskDescription(e.target.value)}
+                className="min-h-[100px]"
+             />
+             <Popover>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant={"outline"}
+                        className={cn("w-full justify-start text-left font-normal", !manualTaskDueDate && "text-muted-foreground")}
+                    >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {manualTaskDueDate ? format(manualTaskDueDate, "PPP") : <span>Pick a due date</span>}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                    <Calendar
+                        mode="single"
+                        selected={manualTaskDueDate}
+                        onSelect={(day) => day && setManualTaskDueDate(day)}
+                        initialFocus
+                    />
+                </PopoverContent>
+            </Popover>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsManualTaskOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddManualTask} disabled={isSavingManualTask}>
+                {isSavingManualTask ? "Adding..." : "Add Task"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+       </Dialog>
     </div>
   );
 }
+
+    

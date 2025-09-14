@@ -11,6 +11,9 @@ export const leadSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email." }),
   phones: z.array(phoneSchema).min(1, { message: "At least one phone number is required." }),
   course: z.string().optional(),
+  relationship: z.string().min(1, { message: "Relationship type is required." }),
 });
 
 export type LeadFormValues = z.infer<typeof leadSchema>;
+
+    

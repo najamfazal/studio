@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -27,6 +26,7 @@ export default function SettingsPage() {
     const [newCourseName, setNewCourseName] = useState("");
     const [newTrait, setNewTrait] = useState("");
     const [newWithdrawalReason, setNewWithdrawalReason] = useState("");
+    const [newRelationshipType, setNewRelationshipType] = useState("");
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
 
     const fetchSettings = useCallback(async () => {
@@ -40,6 +40,7 @@ export default function SettingsPage() {
                     courseNames: data.courseNames || [],
                     commonTraits: data.commonTraits || [],
                     withdrawalReasons: data.withdrawalReasons || [],
+                    relationshipTypes: data.relationshipTypes || ['Lead', 'Learner'],
                     feedbackChips: data.feedbackChips || { content: [], schedule: [], price: [] },
                     id: settingsDoc.id,
                 };
@@ -49,6 +50,7 @@ export default function SettingsPage() {
                     courseNames: ["Example Course 1", "Example Course 2"],
                     commonTraits: ["Decisive", "Budget-conscious"],
                     withdrawalReasons: ["Not interested", "Found alternative"],
+                    relationshipTypes: ["Lead", "Learner", "Archived", "Graduated"],
                     feedbackChips: {
                         content: ["Not relevant", "Too complex"],
                         schedule: ["Wrong time", "Too long"],
@@ -75,6 +77,7 @@ export default function SettingsPage() {
         if (!settings) return;
 
         // Optimistic UI update
+        const originalSettings = settings;
         setSettings(newSettingsState);
         setIsSaving(true);
 
@@ -84,7 +87,7 @@ export default function SettingsPage() {
             toast({ title: "Settings Saved", description: "Your changes have been saved successfully." });
         } catch (error) {
             // Revert on error
-            setSettings(settings);
+            setSettings(originalSettings);
             console.error("Error saving settings:", error);
             toast({ variant: "destructive", title: "Save Failed", description: "Could not save your changes." });
         } finally {
@@ -92,11 +95,11 @@ export default function SettingsPage() {
         }
     };
 
-    const handleAddItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | `feedbackChips.${FeedbackCategory}`) => {
+    const handleAddItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | `feedbackChips.${FeedbackCategory}`) => {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldKey: keyof AppSettings | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' = 'courseNames';
+        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' = 'courseNames';
 
         if (field === 'courseNames') {
             if (!newCourseName) return;
@@ -113,7 +116,13 @@ export default function SettingsPage() {
             valueToAdd = newWithdrawalReason;
             fieldKey = 'withdrawalReasons';
             setNewWithdrawalReason("");
-        } else if (field.startsWith('feedbackChips.')) {
+        } else if (field === 'relationshipTypes') {
+            if(!newRelationshipType) return;
+            valueToAdd = newRelationshipType;
+            fieldKey = 'relationshipTypes';
+            setNewRelationshipType("");
+        }
+        else if (field.startsWith('feedbackChips.')) {
             const category = newFeedbackChip.category;
             if (!category || !newFeedbackChip.value) return;
             valueToAdd = newFeedbackChip.value;
@@ -127,7 +136,7 @@ export default function SettingsPage() {
                 const category = fieldKey.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[fieldKey as keyof AppSettings] as string[];
+                list = draft[fieldKey as keyof Omit<AppSettings, 'id'| 'feedbackChips'>] as string[];
             }
             if (!list.includes(valueToAdd)) {
                 list.push(valueToAdd);
@@ -141,7 +150,7 @@ export default function SettingsPage() {
         const updatePath = fieldKey;
         const updatePayload: { [key: string]: any } = {};
          if (updatePath.includes('.')) {
-            const [parent, child] = updatePath.split('.') as ['feedbackChips', FeedbackCategory];
+            const [parent] = updatePath.split('.') as ['feedbackChips'];
             updatePayload[parent] = { ...newSettings.feedbackChips };
         } else {
             updatePayload[updatePath] = newSettings[updatePath as keyof AppSettings];
@@ -150,7 +159,7 @@ export default function SettingsPage() {
         handleSave(updatePayload, newSettings);
     };
 
-    const handleRemoveItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | `feedbackChips.${FeedbackCategory}`, itemToRemove: string) => {
+    const handleRemoveItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | `feedbackChips.${FeedbackCategory}`, itemToRemove: string) => {
         if (!settings) return;
 
         const newSettings = produce(settings, draft => {
@@ -159,7 +168,7 @@ export default function SettingsPage() {
                 const category = field.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[field as keyof AppSettings] as string[];
+                list = draft[field as keyof Omit<AppSettings, 'id' | 'feedbackChips'>] as string[];
             }
             const index = list.indexOf(itemToRemove);
             if (index > -1) {
@@ -170,7 +179,7 @@ export default function SettingsPage() {
         const updatePath = field;
         const updatePayload: { [key: string]: any } = {};
         if (updatePath.includes('.')) {
-            const [parent, child] = updatePath.split('.') as ['feedbackChips', FeedbackCategory];
+            const [parent] = updatePath.split('.') as ['feedbackChips'];
             updatePayload[parent] = { ...newSettings.feedbackChips };
         } else {
             updatePayload[updatePath] = newSettings[updatePath as keyof AppSettings];
@@ -207,6 +216,33 @@ export default function SettingsPage() {
                 <div className="grid gap-6 max-w-4xl mx-auto">
                     <Card>
                         <CardHeader>
+                            <CardTitle>Relationship Types</CardTitle>
+                            <CardDescription>Manage the relationship tags for your contacts (e.g., Lead, Learner).</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap gap-2">
+                                    {settings.relationshipTypes.map(rtype => (
+                                        <Badge key={rtype} variant="secondary" className="text-sm">
+                                            {rtype}
+                                            <button onClick={() => handleRemoveItem('relationshipTypes', rtype)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
+                                                <X className="h-3 w-3"/>
+                                            </button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                    <Input value={newRelationshipType} onChange={e => setNewRelationshipType(e.target.value)} placeholder="Add new type..." onKeyDown={e => e.key === 'Enter' && handleAddItem('relationshipTypes')} />
+                                    <Button onClick={() => handleAddItem('relationshipTypes')} disabled={isSaving || !newRelationshipType}>
+                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
                             <CardTitle>Course Names</CardTitle>
                             <CardDescription>Manage the list of available courses for the dropdown.</CardDescription>
                         </CardHeader>
@@ -235,7 +271,7 @@ export default function SettingsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Common Traits</CardTitle>
-                            <CardDescription>Manage predefined traits for lead intel.</CardDescription>
+                            <CardDescription>Manage predefined traits for contact intel.</CardDescription>
                         </CardHeader>
                         <CardContent>
                              <div className="space-y-2">
@@ -262,7 +298,7 @@ export default function SettingsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Withdrawal Reasons</CardTitle>
-                            <CardDescription>Manage the chips shown when a lead is marked as "Withdrawn".</CardDescription>
+                            <CardDescription>Manage the chips shown when a contact is marked as "Withdrawn".</CardDescription>
                         </CardHeader>
                         <CardContent>
                              <div className="space-y-2">
@@ -336,3 +372,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    

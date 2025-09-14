@@ -1,3 +1,4 @@
+
 import type {Metadata} from 'next';
 import Link from 'next/link';
 import { Home, ListChecks, Brain, UserCheck, PanelLeft } from 'lucide-react';
@@ -8,7 +9,7 @@ import { Sidebar, SidebarProvider } from '@/components/ui/sidebar';
 
 export const metadata: Metadata = {
   title: 'LeadTrack Solo',
-  description: 'A simple, personal CRM for managing leads.',
+  description: 'A simple, personal CRM for managing contacts and tasks.',
 };
 
 export default function RootLayout({
@@ -35,3 +36,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+    
