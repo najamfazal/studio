@@ -52,7 +52,7 @@ export default function ContactsPage() {
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
     try {
-      const constraints: QueryConstraint[] = [orderBy("createdAt", "desc")];
+      const constraints: QueryConstraint[] = [orderBy("status"), orderBy("createdAt", "desc")];
       if (statusFilters.length > 0) {
         constraints.push(where("status", "in", statusFilters));
       }
