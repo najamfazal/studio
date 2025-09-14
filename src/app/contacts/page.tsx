@@ -13,11 +13,12 @@ import {
   startAfter,
   QueryDocumentSnapshot,
   DocumentData,
+  where,
 } from "firebase/firestore";
 import { Plus, Users, Loader2, Filter } from "lucide-react";
 
 import { db } from "@/lib/firebase";
-import type { AppSettings, Lead } from "@/lib/types";
+import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -33,11 +34,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LeadDialog } from "@/components/lead-dialog";
-import { leadSchema, LeadFormValues } from "@/lib/schemas";
 import { addDoc, updateDoc } from "firebase/firestore";
 
 const PAGE_SIZE = 10;
+
+const ALL_STATUSES: LeadStatus[] = [
+  'Active', 'Paused', 'Snoozed', 'Cooling', 'Dormant', 'Enrolled', 'Withdrawn', 'Archived', 'Graduated'
+];
 
 export default function ContactsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -53,10 +65,12 @@ export default function ContactsPage() {
   const [leadToDelete, setLeadToDelete] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  const [statusFilters, setStatusFilters] = useState<LeadStatus[]>([]);
 
   const { toast } = useToast();
   
-  const fetchLeads = useCallback(async (loadMore = false) => {
+  const fetchLeads = useCallback(async (loadMore = false, filtersChanged = false) => {
     if (loadMore) {
       setIsLoadingMore(true);
     } else {
@@ -65,26 +79,36 @@ export default function ContactsPage() {
 
     try {
       let q;
-      if (loadMore && lastVisible) {
-        q = query(
-          collection(db, "leads"),
-          orderBy("name"),
-          startAfter(lastVisible),
-          limit(PAGE_SIZE)
-        );
-      } else {
-        q = query(collection(db, "leads"), orderBy("name"), limit(PAGE_SIZE));
+      const leadsRef = collection(db, "leads");
+      
+      const queryConstraints = [orderBy("name")];
+
+      if (statusFilters.length > 0) {
+        queryConstraints.push(where("status", "in", statusFilters));
       }
+      
+      if (loadMore && lastVisible && !filtersChanged) {
+        queryConstraints.push(startAfter(lastVisible));
+      }
+      
+      queryConstraints.push(limit(PAGE_SIZE));
+
+      q = query(leadsRef, ...queryConstraints);
 
       const querySnapshot = await getDocs(q);
       const newLeads = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as Lead)
       );
 
-      setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      const newLastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+      setLastVisible(newLastVisible);
       setHasMore(newLeads.length === PAGE_SIZE);
       
-      setLeads(prev => loadMore ? [...prev, ...newLeads] : newLeads);
+      if (loadMore && !filtersChanged) {
+          setLeads(prev => [...prev, ...newLeads]);
+      } else {
+          setLeads(newLeads);
+      }
 
     } catch (error) {
       console.error("Error fetching contacts:", error);
@@ -97,12 +121,12 @@ export default function ContactsPage() {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, lastVisible]);
+  }, [toast, lastVisible, statusFilters]);
 
 
   useEffect(() => {
-    fetchLeads();
-  }, []);
+    fetchLeads(false, true);
+  }, [statusFilters]);
 
   const handleEdit = (lead: Lead) => {
     setLeadToEdit(lead);
@@ -130,7 +154,7 @@ export default function ContactsPage() {
     }
   };
   
-  const handleDialogSave = async (values: LeadFormValues) => {
+  const handleDialogSave = async (values: any) => {
     setIsSaving(true);
     try {
       const { course, ...leadData } = values;
@@ -179,9 +203,17 @@ export default function ContactsPage() {
       setLeadToEdit(null);
     }
   };
+  
+  const handleFilterChange = (status: LeadStatus) => {
+    setStatusFilters(prev => 
+      prev.includes(status) 
+        ? prev.filter(s => s !== status) 
+        : [...prev, status]
+    );
+  };
 
 
-  if (isLoading) {
+  if (isLoading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Logo className="h-12 w-12 animate-spin text-primary" />
@@ -199,10 +231,27 @@ export default function ContactsPage() {
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
             </div>
             <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" className="w-10">
-                    <Filter className="h-4 w-4" />
-                    <span className="sr-only">Filter</span>
-                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="w-10">
+                            <Filter className="h-4 w-4" />
+                            <span className="sr-only">Filter</span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {ALL_STATUSES.map(status => (
+                            <DropdownMenuCheckboxItem
+                                key={status}
+                                checked={statusFilters.includes(status)}
+                                onCheckedChange={() => handleFilterChange(status)}
+                            >
+                                {status}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
                 <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsDialogOpen(true); }}>
                     <Plus className="h-4 w-4" />
                     <span className="sr-only">Add Contact</span>
@@ -211,7 +260,8 @@ export default function ContactsPage() {
         </div>
       </header>
       <main className="flex-1 p-4 sm:p-6 md:p-8">
-        {leads.length > 0 ? (
+        {isLoading && <div className="flex justify-center"><Loader2 className="animate-spin text-primary"/></div>}
+        {!isLoading && leads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {leads.map((lead) => (
               <ContactCard
@@ -224,20 +274,20 @@ export default function ContactsPage() {
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
+          !isLoading && <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <Users className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
               No contacts found
             </h2>
             <p className="mt-2 max-w-xs">
-              Click the "+" button to add your first contact.
+              {statusFilters.length > 0 ? "No contacts match the current filter." : "Click the \"+\" button to add your first contact."}
             </p>
           </div>
         )}
 
         {hasMore && (
             <div className="flex justify-center mt-8">
-                <Button onClick={() => fetchLeads(true)} disabled={isLoadingMore}>
+                <Button onClick={() => fetchLeads(true, false)} disabled={isLoadingMore}>
                     {isLoadingMore && <Loader2 className="mr-2 animate-spin" />}
                     {isLoadingMore ? "Loading..." : "Load More"}
                 </Button>
