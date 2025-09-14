@@ -20,7 +20,7 @@ import { db } from "@/lib/firebase";
 import type { Lead, Interaction, InteractionFeedback, AppSettings, QuickLogType } from "@/lib/types";
 import { Logo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2, MessageSquareText, CalendarCheck, CircleDollarSign, Phone, MessageSquare, BookOpen, Clock, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, Star, Brain, ToggleRight, X, Users, FilePenLine, ThumbsUp, ThumbsDown, CalendarClock, Send, Loader2, MessageSquareText, CalendarCheck, CircleDollarSign, Phone, MessageSquare, BookOpen, Clock, AlertCircle, Edit, Activity } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -124,7 +124,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
 
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   
-  const [isWithdrawnAlertOpen, setIsWithdrawnAlertOpen] = useState(false);
+  const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
   const [selectedWithdrawalReasons, setSelectedWithdrawalReasons] = useState<string[]>([]);
   const [isSubmittingQuickLog, setIsSubmittingQuickLog] = useState(false);
 
@@ -425,7 +425,7 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       return;
     }
     setIsSubmittingFeedback(true);
-    await logInteraction({ feedback }, "Feedback logged");
+    await logInteraction({ feedback }, "Interest & Intent logged");
     setFeedback({});
     setActiveObjectionCategory(null);
     setIsSubmittingFeedback(false);
@@ -440,32 +440,51 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
       setIsSubmittingEvent(true);
       await logInteraction({
           outcome: "Event Scheduled",
-          eventDetails: { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString() }
+          eventDetails: { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString(), status: 'Scheduled' }
       }, "Event Scheduled");
       setEventDetails({});
       setScheduleStep('date');
       setIsSubmittingEvent(false);
   };
 
-  const handleQuickLogClick = (type: QuickLogType) => {
-      if (type === 'Withdrawn') {
-          setIsWithdrawnAlertOpen(true);
-      } else {
-          setIsSubmittingQuickLog(true);
-          logInteraction({ quickLogType: type }, `Logged '${type}'`).finally(() => setIsSubmittingQuickLog(false));
-      }
+  const handleSelectQuickLog = (type: QuickLogType) => {
+    setSelectedQuickLog(current => current === type ? null : type);
+  };
+  
+  const handleLogQuickAction = async () => {
+    if (!selectedQuickLog) {
+        toast({ variant: 'destructive', title: "Please select an activity to log." });
+        return;
+    }
+    setIsSubmittingQuickLog(true);
+
+    const interactionData: Partial<Interaction> = {
+        quickLogType: selectedQuickLog,
+    };
+
+    if (selectedQuickLog === 'Withdrawn') {
+        if (selectedWithdrawalReasons.length === 0) {
+            toast({ variant: 'destructive', title: 'Please select at least one withdrawal reason.' });
+            setIsSubmittingQuickLog(false);
+            return;
+        }
+        interactionData.withdrawalReasons = selectedWithdrawalReasons;
+    }
+
+    await logInteraction(interactionData, `Logged '${selectedQuickLog}'`);
+    
+    // Reset state after logging
+    setSelectedQuickLog(null);
+    setSelectedWithdrawalReasons([]);
+    setIsSubmittingQuickLog(false);
   };
 
-  const handleLogWithdrawn = async () => {
-      setIsSubmittingQuickLog(true);
-      await logInteraction({
-          quickLogType: 'Withdrawn',
-          withdrawalReasons: selectedWithdrawalReasons,
-      }, 'Logged Withdrawn');
-      setIsSubmittingQuickLog(false);
-      setIsWithdrawnAlertOpen(false);
-      setSelectedWithdrawalReasons([]);
+  const handleToggleWithdrawalReason = (reason: string) => {
+      setSelectedWithdrawalReasons(prev =>
+        prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]
+      );
   };
+
 
   const isObjectionsOpen = activeObjectionCategory !== null;
 
@@ -665,181 +684,204 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
              <div className="grid gap-4">
                 
                 <Card>
-                    <CardHeader className="p-4 flex flex-col gap-4">
-                        <CardTitle className="text-lg">Log Activity</CardTitle>
+                    <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-primary"/>
+                            <CardTitle className="text-lg">Quick Log</CardTitle>
+                        </div>
+                         <Button onClick={handleLogQuickAction} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingQuickLog || !selectedQuickLog}>
+                           {isSubmittingQuickLog ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 space-y-4">
                         <div className="flex flex-wrap gap-2">
-                            {quickLogOptions.map(opt => (
-                                <Button key={opt.value} variant="outline" size="sm" onClick={() => handleQuickLogClick(opt.value)} disabled={isSubmittingQuickLog}>
-                                    {isSubmittingQuickLog && <Loader2 className="animate-spin mr-2 h-4 w-4"/>}
+                           {quickLogOptions.map(opt => (
+                                <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="sm" onClick={() => handleSelectQuickLog(opt.value)} disabled={isSubmittingQuickLog}>
                                     {opt.label}
                                 </Button>
                             ))}
                         </div>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 space-y-4">
-                        <Card>
-                           <Collapsible open={isObjectionsOpen} onOpenChange={(isOpen) => { if (!isOpen) setActiveObjectionCategory(null); }}>
-                               <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <BookOpen className="h-5 w-5 text-primary"/>
-                                        <CardTitle className="text-lg">Log Feedback</CardTitle>
+                        {selectedQuickLog === 'Withdrawn' && (
+                            <div className="pt-3 border-t">
+                                <p className="text-sm font-medium mb-2 text-center text-muted-foreground">Select withdrawal reason(s)</p>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                    {(appSettings?.withdrawalReasons || []).map(reason => (
+                                      <Badge
+                                        key={reason}
+                                        variant={selectedWithdrawalReasons.includes(reason) ? "default" : "secondary"}
+                                        onClick={() => handleToggleWithdrawalReason(reason)}
+                                        className="cursor-pointer transition-colors text-sm"
+                                      >
+                                        {reason}
+                                      </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card>
+                   <Collapsible open={isObjectionsOpen} onOpenChange={(isOpen) => { if (!isOpen) setActiveObjectionCategory(null); }}>
+                       <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <BookOpen className="h-5 w-5 text-primary"/>
+                                <CardTitle className="text-lg">Log Interest & Intent</CardTitle>
+                            </div>
+                            <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback || Object.keys(feedback).length === 0}>
+                                {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            </Button>
+                       </CardHeader>
+                       <CardContent className="px-4 pt-0 pb-4">
+                            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                                {(['content', 'schedule', 'price'] as const).map(category => (
+                                    <div key={category} className="space-y-2 text-center">
+                                        <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1.5">
+                                        {category === 'content' && <MessageSquareText className="h-3.5 w-3.5"/>}
+                                        {category === 'schedule' && <CalendarCheck className="h-3.5 w-3.5"/>}
+                                        {category === 'price' && <CircleDollarSign className="h-3.5 w-3.5"/>}
+                                        <span className="sm:inline">{category}</span>
+                                        </p>
+                                        <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
+                                            <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
+                                            <Separator orientation="vertical" className="h-5"/>
+                                            <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
+                                        </div>
                                     </div>
-                                    <Button onClick={handleLogFeedback} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingFeedback || Object.keys(feedback).length === 0}>
-                                        {isSubmittingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                    </Button>
-                               </CardHeader>
-                               <CardContent className="px-4 pt-0 pb-4">
-                                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                                        {(['content', 'schedule', 'price'] as const).map(category => (
-                                            <div key={category} className="space-y-2 text-center">
-                                                <p className="font-medium text-muted-foreground text-xs capitalize flex items-center justify-center gap-1.5">
-                                                {category === 'content' && <MessageSquareText className="h-3.5 w-3.5"/>}
-                                                {category === 'schedule' && <CalendarCheck className="h-3.5 w-3.5"/>}
-                                                {category === 'price' && <CircleDollarSign className="h-3.5 w-3.5"/>}
-                                                <span className="sm:inline">{category}</span>
-                                                </p>
-                                                <div className="flex items-center justify-center gap-1 border rounded-full p-0.5 bg-muted/50">
-                                                    <Button size="icon" variant={feedback[category]?.perception === 'positive' ? 'default' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'positive')}><ThumbsUp className="h-4 w-4"/></Button>
-                                                    <Separator orientation="vertical" className="h-5"/>
-                                                    <Button size="icon" variant={feedback[category]?.perception === 'negative' ? 'destructive' : 'ghost'} className="h-7 w-7 rounded-full flex-1" onClick={() => handleFeedbackSelection(category, 'negative')}><ThumbsDown className="h-4 w-4"/></Button>
-                                                </div>
-                                            </div>
+                                ))}
+                            </div>
+                            <CollapsibleContent>
+                                <div className="pt-3 mt-3 border-t">
+                                {activeObjectionCategory && (
+                                    <div className="flex flex-wrap gap-2 justify-center">
+                                        {(appSettings?.feedbackChips[activeObjectionCategory] || []).map(objection => (
+                                            <Badge
+                                                key={objection}
+                                                variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
+                                                onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
+                                                className="cursor-pointer transition-colors text-sm"
+                                            >
+                                                {objection}
+                                            </Badge>
                                         ))}
                                     </div>
-                                    <CollapsibleContent>
-                                        <div className="pt-3 mt-3 border-t">
-                                        {activeObjectionCategory && (
-                                            <div className="flex flex-wrap gap-2 justify-center">
-                                                {(appSettings?.feedbackChips[activeObjectionCategory] || []).map(objection => (
-                                                    <Badge
-                                                        key={objection}
-                                                        variant={feedback[activeObjectionCategory]?.objections?.includes(objection) ? "default" : "secondary"}
-                                                        onClick={() => handleObjectionSelection(activeObjectionCategory, objection)}
-                                                        className="cursor-pointer transition-colors text-sm"
-                                                    >
-                                                        {objection}
-                                                    </Badge>
+                                )}
+                                </div>
+                            </CollapsibleContent>
+                       </CardContent>
+                   </Collapsible>
+                </Card>
+
+                <Card>
+                    <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-2">
+                           <Clock className="h-5 w-5 text-primary"/>
+                           <CardTitle className="text-lg">Schedule Event</CardTitle>
+                        </div>
+                        <Button onClick={handleScheduleEvent} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingEvent || !eventDetails.type || !eventDetails.dateTime}>
+                          {isSubmittingEvent ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4"/>}
+                        </Button>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 space-y-3">
+                        <div className="flex gap-2">
+                            <Select onValueChange={(v) => setEventDetails(p => ({...p, type: v}))} value={eventDetails.type}>
+                                <SelectTrigger><SelectValue placeholder="Event type..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Online Meet/Demo">Online Meet/Demo</SelectItem>
+                                    <SelectItem value="Visit">Visit</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Popover onOpenChange={(open) => !open && setScheduleStep('date')}>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    variant={"outline"}
+                                    size="icon"
+                                    className={cn("h-10 w-10 shrink-0", !eventDetails.dateTime && "text-muted-foreground")}
+                                >
+                                    <CalendarClock className="h-4 w-4" />
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    {scheduleStep === 'date' && (
+                                        <>
+                                            <Calendar
+                                                mode="single"
+                                                selected={eventDetails.dateTime}
+                                                onSelect={(d) => {
+                                                    const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
+                                                    if (d) {
+                                                        const newDate = setMinutes(setHours(d, getHours(existing)), getMinutes(existing));
+                                                        setEventDetails(p => ({...p, dateTime: newDate}));
+                                                        setScheduleStep('time');
+                                                    }
+                                                }}
+                                                initialFocus
+                                            />
+                                            <div className="flex flex-wrap gap-1 p-2 border-t justify-center">
+                                                {dateQuickPicks.map(qp => (
+                                                    <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
+                                                        const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
+                                                        const newDate = setMinutes(setHours(addDays(new Date(), qp.days), getHours(existing)), getMinutes(existing));
+                                                        setEventDetails(p => ({...p, dateTime: newDate}));
+                                                        setScheduleStep('time');
+                                                    }}>{qp.label}</Button>
                                                 ))}
                                             </div>
-                                        )}
-                                        </div>
-                                    </CollapsibleContent>
-                               </CardContent>
-                           </Collapsible>
-                        </Card>
-
-                        <Card>
-                            <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                   <Clock className="h-5 w-5 text-primary"/>
-                                   <CardTitle className="text-lg">Schedule Event</CardTitle>
-                                </div>
-                                <Button onClick={handleScheduleEvent} size="icon" variant="ghost" className="h-8 w-8" disabled={isSubmittingEvent || !eventDetails.type || !eventDetails.dateTime}>
-                                  {isSubmittingEvent ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4"/>}
-                                </Button>
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0 space-y-3">
-                                <div className="flex gap-2">
-                                    <Select onValueChange={(v) => setEventDetails(p => ({...p, type: v}))} value={eventDetails.type}>
-                                        <SelectTrigger><SelectValue placeholder="Event type..." /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Online Meet/Demo">Online Meet/Demo</SelectItem>
-                                            <SelectItem value="Visit">Visit</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <Popover onOpenChange={(open) => !open && setScheduleStep('date')}>
-                                        <PopoverTrigger asChild>
-                                        <Button
-                                            variant={"outline"}
-                                            size="icon"
-                                            className={cn("h-10 w-10 shrink-0", !eventDetails.dateTime && "text-muted-foreground")}
-                                        >
-                                            <CalendarClock className="h-4 w-4" />
-                                        </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                            {scheduleStep === 'date' && (
-                                                <>
-                                                    <Calendar
-                                                        mode="single"
-                                                        selected={eventDetails.dateTime}
-                                                        onSelect={(d) => {
-                                                            const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
-                                                            if (d) {
-                                                                const newDate = setMinutes(setHours(d, getHours(existing)), getMinutes(existing));
-                                                                setEventDetails(p => ({...p, dateTime: newDate}));
-                                                                setScheduleStep('time');
-                                                            }
-                                                        }}
-                                                        initialFocus
-                                                    />
-                                                    <div className="flex flex-wrap gap-1 p-2 border-t justify-center">
-                                                        {dateQuickPicks.map(qp => (
-                                                            <Button key={qp.label} variant="ghost" size="sm" onClick={() => {
-                                                                const existing = eventDetails.dateTime || setMinutes(setHours(new Date(), 17), 0);
-                                                                const newDate = setMinutes(setHours(addDays(new Date(), qp.days), getHours(existing)), getMinutes(existing));
-                                                                setEventDetails(p => ({...p, dateTime: newDate}));
-                                                                setScheduleStep('time');
-                                                            }}>{qp.label}</Button>
+                                        </>
+                                    )}
+                                    {scheduleStep === 'time' && (
+                                        <div className="p-4">
+                                            <p className="text-sm font-medium text-center mb-2">{eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select a date'}</p>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Hour</p>
+                                                    <div className="grid grid-cols-6 gap-1">
+                                                        {Array.from({length: 12}, (_, i) => i + 1).map(h => (
+                                                        <Button key={h} variant={((getHours(eventDetails.dateTime || new Date()) % 12) || 12) === h ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                            const d = eventDetails.dateTime || new Date();
+                                                            const currentAmPm = getHours(d) >= 12 ? 'pm' : 'am';
+                                                            const newHour = currentAmPm === 'pm' && h < 12 ? h + 12 : (currentAmPm === 'am' && h === 12 ? 0 : h);
+                                                            setEventDetails(p => ({...p, dateTime: setHours(d, newHour)}));
+                                                        }}>{h}</Button>
                                                         ))}
                                                     </div>
-                                                </>
-                                            )}
-                                            {scheduleStep === 'time' && (
-                                                <div className="p-4">
-                                                    <p className="text-sm font-medium text-center mb-2">{eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select a date'}</p>
-                                                    <div className="space-y-3">
-                                                        <div>
-                                                            <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Hour</p>
-                                                            <div className="grid grid-cols-6 gap-1">
-                                                                {Array.from({length: 12}, (_, i) => i + 1).map(h => (
-                                                                <Button key={h} variant={((getHours(eventDetails.dateTime || new Date()) % 12) || 12) === h ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                                    const d = eventDetails.dateTime || new Date();
-                                                                    const currentAmPm = getHours(d) >= 12 ? 'pm' : 'am';
-                                                                    const newHour = currentAmPm === 'pm' && h < 12 ? h + 12 : (currentAmPm === 'am' && h === 12 ? 0 : h);
-                                                                    setEventDetails(p => ({...p, dateTime: setHours(d, newHour)}));
-                                                                }}>{h}</Button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                        <div>
-                                                                <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Period</p>
-                                                                <div className="grid grid-cols-2 gap-1">
-                                                                    <Button variant={getHours(eventDetails.dateTime || new Date()) < 12 ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                                        const d = eventDetails.dateTime || new Date();
-                                                                        const h = getHours(d);
-                                                                        if (h >= 12) setEventDetails(p => ({...p, dateTime: setHours(d, h - 12)}));
-                                                                    }}>AM</Button>
-                                                                    <Button variant={getHours(eventDetails.dateTime || new Date()) >= 12 ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                                        const d = eventDetails.dateTime || new Date();
-                                                                        const h = getHours(d);
-                                                                        if (h < 12) setEventDetails(p => ({...p, dateTime: setHours(d, h + 12)}));
-                                                                    }}>PM</Button>
-                                                                </div>
-                                                        </div>
-                                                        <div>
-                                                                <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Minute</p>
-                                                                <div className="grid grid-cols-2 gap-1">
-                                                                    {['00', '15', '30', '45'].map(m => (
-                                                                        <Button key={m} variant={getMinutes(eventDetails.dateTime || new Date()) === parseInt(m) ? 'default' : 'outline'} size="sm" onClick={() => {
-                                                                            const d = eventDetails.dateTime || new Date();
-                                                                            setEventDetails(p => ({...p, dateTime: setMinutes(d, parseInt(m))}));
-                                                                        }}>{m}</Button>
-                                                                    ))}
-                                                                </div>
-                                                        </div>
-                                                        </div>
-                                                    </div>
-                                                    <Button onClick={() => setScheduleStep('date')} variant="link" size="sm" className="mt-2 p-0 h-auto">Back to date</Button>
                                                 </div>
-                                            )}
-                                        </PopoverContent>
-                                    </Popover>
-                                </div>
-                                {eventDetails.dateTime && <p className="text-sm text-muted-foreground">Selected: {format(eventDetails.dateTime, "PPP p")}</p>}
-                            </CardContent>
-                        </Card>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                        <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Period</p>
+                                                        <div className="grid grid-cols-2 gap-1">
+                                                            <Button variant={getHours(eventDetails.dateTime || new Date()) < 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                const d = eventDetails.dateTime || new Date();
+                                                                const h = getHours(d);
+                                                                if (h >= 12) setEventDetails(p => ({...p, dateTime: setHours(d, h - 12)}));
+                                                            }}>AM</Button>
+                                                            <Button variant={getHours(eventDetails.dateTime || new Date()) >= 12 ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                const d = eventDetails.dateTime || new Date();
+                                                                const h = getHours(d);
+                                                                if (h < 12) setEventDetails(p => ({...p, dateTime: setHours(d, h + 12)}));
+                                                            }}>PM</Button>
+                                                        </div>
+                                                </div>
+                                                <div>
+                                                        <p className="text-xs font-medium text-muted-foreground mb-1 text-center">Minute</p>
+                                                        <div className="grid grid-cols-2 gap-1">
+                                                            {['00', '15', '30', '45'].map(m => (
+                                                                <Button key={m} variant={getMinutes(eventDetails.dateTime || new Date()) === parseInt(m) ? 'default' : 'outline'} size="sm" onClick={() => {
+                                                                    const d = eventDetails.dateTime || new Date();
+                                                                    setEventDetails(p => ({...p, dateTime: setMinutes(d, parseInt(m))}));
+                                                                }}>{m}</Button>
+                                                            ))}
+                                                        </div>
+                                                </div>
+                                                </div>
+                                            </div>
+                                            <Button onClick={() => setScheduleStep('date')} variant="link" size="sm" className="mt-2 p-0 h-auto">Back to date</Button>
+                                        </div>
+                                    )}
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                        {eventDetails.dateTime && <p className="text-sm text-muted-foreground">Selected: {format(eventDetails.dateTime, "PPP p")}</p>}
                     </CardContent>
                 </Card>
                 
@@ -908,35 +950,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
         relationshipTypes={appSettings?.relationshipTypes || []}
       />
       
-      <AlertDialog open={isWithdrawnAlertOpen} onOpenChange={setIsWithdrawnAlertOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Log "Withdrawn"</AlertDialogTitle>
-              <AlertDialogDescription>
-                Select the reason(s) this contact has withdrawn. This helps in tracking trends.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex flex-wrap gap-2 justify-center py-4">
-               {(appSettings?.withdrawalReasons || []).map(reason => (
-                  <Badge
-                    key={reason}
-                    variant={selectedWithdrawalReasons.includes(reason) ? 'default' : 'secondary'}
-                    onClick={() => setSelectedWithdrawalReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])}
-                    className="cursor-pointer text-sm"
-                  >
-                    {reason}
-                  </Badge>
-                ))}
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setSelectedWithdrawalReasons([])}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleLogWithdrawn} disabled={isSubmittingQuickLog || selectedWithdrawalReasons.length === 0}>
-                {isSubmittingQuickLog && <Loader2 className="animate-spin mr-2" />}
-                Log Withdrawn
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
