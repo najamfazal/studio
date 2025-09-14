@@ -41,13 +41,13 @@ export function ContactCard({
   return (
     <Card className="p-4 flex flex-col">
       <div className="flex items-start justify-between mb-3">
-        <Link href={`/contacts/${lead.id}`} className="flex-1 space-y-1 pr-2">
-            <h3 className="font-semibold text-base hover:underline leading-tight">{lead.name}</h3>
-            <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant={lead.status === 'Active' ? "default" : "secondary"} className="text-xs">{lead.status || 'Active'}</Badge>
-                <p className="text-xs text-muted-foreground">{lead.relationship || 'Lead'}</p>
-            </div>
-        </Link>
+        <div className="flex-1 space-y-1 pr-2">
+            <Link href={`/contacts/${lead.id}`} className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-base hover:underline leading-tight">{lead.name}</h3>
+              <p className="text-xs text-muted-foreground">{lead.relationship || 'Lead'}</p>
+              <Badge variant={lead.status === 'Active' ? "default" : "secondary"} className="text-xs">{lead.status || 'Active'}</Badge>
+            </Link>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
@@ -75,7 +75,7 @@ export function ContactCard({
         </DropdownMenu>
       </div>
 
-      <CardContent className="p-0 text-sm space-y-2">
+      <CardContent className="p-0 text-sm flex items-start justify-between">
          <div className="space-y-1">
             {(lead.phones || []).map((phone, index) => (
                 <div key={index} className="flex items-center gap-2">
