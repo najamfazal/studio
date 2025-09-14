@@ -70,7 +70,7 @@ export default function ContactsPage() {
 
   const { toast } = useToast();
   
-  const fetchLeads = useCallback(async (loadMore = false, filtersChanged = false) => {
+  const fetchLeads = useCallback(async (loadMore = false) => {
     if (loadMore) {
       setIsLoadingMore(true);
     } else {
@@ -82,12 +82,8 @@ export default function ContactsPage() {
       const leadsRef = collection(db, "leads");
       
       const queryConstraints = [orderBy("name")];
-
-      if (statusFilters.length > 0) {
-        queryConstraints.push(where("status", "in", statusFilters));
-      }
       
-      if (loadMore && lastVisible && !filtersChanged) {
+      if (loadMore && lastVisible) {
         queryConstraints.push(startAfter(lastVisible));
       }
       
@@ -104,7 +100,7 @@ export default function ContactsPage() {
       setLastVisible(newLastVisible);
       setHasMore(newLeads.length === PAGE_SIZE);
       
-      if (loadMore && !filtersChanged) {
+      if (loadMore) {
           setLeads(prev => [...prev, ...newLeads]);
       } else {
           setLeads(newLeads);
@@ -121,12 +117,12 @@ export default function ContactsPage() {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, lastVisible, statusFilters]);
+  }, [toast, lastVisible]);
 
 
   useEffect(() => {
-    fetchLeads(false, true);
-  }, [statusFilters]);
+    fetchLeads();
+  }, [fetchLeads]);
 
   const handleEdit = (lead: Lead) => {
     setLeadToEdit(lead);
@@ -205,11 +201,11 @@ export default function ContactsPage() {
   };
   
   const handleFilterChange = (status: LeadStatus) => {
-    setStatusFilters(prev => 
-      prev.includes(status) 
-        ? prev.filter(s => s !== status) 
-        : [...prev, status]
-    );
+    // This functionality is temporarily disabled pending a Firestore index creation.
+    toast({
+      title: "Filter disabled",
+      description: "Please create the Firestore index from the link in the console error to enable filtering.",
+    });
   };
 
 
@@ -287,7 +283,7 @@ export default function ContactsPage() {
 
         {hasMore && (
             <div className="flex justify-center mt-8">
-                <Button onClick={() => fetchLeads(true, false)} disabled={isLoadingMore}>
+                <Button onClick={() => fetchLeads(true)} disabled={isLoadingMore}>
                     {isLoadingMore && <Loader2 className="mr-2 animate-spin" />}
                     {isLoadingMore ? "Loading..." : "Load More"}
                 </Button>
