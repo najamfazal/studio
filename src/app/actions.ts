@@ -38,18 +38,26 @@ export async function migrateLeadsToContactsAction() {
 
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      // Check if the document needs migration by looking for the absence of 'status'
+      // Check if the document needs migration by looking for the absence of 'status' field,
+      // which is a key part of the new data model.
       if (!data.status) {
+        
+        let phoneData = data.phones || [];
+        // If there's an old 'phone' field and no 'phones' array, migrate it.
+        if (data.phone && !data.phones) {
+            phoneData = [{ number: data.phone, type: 'both' }];
+        }
+
         batch.update(doc.ref, {
           status: 'Active',
           relationship: 'Lead',
-          afc_step: data.afc_step || 0,
-          hasEngaged: data.hasEngaged || false,
-          onFollowList: data.onFollowList || false,
+          afc_step: data.afc_step ?? 0,
+          hasEngaged: data.hasEngaged ?? false,
+          onFollowList: data.onFollowList ?? false,
           traits: data.traits || [],
           insights: data.insights || [],
           commitmentSnapshot: data.commitmentSnapshot || {},
-          phones: data.phones || [{ number: data.phone || '', type: 'both' }],
+          phones: phoneData,
           createdAt: data.createdAt || new Date().toISOString(),
         });
         migratedCount++;
