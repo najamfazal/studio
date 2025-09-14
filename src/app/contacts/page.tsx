@@ -318,9 +318,9 @@ export default function ContactsPage() {
                 ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={handleAddClick} size="sm" className="w-10 p-0 sm:w-auto sm:px-4 shrink-0 whitespace-nowrap">
-            <Plus className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Add Contact</span>
+          <Button onClick={handleAddClick} size="icon">
+            <Plus className="h-4 w-4" />
+            <span className="sr-only">Add Contact</span>
           </Button>
         </div>
       </header>
@@ -363,3 +363,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    
