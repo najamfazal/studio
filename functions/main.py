@@ -169,7 +169,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
 
 
-@scheduler_fn.on_schedule(schedule="0 9 * * *", timezone="Asia/Dubai")
+@scheduler_fn.on_schedule(schedule="30 9,18 * * *", timezone="Asia/Dubai")
 def afcDailyAdvancer(event: scheduler_fn.ScheduledEvent) -> None:
     """
     Runs daily to advance the AFC for leads with overdue tasks, signifying
@@ -208,3 +208,5 @@ def afcDailyAdvancer(event: scheduler_fn.ScheduledEvent) -> None:
         db.collection("interactions").add(interaction)
         
         print(f"Logged 'Unresponsive' for lead {lead_id} to advance AFC.")
+
+    
