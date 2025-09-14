@@ -16,9 +16,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -42,14 +39,14 @@ export function ContactCard({
   onMerge,
 }: ContactCardProps) {
   return (
-    <Card className="flex flex-col">
-       <CardHeader className="flex flex-row items-start justify-between pb-3">
+    <Card className="p-4">
+      <div className="flex items-start justify-between">
         <Link href={`/contacts/${lead.id}`} className="flex-1 space-y-1">
-            <CardTitle className="text-lg hover:underline">{lead.name}</CardTitle>
-            <div className="flex items-center gap-2">
-                <Badge variant={lead.status === 'Active' ? "default" : "secondary"}>{lead.status || 'Active'}</Badge>
-                <CardDescription>{lead.relationship || 'Lead'}</CardDescription>
-            </div>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-lg hover:underline">{lead.name}</h3>
+            <p className="text-sm text-muted-foreground">{lead.relationship || 'Lead'}</p>
+            <Badge variant={lead.status === 'Active' ? "default" : "secondary"}>{lead.status || 'Active'}</Badge>
+          </div>
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -76,25 +73,32 @@ export function ContactCard({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        <div className="flex items-center gap-3">
-          <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <a
-            href={`mailto:${lead.email}`}
-            className="hover:underline truncate"
-          >
-            {lead.email}
-          </a>
+      </div>
+
+      <CardContent className="p-0 mt-3 text-sm">
+         <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+                {(lead.phones || []).map((phone, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <a href={`tel:${phone.number}`} className="truncate">
+                          {phone.number}
+                        </a>
+                    </div>
+                ))}
+            </div>
+            {lead.email && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <a
+                    href={`mailto:${lead.email}`}
+                    className="hover:underline truncate"
+                  >
+                    {lead.email}
+                  </a>
+                </div>
+            )}
         </div>
-        {(lead.phones || []).length > 0 && (
-          <div className="flex items-center gap-3">
-            <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <a href={`tel:${lead.phones[0].number}`} className="truncate">
-              {lead.phones[0].number}
-            </a>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
