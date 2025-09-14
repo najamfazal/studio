@@ -96,7 +96,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     fetchTasks();
-  }, [toast]);
+  }, []);
 
   const handleMarkComplete = async (taskId: string, completed: boolean) => {
     try {
@@ -270,7 +270,7 @@ export default function TasksPage() {
                 <div key={task.id} className="relative">
                   {task.leadId ? (
                     <Link
-                      href={`/leads/${task.leadId}`}
+                      href={`/contacts/${task.leadId}`}
                       onClick={() => setActiveTask(task.id)}
                       className={cn(
                         "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
@@ -406,5 +406,3 @@ export default function TasksPage() {
     </div>
   );
 }
-
-    

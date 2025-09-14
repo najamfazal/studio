@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -47,7 +48,7 @@ export default function RecallTrainerPage() {
         toast({
           variant: 'default',
           title: 'Not enough data',
-          description: 'You need leads with commitment snapshots to use the trainer.',
+          description: 'You need contacts with commitment snapshots to use the trainer.',
         });
       }
 
@@ -57,7 +58,7 @@ export default function RecallTrainerPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Could not fetch leads for the trainer.",
+        description: "Could not fetch contacts for the trainer.",
       });
     } finally {
       setIsLoading(false);
@@ -140,7 +141,7 @@ export default function RecallTrainerPage() {
               No recall data available
             </h2>
             <p className="mt-2 max-w-xs">
-              Create leads and fill out their "Commitment Snapshot" to start training your recall.
+              Create contacts and fill out their "Commitment Snapshot" to start training your recall.
             </p>
           </div>
         )}

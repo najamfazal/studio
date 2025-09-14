@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -69,7 +70,7 @@ export default function FollowListPage() {
         {leads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {leads.map((lead) => (
-              <Link href={`/leads/${lead.id}`} key={lead.id}>
+              <Link href={`/contacts/${lead.id}`} key={lead.id}>
                 <Card className="hover:shadow-md transition-shadow">
                   <CardHeader>
                     <CardTitle>{lead.name}</CardTitle>
@@ -86,7 +87,7 @@ export default function FollowListPage() {
               Your follow list is empty
             </h2>
             <p className="mt-2 max-w-xs">
-              Add leads to the follow list from their detail page to nurture them over time.
+              Add contacts to the follow list from their detail page to nurture them over time.
             </p>
           </div>
         )}

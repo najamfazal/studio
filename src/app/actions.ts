@@ -30,8 +30,8 @@ export async function migrateLeadsToContactsAction() {
     // We get all docs because checking for existence of a field is not straightforward
     // across all Firestore SDK versions and environments in a simple query.
     // This is safer and for a one-time migration on a personal CRM, performance is acceptable.
-    const leadsCollection = collection(db, 'leads');
-    const snapshot = await getDocs(leadsCollection);
+    const contactsCollection = collection(db, 'leads');
+    const snapshot = await getDocs(contactsCollection);
 
     const batch = writeBatch(db);
     let migratedCount = 0;

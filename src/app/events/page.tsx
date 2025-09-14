@@ -12,7 +12,7 @@ import type { Interaction, Lead } from '@/lib/types';
 import { Logo } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -267,7 +267,7 @@ function EventCategory({ title, events, onAction, onReschedule, isLoading }: { t
               <CardHeader>
                 <CardTitle className="text-lg">{event.eventDetails?.type}</CardTitle>
                 <CardDescription>
-                  <Link href={`/leads/${event.leadId}`} className="hover:underline">{event.leadName}</Link>
+                  <Link href={`/contacts/${event.leadId}`} className="hover:underline">{event.leadName}</Link>
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -301,5 +301,3 @@ function EventCategory({ title, events, onAction, onReschedule, isLoading }: { t
     </section>
   )
 }
-
-    
