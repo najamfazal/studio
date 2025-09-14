@@ -15,7 +15,7 @@ import {
   DocumentData,
   where,
 } from "firebase/firestore";
-import { Plus, Users, Loader2, Filter } from "lucide-react";
+import { Plus, Users, Loader2, Filter, Upload } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
@@ -70,18 +70,27 @@ export default function ContactsPage() {
 
   const { toast } = useToast();
   
-  const fetchLeads = useCallback(async (loadMore = false) => {
+  const fetchLeads = useCallback(async (loadMore = false, filters: LeadStatus[] | null = null) => {
     if (loadMore) {
       setIsLoadingMore(true);
     } else {
       setIsLoading(true);
+      setLeads([]);
+      setLastVisible(null);
     }
 
     try {
       let q;
       const leadsRef = collection(db, "leads");
+      const currentFilters = filters !== null ? filters : statusFilters;
       
-      const queryConstraints = [orderBy("name")];
+      const queryConstraints: any[] = [];
+      
+      if(currentFilters.length > 0) {
+        queryConstraints.push(where("status", "in", currentFilters));
+      }
+
+      queryConstraints.push(orderBy("name"));
       
       if (loadMore && lastVisible) {
         queryConstraints.push(startAfter(lastVisible));
@@ -111,18 +120,19 @@ export default function ContactsPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to fetch contacts.",
+        description: "Failed to fetch contacts. Ensure your Firestore indexes are set up correctly if filtering.",
       });
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, lastVisible]);
+  }, [toast, lastVisible, statusFilters]);
 
 
   useEffect(() => {
     fetchLeads();
-  }, [fetchLeads]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleEdit = (lead: Lead) => {
     setLeadToEdit(lead);
@@ -201,11 +211,11 @@ export default function ContactsPage() {
   };
   
   const handleFilterChange = (status: LeadStatus) => {
-    // This functionality is temporarily disabled pending a Firestore index creation.
-    toast({
-      title: "Filter disabled",
-      description: "Please create the Firestore index from the link in the console error to enable filtering.",
-    });
+    const newFilters = statusFilters.includes(status)
+      ? statusFilters.filter(s => s !== status)
+      : [...statusFilters, status];
+    setStatusFilters(newFilters);
+    fetchLeads(false, newFilters);
   };
 
 
@@ -248,6 +258,10 @@ export default function ContactsPage() {
                         ))}
                     </DropdownMenuContent>
                 </DropdownMenu>
+                <Button variant="outline" size="icon" className="w-10" onClick={() => toast({ title: 'Import not yet implemented.' })}>
+                    <Upload className="h-4 w-4" />
+                    <span className="sr-only">Import Contacts</span>
+                </Button>
                 <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsDialogOpen(true); }}>
                     <Plus className="h-4 w-4" />
                     <span className="sr-only">Add Contact</span>
@@ -321,3 +335,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    
