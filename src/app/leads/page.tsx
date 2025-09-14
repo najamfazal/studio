@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Users2, Filter, Search, X } from "lucide-react";
+import { Plus, Users2, Filter, Search, X, Wand2, Loader2 } from "lucide-react";
 import {
   collection,
   addDoc,
@@ -23,7 +23,7 @@ import { LeadCard } from "@/components/lead-card";
 import { LeadDialog } from "@/components/lead-dialog";
 import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
-import { enrichLeadAction } from "@/app/actions";
+import { enrichLeadAction, migrateLeadsToContactsAction } from "@/app/actions";
 import { db } from "@/lib/firebase";
 import type { Lead, AppSettings, LeadStatus } from "@/lib/types";
 import type { LeadFormValues } from "@/lib/schemas";
@@ -45,6 +45,7 @@ export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilters, setStatusFilters] = useState<LeadStatus[]>(['Active']);
+  const [isMigrating, setIsMigrating] = useState(false);
 
   const { toast } = useToast();
 
@@ -79,7 +80,7 @@ export default function ContactsPage() {
         if (settingsDoc.exists()) {
             setAppSettings({ id: settingsDoc.id, ...settingsDoc.data() } as AppSettings);
         } else {
-            setAppSettings({ relationshipTypes: ['Lead', 'Learner'], courseNames: [], commonTraits: [], feedbackChips: { content: [], schedule: [], price: [] } });
+            setAppSettings({ id: 'appConfig', relationshipTypes: ['Lead', 'Learner'], courseNames: [], commonTraits: [], withdrawalReasons: [], feedbackChips: { content: [], schedule: [], price: [] } });
         }
     } catch (error) {
         console.error("Error fetching settings:", error);
@@ -143,7 +144,7 @@ export default function ContactsPage() {
         
         setLeads((prev) =>
           prev.map((lead) =>
-            lead.id === editingLead.id ? { ...lead, ...updateData } : lead
+            lead.id === editingLead.id ? { ...lead, ...(updateData as any) } : lead
           )
         );
         toast({
@@ -234,6 +235,25 @@ export default function ContactsPage() {
       });
     }
   };
+  
+  const handleMigration = async () => {
+    setIsMigrating(true);
+    const result = await migrateLeadsToContactsAction();
+    if (result.success) {
+      toast({
+        title: "Migration Complete",
+        description: result.message,
+      });
+      fetchLeads(); // Refresh the list after migration
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Migration Failed",
+        description: result.error,
+      });
+    }
+    setIsMigrating(false);
+  };
 
   const filteredLeads = useMemo(() => {
     if (!debouncedSearchTerm) {
@@ -307,6 +327,10 @@ export default function ContactsPage() {
             <Plus className="mr-2 h-4 w-4" />
             Add Contact
           </Button>
+           <Button onClick={handleMigration} variant="ghost" size="icon" disabled={isMigrating} title="Fix Old Data">
+                {isMigrating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                <span className="sr-only">Fix old data</span>
+            </Button>
         </div>
       </header>
 
@@ -330,7 +354,7 @@ export default function ContactsPage() {
               No contacts found
             </h2>
             <p className="mt-2 max-w-xs">
-              Try adjusting your search or filters, or add a new contact to get started.
+              Try adjusting your search or filters, or click the "Fix Data" button (<Wand2 className="inline h-4 w-4" />) if you have old data.
             </p>
           </div>
         )}
@@ -348,5 +372,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-    
