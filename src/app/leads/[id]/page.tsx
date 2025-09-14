@@ -55,6 +55,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  type CarouselApi,
+} from "@/components/ui/carousel"
 
 // Helper function to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -127,7 +133,8 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
   const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
   const [selectedWithdrawalReasons, setSelectedWithdrawalReasons] = useState<string[]>([]);
   const [isSubmittingQuickLog, setIsSubmittingQuickLog] = useState(false);
-
+  const [carouselApi, setCarouselApi] = useState<CarouselApi>()
+  const [activeTab, setActiveTab] = useState("summary");
 
   const { toast } = useToast();
   
@@ -228,6 +235,27 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     ]);
   }, [fetchInteractions, fetchLeadData]);
 
+  useEffect(() => {
+    if (!carouselApi) {
+      return
+    }
+
+    const onSelect = () => {
+      const newTab = carouselApi.selectedScrollSnap() === 0 ? "summary" : "history";
+      setActiveTab(newTab)
+    }
+
+    carouselApi.on("select", onSelect)
+    return () => {
+      carouselApi.off("select", onSelect)
+    }
+  }, [carouselApi])
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const index = value === "summary" ? 0 : 1;
+    carouselApi?.scrollTo(index);
+  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -546,15 +574,17 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
           </div>
       </header>
 
-      <main className="flex-1 p-2 sm:p-4">
-        <Tabs defaultValue="summary" className="mt-0">
-          <TabsList className="mb-2">
+      <main className="flex-1 flex flex-col">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="mt-0">
+          <TabsList className="mb-2 grid w-full grid-cols-2">
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="history">History & Intel</TabsTrigger>
           </TabsList>
-          
-          <TabsContent value="summary">
-             <div className="grid gap-4">
+        </Tabs>
+        <Carousel setApi={setCarouselApi} className="flex-1">
+          <CarouselContent>
+            <CarouselItem>
+              <div className="grid gap-4 p-2 sm:p-4 pt-0">
                 <Card>
                     <CardHeader className="p-4 pb-2 relative">
                         <CardTitle className="text-lg">Snapshot</CardTitle>
@@ -677,12 +707,11 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     </CardContent>
                 </Card>
 
-             </div>
-          </TabsContent>
+              </div>
+            </CarouselItem>
 
-          <TabsContent value="history">
-             <div className="grid gap-4">
-                
+            <CarouselItem>
+              <div className="grid gap-4 p-2 sm:p-4 pt-0">
                 <Card>
                     <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -935,9 +964,10 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                        )}
                     </CardContent>
                 </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+              </div>
+            </CarouselItem>
+          </CarouselContent>
+        </Carousel>
       </main>
 
       <LeadDialog
