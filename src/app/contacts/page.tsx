@@ -274,7 +274,6 @@ export default function ContactsPage() {
       <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-10 gap-2">
         <div className="flex items-center gap-1">
           <SidebarTrigger />
-          <Logo className="h-8 w-8 text-primary hidden sm:block" />
           <h1 className="text-xl font-bold tracking-tight hidden sm:block">Contacts</h1>
         </div>
         <div className="flex items-center gap-2 flex-1 max-w-md">
@@ -364,3 +363,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    
