@@ -1,6 +1,4 @@
 
-
-
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
@@ -723,11 +721,6 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     </CardContent>
                 </Card>
 
-             </div>
-          </TabsContent>
-
-          <TabsContent value="history">
-             <div className="grid gap-4">
                 <Card>
                     <CardHeader className="p-4">
                         <CardTitle className="text-lg">Intel</CardTitle>
@@ -773,6 +766,12 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
                     </CardContent>
                 </Card>
 
+             </div>
+          </TabsContent>
+
+          <TabsContent value="history">
+             <div className="grid gap-4">
+                
                 <Card>
                     <CardHeader className="p-4">
                         <CardTitle className="text-lg">Interaction History</CardTitle>
@@ -857,3 +856,5 @@ export default function LeadDetailPage({ params: paramsPromise }: { params: Prom
     </div>
   );
 }
+
+    
