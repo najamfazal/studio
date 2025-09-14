@@ -82,20 +82,6 @@ export default function TasksPage() {
   }, [toast]);
 
   const handleMarkComplete = async (taskId: string, completed: boolean) => {
-    // Find the task to get its nature
-    const taskToUpdate = tasks.find(t => t.id === taskId);
-    if (!taskToUpdate) return;
-    
-    // Prevent completing procedural tasks from the main list.
-    if (taskToUpdate.nature === 'Procedural' && !taskToUpdate.completed) {
-        toast({
-            variant: "default",
-            title: "Action Required",
-            description: "Please complete procedural tasks from the lead's detail page.",
-        });
-        return;
-    }
-
     try {
       const taskRef = doc(db, "tasks", taskId);
       await updateDoc(taskRef, { completed });
@@ -256,8 +242,7 @@ export default function TasksPage() {
                             "flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-full border-2 transition-colors shrink-0",
                             task.completed
                               ? "bg-primary border-primary text-primary-foreground"
-                              : "border-muted-foreground/50 hover:border-primary",
-                            task.nature === 'Procedural' && !task.completed && 'cursor-not-allowed opacity-50'
+                              : "border-muted-foreground/50 hover:border-primary"
                           )}
                         >
                           {task.completed && <Check className="h-5 w-5" />}
@@ -297,8 +282,7 @@ export default function TasksPage() {
                               "flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-full border-2 transition-colors shrink-0",
                               task.completed
                                 ? "bg-primary border-primary text-primary-foreground"
-                                : "border-muted-foreground/50 hover:border-primary",
-                              task.nature === 'Procedural' && !task.completed && 'cursor-not-allowed opacity-50'
+                                : "border-muted-foreground/50 hover:border-primary"
                             )}
                           >
                             {task.completed && <Check className="h-5 w-5" />}
