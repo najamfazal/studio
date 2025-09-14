@@ -10,6 +10,12 @@ import {
   Trash2,
   GitMerge,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,12 +23,6 @@ import {
   Card,
   CardContent,
 } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type { Lead } from "@/lib/types";
 
 interface ContactCardProps {
@@ -39,18 +39,18 @@ export function ContactCard({
   onMerge,
 }: ContactCardProps) {
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between">
-        <Link href={`/contacts/${lead.id}`} className="flex-1 space-y-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-lg hover:underline">{lead.name}</h3>
-            <p className="text-sm text-muted-foreground">{lead.relationship || 'Lead'}</p>
-            <Badge variant={lead.status === 'Active' ? "default" : "secondary"}>{lead.status || 'Active'}</Badge>
-          </div>
+    <Card className="p-4 flex flex-col">
+      <div className="flex items-start justify-between mb-3">
+        <Link href={`/contacts/${lead.id}`} className="flex-1 space-y-1 pr-2">
+            <h3 className="font-semibold text-base hover:underline leading-tight">{lead.name}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant={lead.status === 'Active' ? "default" : "secondary"} className="text-xs">{lead.status || 'Active'}</Badge>
+                <p className="text-xs text-muted-foreground">{lead.relationship || 'Lead'}</p>
+            </div>
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+            <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
               <MoreVertical className="h-4 w-4" />
               <span className="sr-only">More options</span>
             </Button>
@@ -75,30 +75,29 @@ export function ContactCard({
         </DropdownMenu>
       </div>
 
-      <CardContent className="p-0 mt-3 text-sm">
-         <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-                {(lead.phones || []).map((phone, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                        <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <a href={`tel:${phone.number}`} className="truncate">
-                          {phone.number}
-                        </a>
-                    </div>
-                ))}
-            </div>
-            {lead.email && (
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <a
-                    href={`mailto:${lead.email}`}
-                    className="hover:underline truncate"
-                  >
-                    {lead.email}
-                  </a>
+      <CardContent className="p-0 text-sm space-y-2">
+         <div className="space-y-1">
+            {(lead.phones || []).map((phone, index) => (
+                <div key={index} className="flex items-center gap-2">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <a href={`tel:${phone.number}`} className="truncate text-xs">
+                      {phone.number}
+                    </a>
+                    {phone.type !== 'both' && <span className="text-xs text-muted-foreground capitalize">({phone.type})</span>}
                 </div>
-            )}
+            ))}
         </div>
+        {lead.email && (
+            <div className="flex items-center gap-2">
+              <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              <a
+                href={`mailto:${lead.email}`}
+                className="hover:underline truncate text-xs"
+              >
+                {lead.email}
+              </a>
+            </div>
+        )}
       </CardContent>
     </Card>
   );

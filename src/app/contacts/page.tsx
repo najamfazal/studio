@@ -43,7 +43,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LeadDialog } from "@/components/lead-dialog";
-import { addDoc, updateDoc } from "firebase/firestore";
+import { addDoc, getDoc, updateDoc } from "firebase/firestore";
+import { ImportDialog } from "@/components/import-dialog";
 
 const PAGE_SIZE = 10;
 
@@ -64,48 +65,61 @@ export default function ContactsPage() {
   const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
   const [leadToDelete, setLeadToDelete] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   
   const [statusFilters, setStatusFilters] = useState<LeadStatus[]>([]);
 
   const { toast } = useToast();
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const settingsDoc = await getDoc(doc(db, "settings", "appConfig"));
+      if (settingsDoc.exists()) {
+        setAppSettings(settingsDoc.data() as AppSettings);
+      }
+    } catch (error) {
+      console.error("Error fetching settings: ", error);
+    }
+  }, []);
   
   const fetchLeads = useCallback(async (loadMore = false, filters: LeadStatus[] | null = null) => {
     if (loadMore) {
       setIsLoadingMore(true);
     } else {
       setIsLoading(true);
-      setLeads([]);
-      setLastVisible(null);
+      setLeads([]); // Clear leads for new filter
+      setLastVisible(null); // Reset pagination for new filter
+      setHasMore(true);
     }
 
+    const currentFilters = filters !== null ? filters : statusFilters;
+
     try {
-      let q;
       const leadsRef = collection(db, "leads");
-      const currentFilters = filters !== null ? filters : statusFilters;
-      
-      const queryConstraints: any[] = [];
-      
-      if(currentFilters.length > 0) {
+      const queryConstraints = [];
+
+      if (currentFilters.length > 0) {
         queryConstraints.push(where("status", "in", currentFilters));
       }
-
-      queryConstraints.push(orderBy("name"));
       
+      queryConstraints.push(orderBy("name"));
+
       if (loadMore && lastVisible) {
         queryConstraints.push(startAfter(lastVisible));
       }
       
       queryConstraints.push(limit(PAGE_SIZE));
 
-      q = query(leadsRef, ...queryConstraints);
+      const q = query(leadsRef, ...queryConstraints);
 
       const querySnapshot = await getDocs(q);
       const newLeads = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as Lead)
       );
 
-      const newLastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+      const newLastVisible = querySnapshot.docs.length === PAGE_SIZE ? querySnapshot.docs[querySnapshot.docs.length - 1] : null;
+      
       setLastVisible(newLastVisible);
       setHasMore(newLeads.length === PAGE_SIZE);
       
@@ -130,13 +144,14 @@ export default function ContactsPage() {
 
 
   useEffect(() => {
-    fetchLeads();
+    fetchSettings();
+    fetchLeads(false, statusFilters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [statusFilters]); // Re-fetch when filters change
 
   const handleEdit = (lead: Lead) => {
     setLeadToEdit(lead);
-    setIsDialogOpen(true);
+    setIsLeadDialogOpen(true);
   };
 
   const handleDelete = async () => {
@@ -196,7 +211,7 @@ export default function ContactsPage() {
         setLeads((prev) => [newLead, ...prev]);
         toast({ title: "Contact Added" });
       }
-      setIsDialogOpen(false);
+      setIsLeadDialogOpen(false);
     } catch (error) {
       console.error("Error saving contact:", error);
       toast({
@@ -215,11 +230,20 @@ export default function ContactsPage() {
       ? statusFilters.filter(s => s !== status)
       : [...statusFilters, status];
     setStatusFilters(newFilters);
-    fetchLeads(false, newFilters);
+    // The useEffect will now handle the re-fetch
   };
 
+  const handleImportSave = (data: { file: File, relationship: string, isNew: boolean }) => {
+    console.log("Importing data:", data);
+    toast({
+      title: "Import starting...",
+      description: "This feature is not fully implemented yet."
+    });
+    setIsImportDialogOpen(false);
+  }
 
-  if (isLoading && leads.length === 0) {
+
+  if (isLoading && leads.length === 0 && statusFilters.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Logo className="h-12 w-12 animate-spin text-primary" />
@@ -252,17 +276,18 @@ export default function ContactsPage() {
                                 key={status}
                                 checked={statusFilters.includes(status)}
                                 onCheckedChange={() => handleFilterChange(status)}
+                                onSelect={(e) => e.preventDefault()} // Prevents dropdown from closing
                             >
                                 {status}
                             </DropdownMenuCheckboxItem>
                         ))}
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <Button variant="outline" size="icon" className="w-10" onClick={() => toast({ title: 'Import not yet implemented.' })}>
+                <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)}>
                     <Upload className="h-4 w-4" />
                     <span className="sr-only">Import Contacts</span>
                 </Button>
-                <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsDialogOpen(true); }}>
+                <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }}>
                     <Plus className="h-4 w-4" />
                     <span className="sr-only">Add Contact</span>
                 </Button>
@@ -295,12 +320,16 @@ export default function ContactsPage() {
           </div>
         )}
 
-        {hasMore && (
+        {hasMore && !isLoadingMore && (
             <div className="flex justify-center mt-8">
                 <Button onClick={() => fetchLeads(true)} disabled={isLoadingMore}>
-                    {isLoadingMore && <Loader2 className="mr-2 animate-spin" />}
                     {isLoadingMore ? "Loading..." : "Load More"}
                 </Button>
+            </div>
+        )}
+        {isLoadingMore && (
+             <div className="flex justify-center mt-8">
+                <Loader2 className="animate-spin text-primary"/>
             </div>
         )}
       </main>
@@ -324,16 +353,21 @@ export default function ContactsPage() {
       </AlertDialog>
       
       <LeadDialog
-        isOpen={isDialogOpen}
-        setIsOpen={setIsDialogOpen}
+        isOpen={isLeadDialogOpen}
+        setIsOpen={setIsLeadDialogOpen}
         onSave={handleDialogSave}
         leadToEdit={leadToEdit}
         isSaving={isSaving}
         courseNames={appSettings?.courseNames || []}
         relationshipTypes={appSettings?.relationshipTypes || ['Lead', 'Learner']}
       />
+
+      <ImportDialog
+        isOpen={isImportDialogOpen}
+        setIsOpen={setIsImportDialogOpen}
+        onSave={handleImportSave}
+        relationshipTypes={appSettings?.relationshipTypes || []}
+      />
     </div>
   );
 }
-
-    
