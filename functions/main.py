@@ -1,4 +1,4 @@
-from firebase_functions import firestore_fn, options, scheduler_fn
+from firebase_functions import firestore_fn, options
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
 
@@ -28,6 +28,28 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     }
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
+
+@firestore_fn.on_document_created(document="leads/{leadId}")
+def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
+    """
+    Initializes the Automated Follow-up Cycle (AFC) for a new lead.
+    """
+    lead_id = event.params.get("leadId")
+    lead_data = event.data.to_dict()
+    lead_name = lead_data.get("name")
+    
+    if not lead_id or not lead_name:
+        print("Lead data is missing ID or name. Aborting AFC initiation.")
+        return
+        
+    print(f"New lead created: {lead_name} ({lead_id}). Initializing AFC.")
+    
+    # Set initial AFC step and schedule the first follow-up.
+    event.data.reference.update({"afc_step": 1})
+    due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
+    create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
+    print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
+
 
 @firestore_fn.on_document_created(document="interactions/{interactionId}")
 def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
@@ -143,60 +165,6 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
     create_task(lead_id, lead_data['name'], f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
-
-
-@scheduler_fn.on_schedule(schedule="0 9-20 * * *", timezone="Asia/Dubai")
-def afcEngine(event: scheduler_fn.ScheduledEvent) -> None:
-    """
-    Safety net to initialize AFC for new leads or catch any orphaned Active leads.
-    """
-    print("Running afcEngine safety net...")
-    now = datetime.now()
-    one_day_ago = now - timedelta(days=1)
-
-    # Find active leads with no interaction history (brand new)
-    new_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "==", None)
-    for lead in new_leads_query.stream():
-        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).limit(1).stream()
-        if not any(tasks_query):
-            print(f"New lead {lead.id} has no tasks. Initializing AFC.")
-            lead.reference.update({"afc_step": 1})
-            due_date = now + timedelta(days=AFC_SCHEDULE[1])
-            create_task(lead.id, lead.to_dict()['name'], f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
-
-    # Find active leads who were missed by the system somehow
-    active_leads_query = db.collection("leads").where("status", "==", "Active").where("last_interaction_date", "<", one_day_ago)
-    for lead in active_leads_query.stream():
-        tasks_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False).limit(1).stream()
-        if not any(tasks_query):
-            print(f"Orphaned lead {lead.id} has no tasks. Resetting AFC.")
-            lead.reference.update({"afc_step": 1})
-            due_date = now + timedelta(days=AFC_SCHEDULE[1])
-            create_task(lead.id, lead.to_dict()['name'], f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
-
-
-@scheduler_fn.on_schedule(schedule="every 24 hours")
-def relationshipEngine(event: scheduler_fn.ScheduledEvent) -> None:
-    """
-    Nurtures leads on the follow list by creating Reconnect tasks.
-    """
-    print("Running relationshipEngine...")
-    now = datetime.now()
-    thirty_days_ago = now - timedelta(days=30)
-    
-    follow_leads_query = db.collection("leads").where("onFollowList", "==", True)
-
-    for lead in follow_leads_query.stream():
-        lead_data = lead.to_dict()
-        last_interaction = lead_data.get("last_interaction_date")
-        
-        # Check if last interaction was more than 30 days ago
-        if not last_interaction or last_interaction.replace(tzinfo=None) < thirty_days_ago:
-            # Check if a "Reconnect" task already exists
-            reconnect_task_query = db.collection("tasks").where("leadId", "==", lead.id).where("completed", "==", False)
-            if not any(task.to_dict().get("description") == "Reconnect" for task in reconnect_task_query.stream()):
-                 print(f"Creating Reconnect task for lead {lead.id}")
-                 create_task(lead.id, lead_data['name'], "Reconnect", "Procedural")
 
 # Note: The AI-powered Trait Suggester is a future enhancement.
 # It would require a Genkit flow and is not included in this initial backend refactor.
