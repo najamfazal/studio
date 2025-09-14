@@ -21,7 +21,6 @@ import { Logo } from "../icons"
 
 const sidebarItems = [
     { href: '/', icon: ListChecks, label: 'Tasks' },
-    { href: '/leads', icon: Home, label: 'Contacts' },
     { href: '/events', icon: CalendarDays, label: 'Events' },
     { href: '/follow-list', icon: UserCheck, label: 'Follow List' },
     { href: '/recall-trainer', icon: Brain, label: 'Recall Trainer' },
@@ -165,5 +164,3 @@ export {
   Sidebar,
   SidebarTrigger,
 }
-
-    
