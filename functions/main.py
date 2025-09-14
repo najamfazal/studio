@@ -1,10 +1,12 @@
-from firebase_functions import firestore_fn, options
+from firebase_functions import firestore_fn, options, scheduler_fn
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
 
 # Initialize Firebase Admin SDK
 initialize_app()
 db = firestore.client()
+options.set_global_options(region="us-central1")
+
 
 # --- AFC (Automated Follow-up Cycle) Configuration ---
 AFC_SCHEDULE = {
@@ -166,5 +168,43 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     create_task(lead_id, lead_data['name'], f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
 
-# Note: The AI-powered Trait Suggester is a future enhancement.
-# It would require a Genkit flow and is not included in this initial backend refactor.
+
+@scheduler_fn.on_schedule(schedule="0 9 * * *", timezone="Asia/Dubai")
+def afcDailyAdvancer(event: scheduler_fn.ScheduledEvent) -> None:
+    """
+    Runs daily to advance the AFC for leads with overdue tasks, signifying
+    that a follow-up was attempted but the lead was unresponsive.
+    """
+    print("Running daily AFC advancer for unresponsive leads...")
+    now = datetime.now()
+    
+    # Find all open, interactive tasks that are overdue
+    tasks_ref = db.collection("tasks")
+    overdue_tasks_query = tasks_ref.where("completed", "==", False) \
+                                   .where("nature", "==", "Interactive") \
+                                   .where("dueDate", "<", now) \
+                                   .stream()
+                                   
+    for task in overdue_tasks_query:
+        task_data = task.to_dict()
+        lead_id = task_data.get("leadId")
+        
+        if not lead_id:
+            continue
+
+        print(f"Processing overdue task {task.id} for lead {lead_id}.")
+        
+        # 1. Mark the overdue task as complete
+        task.reference.update({"completed": True})
+        
+        # 2. Log an "Unresponsive" interaction to trigger the AFC advancement
+        # The logProcessor function will handle the rest.
+        interaction = {
+            "leadId": lead_id,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "quickLogType": "Unresponsive",
+            "notes": f"System generated: No response to overdue task '{task_data.get('description')}'.",
+        }
+        db.collection("interactions").add(interaction)
+        
+        print(f"Logged 'Unresponsive' for lead {lead_id} to advance AFC.")
