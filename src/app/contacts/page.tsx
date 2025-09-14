@@ -363,5 +363,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-    
