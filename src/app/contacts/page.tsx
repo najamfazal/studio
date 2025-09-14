@@ -293,9 +293,9 @@ export default function ContactsPage() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="w-10 p-0 sm:w-auto sm:px-4 shrink-0">
-                    <Filter className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Filter</span>
+                <Button variant="outline" size="icon">
+                    <Filter className="h-4 w-4" />
+                    <span className="sr-only">Filter</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -363,5 +363,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-    
