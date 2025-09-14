@@ -27,6 +27,7 @@ import type { Lead } from "@/lib/types";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 
 
 interface LeadDialogProps {
@@ -194,20 +195,26 @@ export function LeadDialog({
               control={form.control}
               name="relationship"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="space-y-3">
                   <FormLabel>Relationship</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a relationship type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      className="flex space-x-2"
+                    >
                       {relationshipTypes.map(name => (
-                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                         <FormItem key={name} className="flex items-center space-x-2 space-y-0">
+                          <FormControl>
+                            <RadioGroupItem value={name} />
+                          </FormControl>
+                          <FormLabel className="font-normal">
+                            {name}
+                          </FormLabel>
+                        </FormItem>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </RadioGroup>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
