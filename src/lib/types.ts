@@ -22,6 +22,26 @@ export type PhoneNumber = {
   type: 'calling' | 'chat' | 'both';
 }
 
+export type CourseSchedule = {
+  id: string;
+  section: string;
+  trainer: string;
+  slot: string;
+  days: string[];
+}
+
+export type PaymentInstallment = {
+  id: string;
+  dueDate: string; // ISO String
+  amount: number;
+  status: 'Paid' | 'Unpaid';
+}
+
+export type PaymentPlan = {
+  totalPrice: number;
+  installments: PaymentInstallment[];
+}
+
 export type Lead = {
   id: string;
   name: string;
@@ -41,6 +61,12 @@ export type Lead = {
   traits: string[];
   insights: string[];
   commitmentSnapshot: CommitmentSnapshot;
+
+  // --- Fields for "Learner" ---
+  enrolledDate?: string;
+  estCompletionDate?: string;
+  courseSchedule?: CourseSchedule[];
+  paymentPlan?: PaymentPlan;
 };
 
 export type TaskNature = 'Procedural' | 'Interactive';
@@ -99,5 +125,3 @@ export type AppSettings = {
     price: string[];
   }
 }
-
-    
