@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 
 const INTERACTION_PAGE_SIZE = 5;
 
@@ -213,7 +214,7 @@ export default function ContactDetailPage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  {lead.traits?.map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
+                  {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
                 </div>
                 <div className="flex gap-2">
                   <Input value={newTrait} onChange={e => setNewTrait(e.target.value)} placeholder="Add a trait..."/>
@@ -227,7 +228,7 @@ export default function ContactDetailPage() {
             <CardContent>
                 <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
-                        {lead.insights?.map(insight => <Badge key={insight} variant="outline">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
+                        {(lead.insights || []).map(insight => <Badge key={insight} variant="outline">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
                     </div>
                     <div className="flex gap-2">
                         <Input value={newInsight} onChange={e => setNewInsight(e.target.value)} placeholder="Add an insight..."/>
@@ -302,3 +303,4 @@ export default function ContactDetailPage() {
   );
 }
 
+    
