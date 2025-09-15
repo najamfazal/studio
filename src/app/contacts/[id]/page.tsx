@@ -22,6 +22,7 @@ import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { QuickLogDialog } from '@/components/quick-log-dialog';
 
 const INTERACTION_PAGE_SIZE = 5;
 
@@ -50,6 +51,10 @@ export default function ContactDetailPage() {
   
   const [newInsight, setNewInsight] = useState("");
   const [newTrait, setNewTrait] = useState("");
+  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
+  
+  const [traitSuggestions, setTraitSuggestions] = useState<string[]>([]);
+
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -145,21 +150,25 @@ export default function ContactDetailPage() {
     }
   };
   
-  const handleAddChip = (type: 'traits' | 'insights') => {
-    const value = type === 'traits' ? newTrait.trim() : newInsight.trim();
-    if (!value || !lead) return;
+  const handleAddChip = (type: 'traits' | 'insights', value?: string) => {
+    const chipValue = value ?? (type === 'traits' ? newTrait.trim() : newInsight.trim());
+    if (!chipValue || !lead) return;
 
     const currentList = lead[type] || [];
-    if (currentList.includes(value)) {
+    if (currentList.includes(chipValue)) {
         toast({ variant: 'destructive', title: 'Item already exists' });
         return;
     }
     
-    const newList = [...currentList, value];
+    const newList = [...currentList, chipValue];
     handleUpdate(type, newList);
 
-    if (type === 'traits') setNewTrait("");
-    else setNewInsight("");
+    if (type === 'traits') {
+      setNewTrait("");
+      setTraitSuggestions([]);
+    } else {
+      setNewInsight("");
+    }
   };
   
   const handleRemoveChip = (type: 'traits' | 'insights', value: string) => {
@@ -183,8 +192,20 @@ export default function ContactDetailPage() {
     }
   }
 
+  const handleTraitInputChange = (value: string) => {
+    setNewTrait(value);
+    if (value && appSettings?.commonTraits) {
+        const lowercasedValue = value.toLowerCase();
+        setTraitSuggestions(
+            appSettings.commonTraits.filter(trait => trait.toLowerCase().includes(lowercasedValue))
+        );
+    } else {
+        setTraitSuggestions([]);
+    }
+  };
 
-  if (isLoading || !lead) {
+
+  if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
@@ -198,11 +219,19 @@ export default function ContactDetailPage() {
       <TabsContent value="summary" className="space-y-6">
         <Card>
           <CardHeader><CardTitle>Commitment Snapshot</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-            <EditableField label="Course" value={lead.commitmentSnapshot?.course || ""} onSave={(val) => handleUpdate('commitmentSnapshot.course', val)} type="select" selectOptions={appSettings?.courseNames || []} placeholder="Select a course"/>
-            <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
-            <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || ""} onSave={(val) => handleUpdate('commitmentSnapshot.schedule', val)} placeholder="Enter schedule"/>
-            <div className="md:col-span-2">
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-grow-[3]">
+                <EditableField label="Course" value={lead.commitmentSnapshot?.course || ""} onSave={(val) => handleUpdate('commitmentSnapshot.course', val)} type="select" selectOptions={appSettings.courseNames || []} placeholder="Select a course"/>
+              </div>
+              <div className="flex-grow-[1]">
+                <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
+              </div>
+            </div>
+             <div>
+               <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || ""} onSave={(val) => handleUpdate('commitmentSnapshot.schedule', val)} placeholder="Enter schedule"/>
+             </div>
+            <div>
               <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
             </div>
           </CardContent>
@@ -216,9 +245,20 @@ export default function ContactDetailPage() {
                 <div className="flex flex-wrap gap-2">
                   {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
                 </div>
-                <div className="flex gap-2">
-                  <Input value={newTrait} onChange={e => setNewTrait(e.target.value)} placeholder="Add a trait..."/>
-                  <Button size="icon" onClick={() => handleAddChip('traits')}><Plus/></Button>
+                <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                        <Input value={newTrait} onChange={(e) => handleTraitInputChange(e.target.value)} placeholder="Add a trait..."/>
+                        <Button size="icon" onClick={() => handleAddChip('traits')}><Plus/></Button>
+                    </div>
+                    {traitSuggestions.length > 0 && (
+                        <div className="border rounded-md">
+                            {traitSuggestions.map(suggestion => (
+                                <button key={suggestion} onClick={() => { handleAddChip('traits', suggestion); }} className="w-full text-left p-2 text-sm hover:bg-muted">
+                                    {suggestion}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
               </div>
             </CardContent>
@@ -241,7 +281,24 @@ export default function ContactDetailPage() {
       </TabsContent>
       
       <TabsContent value="logs" className="space-y-6">
-         {/* Implement Log Tab UI */}
+          <Card>
+            <CardHeader><CardTitle>Quick Log</CardTitle></CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">Log a common interaction status in one click.</p>
+                <Button onClick={() => setIsQuickLogOpen(true)}>Open Quick Log</Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+                <CardTitle>Log Feedback</CardTitle>
+                <CardDescription>Record the lead's feedback on key aspects.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                 {/* Feedback Section */}
+                 <div>todo</div>
+            </CardContent>
+          </Card>
       </TabsContent>
     </Tabs>
   );
@@ -299,6 +356,14 @@ export default function ContactDetailPage() {
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         {lead.relationship === 'Learner' ? renderLearnerView() : renderLeadView()}
       </main>
+
+       <QuickLogDialog
+        isOpen={isQuickLogOpen}
+        setIsOpen={setIsQuickLogOpen}
+        lead={lead}
+        onLogSaved={fetchInteractions}
+        appSettings={appSettings}
+      />
     </div>
   );
 }
