@@ -178,7 +178,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast]); // lastInteraction removed from deps to fix infinite loop
+  }, [id, toast, lastInteraction]); // lastInteraction is required here for pagination to work
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -228,12 +228,28 @@ export default function ContactDetailPage() {
       fetchLeadAndEvents();
       fetchInteractions();
     }
-  }, [id, fetchLeadAndEvents, fetchInteractions]);
+  }, [id, fetchLeadAndEvents]);
+
+  useEffect(() => {
+    if (!id) return;
+    // Debounce the fetch a little in case of rapid tab switching
+    const handler = setTimeout(() => {
+      if (tasksLoaded) {
+        setActiveTasks([]);
+        setPastTasks([]);
+        setLastActiveTask(null);
+        setLastPastTask(null);
+        fetchTasks('active');
+        fetchTasks('past');
+      }
+    }, 100);
+
+    return () => clearTimeout(handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksLoaded]);
 
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksLoaded) {
-      fetchTasks('active');
-      fetchTasks('past');
       setTasksLoaded(true);
     }
   };
@@ -320,23 +336,31 @@ export default function ContactDetailPage() {
     setSubmissionState('submitting');
     
     let interaction: Partial<Interaction> = {
-        quickLogType: selectedQuickLog
+        quickLogType: selectedQuickLog,
+        leadId: id,
+        createdAt: new Date().toISOString(),
     };
 
     if (selectedQuickLog === 'Withdrawn') {
         interaction.withdrawalReasons = withdrawalReasons;
     }
 
+    // Optimistic UI update
+    const optimisticInteraction: Interaction = {
+      id: `optimistic-${Date.now()}`,
+      ...interaction
+    } as Interaction;
+    setInteractions(prev => [optimisticInteraction, ...prev]);
+
     try {
-        await addDoc(collection(db, 'interactions'), {
-            ...interaction,
-            leadId: id,
-            createdAt: new Date().toISOString(),
-        });
+        const docRef = await addDoc(collection(db, 'interactions'), interaction);
+        // Replace optimistic with real
+        setInteractions(prev => prev.map(i => i.id === optimisticInteraction.id ? { ...i, id: docRef.id } : i));
         setSubmissionState('submitted');
         toast({title: "Interaction logged successfully."});
-        fetchInteractions(); 
     } catch (error) {
+        // Revert optimistic update
+        setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
         console.error("Error logging interaction:", error);
         toast({variant: "destructive", title: "Failed to log interaction."});
         setSubmissionState('idle');
@@ -346,6 +370,10 @@ export default function ContactDetailPage() {
             setSelectedQuickLog(null);
             setQuickLogStep('initial');
             setWithdrawalReasons([]);
+            // Soft-refresh data in background
+            fetchInteractions();
+            fetchTasks('active');
+            fetchTasks('past');
         }, 1000);
     }
   }
@@ -392,20 +420,32 @@ export default function ContactDetailPage() {
         return;
     }
     setIsLoggingFeedback(true);
+
+    const interactionPayload = {
+      feedback,
+      leadId: id,
+      createdAt: new Date().toISOString(),
+    };
+
+    const optimisticInteraction: Interaction = {
+      id: `optimistic-${Date.now()}`,
+      ...interactionPayload
+    } as Interaction;
+    setInteractions(prev => [optimisticInteraction, ...prev]);
+
     try {
-      await addDoc(collection(db, "interactions"), {
-        feedback,
-        leadId: id,
-        createdAt: new Date().toISOString(),
-      });
+      const docRef = await addDoc(collection(db, "interactions"), interactionPayload);
+      setInteractions(prev => prev.map(i => i.id === optimisticInteraction.id ? { ...i, id: docRef.id } : i));
       setFeedback({});
       setActiveChipCategory(null);
       toast({ title: "Feedback logged" });
-      fetchInteractions();
     } catch (e) {
+      setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
       toast({variant: 'destructive', title: 'Failed to log feedback.'})
     } finally {
       setIsLoggingFeedback(false);
+      // Soft-refresh
+      fetchInteractions();
     }
   }
 
@@ -446,17 +486,32 @@ export default function ContactDetailPage() {
       };
     }
 
+    const optimisticInteraction: Interaction = {
+      id: `optimistic-${Date.now()}`,
+      ...interactionPayload
+    } as Interaction;
+    setInteractions(prev => [optimisticInteraction, ...prev]);
+    
+    // Reset state immediately
+    const prevSelectedOutcome = selectedOutcome;
+    setSelectedOutcome(null);
+    setOutcomeNotes('');
+    setFollowUpDate(undefined);
+    setEventDetails({ type: '', dateTime: undefined });
+
     try {
-      await addDoc(collection(db, 'interactions'), interactionPayload);
+      const docRef = await addDoc(collection(db, 'interactions'), interactionPayload);
+      setInteractions(prev => prev.map(i => i.id === optimisticInteraction.id ? { ...i, id: docRef.id } : i));
       toast({ title: 'Outcome logged successfully.' });
-      // Reset state and refetch data
-      setSelectedOutcome(null);
-      setOutcomeNotes('');
-      setFollowUpDate(undefined);
-      setEventDetails({ type: '', dateTime: undefined });
-      fetchInteractions(); // refresh logs
-      fetchLeadAndEvents(); // refresh summary & event pill
+
+      // After successful log, refresh data that depends on it
+      if (prevSelectedOutcome === "Event Scheduled") {
+          fetchLeadAndEvents();
+      }
+      // Re-fetch tasks if an Info task was just created
+      fetchTasks('active');
     } catch (error) {
+      setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
       console.error("Error logging outcome:", error);
       toast({ variant: 'destructive', title: 'Failed to log outcome.' });
     } finally {
@@ -1110,3 +1165,5 @@ export default function ContactDetailPage() {
     </div>
   );
 }
+
+    
