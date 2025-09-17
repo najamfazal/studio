@@ -118,21 +118,26 @@ export default function ContactDetailPage() {
     setIsInteractionsLoading(true);
     
     try {
-      const qConstraints = [
+      const qConstraints: any[] = [
         where('leadId', '==', id),
         orderBy('createdAt', 'desc'),
-        limit(loadMore ? 10 : INTERACTION_PAGE_SIZE)
       ];
 
-      if (loadMore && lastInteraction) {
-        qConstraints.push(startAfter(lastInteraction));
+      if (loadMore) {
+          qConstraints.push(limit(10));
+          if (lastInteraction) {
+            qConstraints.push(startAfter(lastInteraction));
+          }
+      } else {
+          qConstraints.push(limit(INTERACTION_PAGE_SIZE));
       }
 
       const q = query(collection(db, 'interactions'), ...qConstraints);
       const snapshot = await getDocs(q);
       const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
 
-      setHasMoreInteractions(newInteractions.length === (loadMore ? 10 : INTERACTION_PAGE_SIZE));
+      const pageSize = loadMore ? 10 : INTERACTION_PAGE_SIZE;
+      setHasMoreInteractions(newInteractions.length === pageSize);
       setLastInteraction(snapshot.docs[snapshot.docs.length - 1] || null);
 
       setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
@@ -142,7 +147,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast, lastInteraction]);
+  }, [id, toast]); // Removed lastInteraction from dependencies
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -687,7 +692,7 @@ export default function ContactDetailPage() {
           <Card>
             <CardHeader className="p-4"><CardTitle className="text-lg">Active Tasks</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0">
-              {isTasksLoading && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
+              {isTasksLoading && activeTasks.length === 0 && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
               {!isTasksLoading && activeTasks.length > 0 && (
                 <div className="space-y-2">
                   {activeTasks.map(task => (
@@ -712,7 +717,7 @@ export default function ContactDetailPage() {
            <Card>
             <CardHeader className="p-4"><CardTitle className="text-lg">Past Tasks</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0">
-              {isTasksLoading && pastTasks.length === 0 && !tasksLoaded && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
+              {isTasksLoading && pastTasks.length === 0 && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
               {!isTasksLoading && pastTasks.length > 0 && (
                  <div className="space-y-2">
                   {pastTasks.map(task => (
@@ -798,3 +803,5 @@ export default function ContactDetailPage() {
     </div>
   );
 }
+
+    
