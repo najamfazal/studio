@@ -411,9 +411,8 @@ export default function ContactDetailPage() {
                   <>
                     <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>Quick Log</CardTitle>
-                        <Button onClick={handleLogInteraction} size="sm" disabled={isSubmitDisabled()}>
-                            <Send className="mr-2 h-4 w-4" />
-                            Submit
+                        <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
+                            {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                         </Button>
                     </CardHeader>
                     <CardContent className="flex flex-wrap gap-2">
@@ -441,9 +440,8 @@ export default function ContactDetailPage() {
                                 <CardTitle>Select Reason</CardTitle>
                             </div>
                           </div>
-                           <Button onClick={handleLogInteraction} size="sm" disabled={isSubmitDisabled()}>
-                                <Send className="mr-2 h-4 w-4" />
-                                Submit
+                           <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
+                                {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                             </Button>
                       </div>
                     </CardHeader>
