@@ -77,8 +77,8 @@ export type Task = {
   leadName: string;
   description: string;
   completed: boolean;
-  createdAt: string; // ISO date string
-  dueDate?: string; // ISO date string for overdue checks
+  createdAt: any; // Can be Date, string, or Firestore Timestamp
+  dueDate?: any; // Can be Date, string, or Firestore Timestamp
   nature: TaskNature;
 };
 
