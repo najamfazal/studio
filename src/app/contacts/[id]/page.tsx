@@ -26,7 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 
-const INTERACTION_PAGE_SIZE = 5;
+const INTERACTION_INITIAL_PAGE_SIZE = 5;
+const INTERACTION_LOAD_MORE_SIZE = 10;
 
 // Helper to safely convert Firestore Timestamps or strings to Date objects
 const toDate = (dateValue: any): Date | null => {
@@ -103,11 +104,14 @@ export default function ContactDetailPage() {
   const fetchInteractions = useCallback(async (loadMore = false) => {
     if (!id) return;
     setIsInteractionsLoading(true);
+    
+    const pageSize = loadMore ? INTERACTION_LOAD_MORE_SIZE : INTERACTION_INITIAL_PAGE_SIZE;
+
     try {
       const qConstraints = [
         where('leadId', '==', id),
         orderBy('createdAt', 'desc'),
-        limit(INTERACTION_PAGE_SIZE)
+        limit(pageSize)
       ];
 
       if (loadMore && lastInteraction) {
@@ -118,7 +122,7 @@ export default function ContactDetailPage() {
       const snapshot = await getDocs(q);
       const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
 
-      setHasMoreInteractions(newInteractions.length === INTERACTION_PAGE_SIZE);
+      setHasMoreInteractions(newInteractions.length === pageSize);
       setLastInteraction(snapshot.docs[snapshot.docs.length - 1] || null);
 
       setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
@@ -410,7 +414,7 @@ export default function ContactDetailPage() {
                 {quickLogStep === 'initial' && (
                   <>
                     <CardHeader className="flex-row items-center justify-between">
-                        <CardTitle className="text-lg">Quick Log</CardTitle>
+                        <CardTitle className="text-lg font-normal">Quick Log</CardTitle>
                         <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
                             {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                         </Button>
@@ -437,7 +441,7 @@ export default function ContactDetailPage() {
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
                             <div>
                                 <CardDescription>Quick Log - Withdrawn</CardDescription>
-                                <CardTitle className="text-lg">Select Reason</CardTitle>
+                                <CardTitle className="text-lg font-normal">Select Reason</CardTitle>
                             </div>
                           </div>
                            <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
@@ -474,7 +478,7 @@ export default function ContactDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-lg">Log Feedback</CardTitle>
+                <CardTitle className="text-lg font-normal">Log Feedback</CardTitle>
               </div>
               <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
                 {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
@@ -519,6 +523,49 @@ export default function ContactDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Log History</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isInteractionsLoading && interactions.length === 0 && (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="animate-spin" />
+                </div>
+              )}
+              {interactions.length > 0 && (
+                <div className="space-y-3">
+                  {interactions.map(interaction => (
+                    <div key={interaction.id} className="text-sm p-3 bg-muted/50 rounded-lg">
+                      <div className="flex justify-between items-center mb-1">
+                          <p className="font-semibold">
+                              {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
+                               interaction.feedback ? 'Feedback Logged' :
+                               interaction.outcome ? `Outcome: ${interaction.outcome}` : 
+                               interaction.notes ? 'Note' :
+                               'Interaction'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{format(toDate(interaction.createdAt)!, 'PP p')}</p>
+                      </div>
+                      {interaction.notes && <p className="text-muted-foreground">{interaction.notes}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!isInteractionsLoading && interactions.length === 0 && (
+                <p className="text-sm text-center text-muted-foreground p-4">No interactions have been logged yet.</p>
+              )}
+              {hasMoreInteractions && (
+                <div className="flex justify-center">
+                  <Button variant="outline" onClick={() => fetchInteractions(true)} disabled={isInteractionsLoading}>
+                    {isInteractionsLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
       </TabsContent>
     </Tabs>
   );
@@ -580,3 +627,5 @@ export default function ContactDetailPage() {
   );
 }
  
+
+    
