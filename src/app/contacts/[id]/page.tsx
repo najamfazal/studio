@@ -194,11 +194,19 @@ export default function ContactDetailPage() {
   
   const handleLogInteraction = async () => {
     if (!selectedQuickLog) return;
+    
+    // Check if it's a multi-step action that's incomplete
+    if (quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) {
+        toast({ variant: 'destructive', title: "Please select a reason for withdrawal."});
+        return;
+    }
+
     setSubmissionState('submitting');
     
     let interaction: Partial<Interaction> = {
         quickLogType: selectedQuickLog
     };
+
     if (selectedQuickLog === 'Withdrawn') {
         interaction.withdrawalReasons = withdrawalReasons;
     }
@@ -219,8 +227,8 @@ export default function ContactDetailPage() {
     } finally {
         setTimeout(() => {
             setSubmissionState('idle');
-            setQuickLogStep('initial');
             setSelectedQuickLog(null);
+            setQuickLogStep('initial');
             setWithdrawalReasons([]);
         }, 1000);
     }
@@ -288,10 +296,11 @@ export default function ContactDetailPage() {
     return appSettings.commonTraits.filter(trait => !lead.traits.includes(trait));
   }, [appSettings?.commonTraits, lead?.traits]);
 
-  const handleQuickLogChipClick = (logType: QuickLogType, multistep: QuickLogStep | null) => {
+  const handleQuickLogChipClick = (logType: QuickLogType) => {
     setSelectedQuickLog(logType);
-    if (multistep) {
-        setQuickLogStep(multistep);
+    const option = quickLogOptions.find(o => o.value === logType);
+    if (option?.multistep) {
+        setQuickLogStep(option.multistep);
     }
   };
 
@@ -305,6 +314,12 @@ export default function ContactDetailPage() {
     setQuickLogStep('initial');
     setSelectedQuickLog(null);
     setWithdrawalReasons([]);
+  }
+  
+  const isSubmitDisabled = () => {
+    if (submissionState !== 'idle' || !selectedQuickLog) return true;
+    if (quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) return true;
+    return false;
   }
 
   if (isLoading || !lead || !appSettings) {
@@ -382,73 +397,80 @@ export default function ContactDetailPage() {
       </TabsContent>
       
       <TabsContent value="logs" className="space-y-6">
-          <Card>
-            <div className="relative overflow-hidden">
-                <AnimatePresence initial={false}>
-                    <motion.div
-                        key={quickLogStep}
-                        initial={{ opacity: 0, x: quickLogStep === 'initial' ? 0 : 300 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -300 }}
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                    >
-                        {quickLogStep === 'initial' && (
-                            <>
-                                <CardHeader><CardTitle>Quick Log</CardTitle></CardHeader>
-                                <CardContent className="flex flex-wrap gap-2">
-                                    {quickLogOptions.map(opt => (
-                                        <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="sm" onClick={() => handleQuickLogChipClick(opt.value, opt.multistep)} disabled={submissionState !== 'idle'}>{opt.label}</Button>
-                                    ))}
-                                </CardContent>
-                                <CardFooter>
-                                    <Button onClick={handleLogInteraction} disabled={submissionState !== 'idle' || !selectedQuickLog || (quickLogOptions.find(o => o.value === selectedQuickLog)?.multistep !== null)}>
-                                        <Send className="mr-2 h-4 w-4"/> Submit
-                                    </Button>
-                                </CardFooter>
-                            </>
-                        )}
-                        {quickLogStep === 'withdrawn' && (
-                           <>
-                                <CardHeader>
-                                    <div className="flex items-center gap-2">
-                                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
-                                        <div>
-                                            <CardDescription>Quick Log - Withdrawn</CardDescription>
-                                            <CardTitle>Select Reason</CardTitle>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex flex-wrap gap-2">
-                                        {(appSettings.withdrawalReasons || []).map(reason => (
-                                            <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                                <CardFooter>
-                                    <Button onClick={handleLogInteraction} disabled={submissionState !== 'idle' || withdrawalReasons.length === 0}>
-                                        <Send className="mr-2 h-4 w-4"/> Submit
-                                    </Button>
-                                </CardFooter>
-                           </>
-                        )}
-                    </motion.div>
-                </AnimatePresence>
-
-                 <AnimatePresence>
-                    {submissionState !== 'idle' && (
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center"
-                        >
-                            {submissionState === 'submitting' && <p>Submitting...</p>}
-                            {submissionState === 'submitted' && <p className="text-primary">Submitted</p>}
-                        </motion.div>
-                    )}
-                 </AnimatePresence>
-            </div>
+          <Card className="relative overflow-hidden">
+            <AnimatePresence initial={false}>
+              <motion.div
+                key={quickLogStep}
+                className="w-full"
+                initial={{ opacity: 0, x: quickLogStep === 'initial' ? 0 : 300 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -300, position: 'absolute' }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+              >
+                {quickLogStep === 'initial' && (
+                  <>
+                    <CardHeader className="flex-row items-center justify-between">
+                        <CardTitle>Quick Log</CardTitle>
+                        <Button onClick={handleLogInteraction} size="sm" disabled={isSubmitDisabled()}>
+                            <Send className="mr-2 h-4 w-4" />
+                            Submit
+                        </Button>
+                    </CardHeader>
+                    <CardContent className="flex flex-wrap gap-2">
+                      {quickLogOptions.map(opt => (
+                        <Button 
+                            key={opt.value} 
+                            variant={selectedQuickLog === opt.value ? 'default' : 'outline'} 
+                            size="sm" 
+                            onClick={() => handleQuickLogChipClick(opt.value)} 
+                            disabled={submissionState !== 'idle'}>
+                                {opt.label}
+                        </Button>
+                      ))}
+                    </CardContent>
+                  </>
+                )}
+                {quickLogStep === 'withdrawn' && (
+                  <>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
+                            <div>
+                                <CardDescription>Quick Log - Withdrawn</CardDescription>
+                                <CardTitle>Select Reason</CardTitle>
+                            </div>
+                          </div>
+                           <Button onClick={handleLogInteraction} size="sm" disabled={isSubmitDisabled()}>
+                                <Send className="mr-2 h-4 w-4" />
+                                Submit
+                            </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {(appSettings.withdrawalReasons || []).map(reason => (
+                          <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
+            <AnimatePresence>
+              {submissionState !== 'idle' && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center"
+                >
+                  {submissionState === 'submitting' && <p>Submitting...</p>}
+                  {submissionState === 'submitted' && <p className="text-primary">Submitted</p>}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </Card>
 
           <Card>
