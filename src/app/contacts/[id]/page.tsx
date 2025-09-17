@@ -70,6 +70,7 @@ export default function ContactDetailPage() {
   
   // Quick Log State
   const [quickLogStep, setQuickLogStep] = useState<QuickLogStep>('initial');
+  const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
   const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'submitted'>('idle');
   const [withdrawalReasons, setWithdrawalReasons] = useState<string[]>([]);
   
@@ -191,8 +192,17 @@ export default function ContactDetailPage() {
     handleUpdate(type, newList);
   };
   
-  const handleLogInteraction = async (interaction: Partial<Interaction>) => {
+  const handleLogInteraction = async () => {
+    if (!selectedQuickLog) return;
     setSubmissionState('submitting');
+    
+    let interaction: Partial<Interaction> = {
+        quickLogType: selectedQuickLog
+    };
+    if (selectedQuickLog === 'Withdrawn') {
+        interaction.withdrawalReasons = withdrawalReasons;
+    }
+
     try {
         await addDoc(collection(db, 'interactions'), {
             ...interaction,
@@ -210,6 +220,7 @@ export default function ContactDetailPage() {
         setTimeout(() => {
             setSubmissionState('idle');
             setQuickLogStep('initial');
+            setSelectedQuickLog(null);
             setWithdrawalReasons([]);
         }, 1000);
     }
@@ -278,10 +289,9 @@ export default function ContactDetailPage() {
   }, [appSettings?.commonTraits, lead?.traits]);
 
   const handleQuickLogChipClick = (logType: QuickLogType, multistep: QuickLogStep | null) => {
+    setSelectedQuickLog(logType);
     if (multistep) {
         setQuickLogStep(multistep);
-    } else {
-        handleLogInteraction({ quickLogType: logType });
     }
   };
 
@@ -291,12 +301,11 @@ export default function ContactDetailPage() {
     );
   };
 
-  const handleLogWithdrawn = () => {
-    handleLogInteraction({
-        quickLogType: 'Withdrawn',
-        withdrawalReasons: withdrawalReasons,
-    });
-  };
+  const handleBackFromMultistep = () => {
+    setQuickLogStep('initial');
+    setSelectedQuickLog(null);
+    setWithdrawalReasons([]);
+  }
 
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -388,16 +397,21 @@ export default function ContactDetailPage() {
                                 <CardHeader><CardTitle>Quick Log</CardTitle></CardHeader>
                                 <CardContent className="flex flex-wrap gap-2">
                                     {quickLogOptions.map(opt => (
-                                        <Button key={opt.value} variant="outline" size="sm" onClick={() => handleQuickLogChipClick(opt.value, opt.multistep)} disabled={submissionState !== 'idle'}>{opt.label}</Button>
+                                        <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="sm" onClick={() => handleQuickLogChipClick(opt.value, opt.multistep)} disabled={submissionState !== 'idle'}>{opt.label}</Button>
                                     ))}
                                 </CardContent>
+                                <CardFooter>
+                                    <Button onClick={handleLogInteraction} disabled={submissionState !== 'idle' || !selectedQuickLog || (quickLogOptions.find(o => o.value === selectedQuickLog)?.multistep !== null)}>
+                                        <Send className="mr-2 h-4 w-4"/> Submit
+                                    </Button>
+                                </CardFooter>
                             </>
                         )}
                         {quickLogStep === 'withdrawn' && (
                            <>
                                 <CardHeader>
                                     <div className="flex items-center gap-2">
-                                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setQuickLogStep('initial')}><ArrowLeft/></Button>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
                                         <div>
                                             <CardDescription>Quick Log - Withdrawn</CardDescription>
                                             <CardTitle>Select Reason</CardTitle>
@@ -412,7 +426,7 @@ export default function ContactDetailPage() {
                                     </div>
                                 </CardContent>
                                 <CardFooter>
-                                    <Button onClick={handleLogWithdrawn} disabled={submissionState !== 'idle' || withdrawalReasons.length === 0}>
+                                    <Button onClick={handleLogInteraction} disabled={submissionState !== 'idle' || withdrawalReasons.length === 0}>
                                         <Send className="mr-2 h-4 w-4"/> Submit
                                     </Button>
                                 </CardFooter>
