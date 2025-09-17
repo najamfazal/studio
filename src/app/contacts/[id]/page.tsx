@@ -10,11 +10,11 @@ import { ArrowLeft, Loader2, Mail, Phone, Plus, ThumbsDown, ThumbsUp, Trash2 } f
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment } from '@/lib/types';
+import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment, InteractionFeedback } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { QuickLogDialog } from '@/components/quick-log-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 const INTERACTION_PAGE_SIZE = 5;
 
@@ -34,6 +35,8 @@ const toDate = (dateValue: any): Date | null => {
   if (dateValue.toDate) return dateValue.toDate(); // Firestore Timestamp
   return null;
 };
+
+type FeedbackCategory = keyof InteractionFeedback;
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -52,6 +55,8 @@ export default function ContactDetailPage() {
   
   const [newInsight, setNewInsight] = useState("");
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
+  const [feedback, setFeedback] = useState<InteractionFeedback>({});
+  const [isLoggingFeedback, setIsLoggingFeedback] = useState(false);
   
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -186,6 +191,44 @@ export default function ContactDetailPage() {
     }
   }
 
+  const handlePerceptionChange = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
+    setFeedback(produce(draft => {
+        if (!draft[category] || draft[category]?.perception !== perception) {
+            draft[category] = { perception, objections: [] };
+        } else {
+            // If clicking the same perception again, clear it.
+            delete draft[category];
+        }
+    }));
+  };
+
+  const handleObjectionToggle = (category: FeedbackCategory, objection: string) => {
+    setFeedback(produce(draft => {
+        const categoryFeedback = draft[category];
+        if (categoryFeedback) {
+            const objections = categoryFeedback.objections || [];
+            const index = objections.indexOf(objection);
+            if (index > -1) {
+                objections.splice(index, 1);
+            } else {
+                objections.push(objection);
+            }
+            categoryFeedback.objections = objections;
+        }
+    }));
+  };
+  
+  const handleLogFeedback = async () => {
+    if (Object.keys(feedback).length === 0) {
+        toast({ variant: 'destructive', title: "Nothing to log", description: "Please select a perception first." });
+        return;
+    }
+    setIsLoggingFeedback(true);
+    await handleLogInteraction({ feedback });
+    setFeedback({});
+    setIsLoggingFeedback(false);
+  }
+
   const availableTraits = useMemo(() => {
     if (!appSettings?.commonTraits || !lead?.traits) return [];
     return appSettings.commonTraits.filter(trait => !lead.traits.includes(trait));
@@ -281,9 +324,48 @@ export default function ContactDetailPage() {
                 <CardDescription>Record the lead's feedback on key aspects.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                 {/* Feedback Section */}
-                 <div>todo</div>
+                 {(['content', 'schedule', 'price'] as FeedbackCategory[]).map(category => (
+                    <div key={category}>
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-semibold capitalize">{category}</h4>
+                            <div className="flex items-center gap-3">
+                                <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn(feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
+                                    <ThumbsUp className="h-5 w-5 text-green-600"/>
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'negative')} className={cn(feedback[category]?.perception === 'negative' && 'bg-red-100 dark:bg-red-900')}>
+                                    <ThumbsDown className="h-5 w-5 text-red-600"/>
+                                </Button>
+                            </div>
+                        </div>
+                        {feedback[category]?.perception === 'negative' && (
+                            <div className="pt-3">
+                                <div className="flex flex-wrap gap-2">
+                                    {(appSettings.feedbackChips[category] || []).map(objection => (
+                                        <Badge
+                                            key={objection}
+                                            variant={feedback[category]?.objections?.includes(objection) ? "default" : "secondary"}
+                                            onClick={() => handleObjectionToggle(category, objection)}
+                                            className="cursor-pointer"
+                                        >
+                                            {objection}
+                                        </Badge>
+                                    ))}
+                                    {(appSettings.feedbackChips[category] || []).length === 0 && (
+                                        <p className="text-xs text-muted-foreground">No objection reasons configured in settings.</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        <Separator className="mt-4"/>
+                    </div>
+                ))}
             </CardContent>
+            <CardFooter>
+                 <Button onClick={handleLogFeedback} disabled={isLoggingFeedback} className="w-full">
+                    {isLoggingFeedback && <Loader2 className="animate-spin mr-2" />}
+                    Log Feedback
+                </Button>
+            </CardFooter>
           </Card>
       </TabsContent>
     </Tabs>
@@ -353,5 +435,3 @@ export default function ContactDetailPage() {
     </div>
   );
 }
-
-    
