@@ -410,7 +410,7 @@ export default function ContactDetailPage() {
                 {quickLogStep === 'initial' && (
                   <>
                     <CardHeader className="flex-row items-center justify-between">
-                        <CardTitle>Quick Log</CardTitle>
+                        <CardTitle className="text-lg">Quick Log</CardTitle>
                         <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
                             {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                         </Button>
@@ -437,7 +437,7 @@ export default function ContactDetailPage() {
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
                             <div>
                                 <CardDescription>Quick Log - Withdrawn</CardDescription>
-                                <CardTitle>Select Reason</CardTitle>
+                                <CardTitle className="text-lg">Select Reason</CardTitle>
                             </div>
                           </div>
                            <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
@@ -474,8 +474,7 @@ export default function ContactDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Log Feedback</CardTitle>
-                <CardDescription>Record the lead's feedback on key aspects.</CardDescription>
+                <CardTitle className="text-lg">Log Feedback</CardTitle>
               </div>
               <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
                 {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
@@ -580,5 +579,4 @@ export default function ContactDetailPage() {
     </div>
   );
 }
-
-    
+ 
