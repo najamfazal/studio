@@ -9,7 +9,8 @@
         "venv",
         ".git",
         "firebase-debug.log",
-        "firebase-debug.*.log"
+        "firebase-debug.*.log",
+        "__pycache__"
       ]
     }
   ]
