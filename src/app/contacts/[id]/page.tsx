@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc, writeBatch } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
 import { addDays, format, formatDistanceToNowStrict, isAfter, isToday, parseISO } from 'date-fns';
@@ -26,7 +26,6 @@ import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 const INTERACTION_PAGE_SIZE = 5;
@@ -228,23 +227,22 @@ export default function ContactDetailPage() {
       fetchLeadAndEvents();
       fetchInteractions();
     }
-  }, [id, fetchLeadAndEvents]);
+  }, [id, fetchLeadAndEvents, fetchInteractions]);
 
   useEffect(() => {
     if (!id) return;
-    // Debounce the fetch a little in case of rapid tab switching
-    const handler = setTimeout(() => {
-      if (tasksLoaded) {
+    if (tasksLoaded) {
+      const handler = setTimeout(() => {
         setActiveTasks([]);
         setPastTasks([]);
         setLastActiveTask(null);
         setLastPastTask(null);
         fetchTasks('active');
         fetchTasks('past');
-      }
-    }, 100);
+      }, 100);
 
-    return () => clearTimeout(handler);
+      return () => clearTimeout(handler);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksLoaded]);
 
@@ -371,7 +369,7 @@ export default function ContactDetailPage() {
             setQuickLogStep('initial');
             setWithdrawalReasons([]);
             // Soft-refresh data in background
-            fetchInteractions();
+            fetchInteractions(false);
             fetchTasks('active');
             fetchTasks('past');
         }, 1000);
@@ -445,7 +443,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsLoggingFeedback(false);
       // Soft-refresh
-      fetchInteractions();
+      fetchInteractions(false);
     }
   }
 
@@ -523,43 +521,54 @@ export default function ContactDetailPage() {
     if (!eventToManage) return;
     setIsEventActionLoading(true);
 
+    const batch = writeBatch(db);
+
     try {
+        const originalEventRef = doc(db, 'interactions', eventToManage.id);
+
         if (action === 'Rescheduled') {
             if (!rescheduleDate) {
                 toast({variant: 'destructive', title: 'Please select a new date.'});
                 setIsEventActionLoading(false);
                 return;
             }
-            // Update original event to cancelled
-            await updateDoc(doc(db, 'interactions', eventToManage.id), { 'eventDetails.status': 'Cancelled' });
-            // Create new event
-            await addDoc(collection(db, 'interactions'), {
+            
+            // Log interaction about rescheduling
+            const rescheduleLogRef = doc(collection(db, 'interactions'));
+            batch.set(rescheduleLogRef, {
                 leadId: id,
                 createdAt: new Date().toISOString(),
                 outcome: 'Event Scheduled',
                 eventDetails: {
-                    ...eventToManage.eventDetails,
-                    status: 'Scheduled',
+                    type: eventToManage.eventDetails?.type,
                     dateTime: rescheduleDate.toISOString(),
+                    status: 'Scheduled',
                     rescheduledFrom: eventToManage.eventDetails?.dateTime,
                 },
                 notes: `Rescheduled from ${format(toDate(eventToManage.eventDetails!.dateTime)!, 'PPp')}`
             });
+            // Mark original event as Cancelled
+            batch.update(originalEventRef, { 'eventDetails.status': 'Cancelled' });
+            
             toast({title: 'Event Rescheduled'});
 
         } else { // Completed or Cancelled
-            await updateDoc(doc(db, 'interactions', eventToManage.id), { 'eventDetails.status': action });
-            await addDoc(collection(db, 'interactions'), {
+            batch.update(originalEventRef, { 'eventDetails.status': action });
+            
+            const actionLogRef = doc(collection(db, 'interactions'));
+            batch.set(actionLogRef, {
                 leadId: id,
                 createdAt: new Date().toISOString(),
-                notes: `Event marked as ${action}`
+                notes: `Event ${eventToManage.eventDetails?.type} marked as ${action}.`
             });
             toast({title: `Event ${action}`});
         }
         
+        await batch.commit();
+
         // Refresh data
         fetchLeadAndEvents();
-        fetchInteractions();
+        fetchInteractions(false);
         setEventToManage(null);
         setRescheduleDate(undefined);
 
@@ -604,7 +613,7 @@ export default function ContactDetailPage() {
   
   const setEventTime = (time: string) => {
     const [hours, minutes] = time.split(':').map(Number);
-    const newDateTime = new Date(eventDetails.dateTime || new Date());
+    const newDateTime = eventDetails.dateTime ? new Date(eventDetails.dateTime) : new Date();
     newDateTime.setHours(hours, minutes, 0, 0);
     setEventDetails(prev => ({...prev, dateTime: newDateTime}));
   }

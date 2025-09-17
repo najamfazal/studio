@@ -120,6 +120,10 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             event_type = event_details.get("type", "Event")
             event_time_str = event_details.get("dateTime")
             
+            # If this is a reschedule, delete old event tasks first.
+            if event_details.get("rescheduledFrom"):
+                delete_event_tasks(lead_id, event_type)
+
             # Pause AFC by completing open interactive tasks
             complete_open_interactive_tasks(lead_id)
 
@@ -134,6 +138,13 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
                      reminder_due_date = event_time - timedelta(days=1)
                      create_task(lead_id, lead_name, f"Remind about {event_type}", "Procedural", reminder_due_date)
                 print(f"Created event tasks for lead {lead_id}")
+        
+        # This handles logs like 'Event Completed' or 'Event Cancelled'
+        elif "Event" in interaction_data.get("notes", "") and "marked as Cancelled" in interaction_data.get("notes", ""):
+            event_type = interaction_data.get("notes", "").split(" ")[1]
+            delete_event_tasks(lead_id, event_type)
+            print(f"Deleted tasks for cancelled event for lead {lead_id}")
+            
         return # End processing for outcomes
 
     # --- 3. Quick-Log & Standard Engagement Processing (AFC Logic) ---
@@ -233,7 +244,7 @@ def onTaskUpdate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             
             # A simple way to identify 'Info' tasks is by their description. This could be more robust.
             # Assuming 'Info' tasks don't use the standard "Follow-up" description.
-            if lead_id and "Follow-up" not in data_after.get('description', ''):
+            if lead_id and "Follow-up" not in data_after.get('description', '') and "Confirm" not in data_after.get('description', '') and "Remind" not in data_after.get('description', ''):
                 print(f"Procedural task {task_id} for lead {lead_id} completed. Resetting AFC.")
                 
                 # Log a "Followup" interaction to reset the AFC
@@ -266,7 +277,22 @@ def delete_pending_followups(lead_id: str):
          if "Follow-up" in task.to_dict().get("description", ""):
             task.reference.delete()
             print(f"Deleted pending follow-up task {task.id} for lead {lead_id}")
-            
+
+def delete_event_tasks(lead_id: str, event_type: str):
+    """Deletes reminder and confirmation tasks for a given event."""
+    tasks_ref = db.collection("tasks")
+    reminder_query = tasks_ref.where("leadId", "==", lead_id) \
+                               .where("description", "==", f"Remind about {event_type}").stream()
+    confirmation_query = tasks_ref.where("leadId", "==", lead_id) \
+                                  .where("description", "==", f"Confirm attendance for {event_type}").stream()
+
+    for task in reminder_query:
+        task.reference.delete()
+        print(f"Deleted reminder task {task.id} for lead {lead_id}")
+    for task in confirmation_query:
+        task.reference.delete()
+        print(f"Deleted confirmation task {task.id} for lead {lead_id}")
+
 def reset_afc_for_engagement(lead_id: str, lead_name: str):
     """Resets the AFC cycle for an engaged lead."""
     # Delete any other pending "Follow-up" tasks to avoid duplicates
