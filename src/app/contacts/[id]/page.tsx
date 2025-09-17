@@ -156,11 +156,9 @@ export default function ContactDetailPage() {
         orderBy('createdAt', 'desc'),
       ];
 
-      if (loadMore) {
+      if (loadMore && lastInteraction) {
+          qConstraints.push(startAfter(lastInteraction));
           qConstraints.push(limit(10));
-          if (lastInteraction) {
-            qConstraints.push(startAfter(lastInteraction));
-          }
       } else {
           qConstraints.push(limit(INTERACTION_PAGE_SIZE));
       }
@@ -551,9 +549,8 @@ export default function ContactDetailPage() {
   
   const setEventTime = (time: string) => {
     const [hours, minutes] = time.split(':').map(Number);
-    const newDateTime = produce(eventDetails.dateTime || new Date(), draft => {
-      draft.setHours(hours, minutes, 0, 0);
-    });
+    const newDateTime = new Date(eventDetails.dateTime || new Date());
+    newDateTime.setHours(hours, minutes, 0, 0);
     setEventDetails(prev => ({...prev, dateTime: newDateTime}));
   }
 
@@ -1113,5 +1110,3 @@ export default function ContactDetailPage() {
     </div>
   );
 }
-
-    
