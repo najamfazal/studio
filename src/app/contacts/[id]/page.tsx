@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { QuickLogDialog } from '@/components/quick-log-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const INTERACTION_PAGE_SIZE = 5;
 
@@ -50,12 +51,8 @@ export default function ContactDetailPage() {
   const [hasMoreInteractions, setHasMoreInteractions] = useState(true);
   
   const [newInsight, setNewInsight] = useState("");
-  const [newTrait, setNewTrait] = useState("");
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
   
-  const [traitSuggestions, setTraitSuggestions] = useState<string[]>([]);
-
-
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -150,10 +147,10 @@ export default function ContactDetailPage() {
     }
   };
   
-  const handleAddChip = (type: 'traits' | 'insights', value?: string) => {
-    const chipValue = value ?? (type === 'traits' ? newTrait.trim() : newInsight.trim());
-    if (!chipValue || !lead) return;
+  const handleAddChip = (type: 'traits' | 'insights', value: string) => {
+    if (!value || !lead) return;
 
+    const chipValue = value.trim();
     const currentList = lead[type] || [];
     if (currentList.includes(chipValue)) {
         toast({ variant: 'destructive', title: 'Item already exists' });
@@ -163,10 +160,7 @@ export default function ContactDetailPage() {
     const newList = [...currentList, chipValue];
     handleUpdate(type, newList);
 
-    if (type === 'traits') {
-      setNewTrait("");
-      setTraitSuggestions([]);
-    } else {
+    if (type === 'insights') {
       setNewInsight("");
     }
   };
@@ -192,17 +186,10 @@ export default function ContactDetailPage() {
     }
   }
 
-  const handleTraitInputChange = (value: string) => {
-    setNewTrait(value);
-    if (value && appSettings?.commonTraits) {
-        const lowercasedValue = value.toLowerCase();
-        setTraitSuggestions(
-            appSettings.commonTraits.filter(trait => trait.toLowerCase().includes(lowercasedValue))
-        );
-    } else {
-        setTraitSuggestions([]);
-    }
-  };
+  const availableTraits = useMemo(() => {
+    if (!appSettings?.commonTraits || !lead?.traits) return [];
+    return appSettings.commonTraits.filter(trait => !lead.traits.includes(trait));
+  }, [appSettings?.commonTraits, lead?.traits]);
 
 
   if (isLoading || !lead || !appSettings) {
@@ -245,21 +232,20 @@ export default function ContactDetailPage() {
                 <div className="flex flex-wrap gap-2">
                   {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
                 </div>
-                <div className="flex flex-col gap-2">
-                    <div className="flex gap-2">
-                        <Input value={newTrait} onChange={(e) => handleTraitInputChange(e.target.value)} placeholder="Add a trait..."/>
-                        <Button size="icon" onClick={() => handleAddChip('traits')}><Plus/></Button>
-                    </div>
-                    {traitSuggestions.length > 0 && (
-                        <div className="border rounded-md">
-                            {traitSuggestions.map(suggestion => (
-                                <button key={suggestion} onClick={() => { handleAddChip('traits', suggestion); }} className="w-full text-left p-2 text-sm hover:bg-muted">
-                                    {suggestion}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                 <Select onValueChange={(value) => handleAddChip('traits', value)} value="">
+                    <SelectTrigger>
+                        <SelectValue placeholder="Add a trait..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {availableTraits.length > 0 ? (
+                            availableTraits.map(trait => (
+                                <SelectItem key={trait} value={trait}>{trait}</SelectItem>
+                            ))
+                        ) : (
+                            <div className="p-2 text-sm text-muted-foreground text-center">No more traits to add.</div>
+                        )}
+                    </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
@@ -272,7 +258,7 @@ export default function ContactDetailPage() {
                     </div>
                     <div className="flex gap-2">
                         <Input value={newInsight} onChange={e => setNewInsight(e.target.value)} placeholder="Add an insight..."/>
-                        <Button size="icon" onClick={() => handleAddChip('insights')}><Plus/></Button>
+                        <Button size="icon" onClick={() => handleAddChip('insights', newInsight)}><Plus/></Button>
                     </div>
                 </div>
             </CardContent>
