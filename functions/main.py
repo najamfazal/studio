@@ -53,6 +53,33 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
 
 
+@firestore_fn.on_document_updated(document="tasks/{taskId}")
+def onTaskUpdate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
+    """
+    Triggers when a task is updated, specifically to handle AFC advancement
+    when a follow-up task is marked as complete.
+    """
+    before_data = event.data.before.to_dict()
+    after_data = event.data.after.to_dict()
+
+    # Check if the task was just marked as completed
+    if before_data.get("completed") == False and after_data.get("completed") == True:
+        task_desc = after_data.get("description", "")
+        # Check if it was an interactive follow-up task
+        if "Follow-up" in task_desc and after_data.get("nature") == "Interactive":
+            lead_id = after_data.get("leadId")
+            if lead_id:
+                print(f"Follow-up task '{task_desc}' completed for lead {lead_id}. Logging interaction to advance AFC.")
+                # Log a "Followup" interaction to trigger the logProcessor
+                interaction = {
+                    "leadId": lead_id,
+                    "createdAt": firestore.SERVER_TIMESTAMP,
+                    "quickLogType": "Followup",
+                    "notes": f"System generated: Completed task '{task_desc}'.",
+                }
+                db.collection("interactions").add(interaction)
+
+
 @firestore_fn.on_document_created(document="interactions/{interactionId}")
 def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
@@ -153,7 +180,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
                 print(f"AFC cycle complete for {lead_id}. Status set to {new_status}.")
             return # End here for unresponsive, don't schedule 1st follow-up
 
-    # --- AFC Reset Logic for "Unchanged" or other responsive logs ---
+    # --- AFC Reset Logic for "Followup", "Unchanged", or other responsive logs ---
     # Delete any other pending "Follow-up" tasks to avoid duplicates
     pending_follow_ups_query = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False).stream()
     for task in pending_follow_ups_query:
