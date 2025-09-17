@@ -40,22 +40,29 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
     An HTTP-triggered function to import contacts from a CSV file.
     Expects a JSON payload with 'csvData', 'relationship', and 'isNew'.
     """
-    # Force redeploy comment
+    # Force redeploy comment.
     # Handle CORS preflight requests
     if req.method == "OPTIONS":
         headers = {
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
             "Access-Control-Max-Age": "3600",
         }
-        return https_fn.Response("", headers=headers)
+        return https_fn.Response("", status=204, headers=headers)
 
     headers = {"Access-Control-Allow-Origin": "*"}
     
     try:
-        req_data = req.get_json()
-        csv_data_string = req_data['csvData']
+        req_data = req.get_json(silent=True)
+        if not req_data:
+             return https_fn.Response(
+                {"error": "Invalid JSON payload."},
+                status=400,
+                headers=headers
+            )
+
+        csv_data_string = req_data.get('csvData')
         default_relationship = req_data.get('relationship', 'Lead')
         is_new_mode = req_data.get('isNew', True)
 
@@ -233,7 +240,8 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             
             # If this is a reschedule, delete old event tasks first.
             if event_details.get("rescheduledFrom"):
-                delete_event_tasks(lead_id, event_type)
+                old_event_type = event_details.get("type")
+                delete_event_tasks(lead_id, old_event_type)
 
             # Pause AFC by completing open interactive tasks
             complete_open_interactive_tasks(lead_id)
@@ -252,8 +260,10 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
         
         # This handles logs like 'Event Completed' or 'Event Cancelled'
         elif "Event" in interaction_data.get("notes", "") and "marked as Cancelled" in interaction_data.get("notes", ""):
-            event_type = interaction_data.get("notes", "").split(" ")[1]
-            delete_event_tasks(lead_id, event_type)
+            # Note: This logic is brittle. A better approach would be a dedicated field.
+            event_details = interaction_data.get("eventDetails", {})
+            event_type_from_log = interaction_data.get("notes", "").split(" ")[1]
+            delete_event_tasks(lead_id, event_type_from_log)
             print(f"Deleted tasks for cancelled event for lead {lead_id}")
             
         return # End processing for outcomes
@@ -391,8 +401,11 @@ def delete_pending_followups(lead_id: str):
 
 def delete_event_tasks(lead_id: str, event_type: str):
     """Deletes reminder and confirmation tasks for a given event."""
+    if not event_type:
+        print(f"Cannot delete event tasks for lead {lead_id}: event_type is missing.")
+        return
+        
     tasks_ref = db.collection("tasks")
-    # This query needs to be less specific to catch rescheduled tasks
     q = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False)
     
     reminder_desc = f"Remind about {event_type}"
@@ -408,11 +421,12 @@ def delete_event_tasks(lead_id: str, event_type: str):
 
 def reset_afc_for_engagement(lead_id: str, lead_name: str):
     """Resets the AFC cycle for an engaged lead."""
+    lead_ref = db.collection("leads").document(lead_id)
     # Delete any other pending "Follow-up" tasks to avoid duplicates
     delete_pending_followups(lead_id)
         
     # Reset AFC step and create a new 1st follow-up task for tomorrow
-    db.collection("leads").document(lead_id).update({"afc_step": 1}) # Start at step 1
+    lead_ref.update({"afc_step": 1}) # Start at step 1
     due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
     create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
