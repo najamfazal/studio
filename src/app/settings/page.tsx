@@ -14,6 +14,7 @@ import { Loader2, Plus, Settings, Trash2, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 
@@ -208,7 +209,8 @@ export default function SettingsPage() {
         <div className="flex flex-col min-h-screen bg-background">
             <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-10">
                 <div className="flex items-center gap-3">
-                    <Settings className="h-8 w-8 text-primary" />
+                    <SidebarTrigger />
+                    <Settings className="h-8 w-8 text-primary hidden sm:block" />
                     <h1 className="text-xl font-bold tracking-tight">App Settings</h1>
                 </div>
             </header>
@@ -372,5 +374,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    
