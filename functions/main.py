@@ -1,3 +1,4 @@
+
 from firebase_functions import firestore_fn, options, scheduler_fn
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
@@ -51,33 +52,6 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
     create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
-
-
-@firestore_fn.on_document_updated(document="tasks/{taskId}")
-def onTaskUpdate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
-    """
-    Triggers when a task is updated, specifically to handle AFC advancement
-    when a follow-up task is marked as complete.
-    """
-    before_data = event.data.before.to_dict()
-    after_data = event.data.after.to_dict()
-
-    # Check if the task was just marked as completed
-    if before_data.get("completed") == False and after_data.get("completed") == True:
-        task_desc = after_data.get("description", "")
-        # Check if it was an interactive follow-up task
-        if "Follow-up" in task_desc and after_data.get("nature") == "Interactive":
-            lead_id = after_data.get("leadId")
-            if lead_id:
-                print(f"Follow-up task '{task_desc}' completed for lead {lead_id}. Logging interaction to advance AFC.")
-                # Log a "Followup" interaction to trigger the logProcessor
-                interaction = {
-                    "leadId": lead_id,
-                    "createdAt": firestore.SERVER_TIMESTAMP,
-                    "quickLogType": "Followup",
-                    "notes": f"System generated: Completed task '{task_desc}'.",
-                }
-                db.collection("interactions").add(interaction)
 
 
 @firestore_fn.on_document_created(document="interactions/{interactionId}")
@@ -235,5 +209,3 @@ def afcDailyAdvancer(event: scheduler_fn.ScheduledEvent) -> None:
         db.collection("interactions").add(interaction)
         
         print(f"Logged 'Unresponsive' for lead {lead_id} to advance AFC.")
-
-    
