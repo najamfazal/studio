@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNowStrict } from 'date-fns';
 import { ArrowLeft, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const INTERACTION_INITIAL_PAGE_SIZE = 5;
 const INTERACTION_LOAD_MORE_SIZE = 10;
@@ -326,6 +327,22 @@ export default function ContactDetailPage() {
     return false;
   }
 
+  const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
+    const parts: string[] = [];
+    for (const key in feedbackData) {
+        const category = key as FeedbackCategory;
+        const feedbackItem = feedbackData[category];
+        if (feedbackItem) {
+            let part = `Feedback on ${category}: ${feedbackItem.perception}`;
+            if (feedbackItem.objections && feedbackItem.objections.length > 0) {
+                part += ` (${feedbackItem.objections.join(', ')})`;
+            }
+            parts.push(part);
+        }
+    }
+    return parts.join('; ');
+  };
+
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -526,46 +543,61 @@ export default function ContactDetailPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Log History</CardTitle>
+              <CardTitle className="text-lg font-normal">Log History</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {isInteractionsLoading && interactions.length === 0 && (
-                <div className="flex justify-center p-4">
-                  <Loader2 className="animate-spin" />
-                </div>
-              )}
-              {interactions.length > 0 && (
-                <div className="space-y-3">
-                  {interactions.map(interaction => (
-                    <div key={interaction.id} className="text-sm p-3 bg-muted/50 rounded-lg">
-                      <div className="flex justify-between items-center mb-1">
-                          <p className="font-semibold">
-                              {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
-                               interaction.feedback ? 'Feedback Logged' :
-                               interaction.outcome ? `Outcome: ${interaction.outcome}` : 
-                               interaction.notes ? 'Note' :
-                               'Interaction'}
+              <TooltipProvider>
+                {isInteractionsLoading && interactions.length === 0 && (
+                  <div className="flex justify-center p-4">
+                    <Loader2 className="animate-spin" />
+                  </div>
+                )}
+                {interactions.length > 0 && (
+                  <div className="space-y-3">
+                    {interactions.map(interaction => {
+                      const interactionDate = toDate(interaction.createdAt)!;
+                      return (
+                        <div key={interaction.id} className="text-sm p-3 bg-muted/50 rounded-lg">
+                          <div className="flex justify-between items-center mb-1">
+                              <p className="font-semibold capitalize">
+                                  {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
+                                  interaction.feedback ? 'Feedback' :
+                                  interaction.outcome ? `Outcome: ${interaction.outcome}` : 
+                                  interaction.notes ? 'Note' :
+                                  'Interaction'}
+                              </p>
+                              <Tooltip delayDuration={300}>
+                                  <TooltipTrigger>
+                                      <p className="text-xs text-muted-foreground hover:text-foreground cursor-default">
+                                          {formatDistanceToNowStrict(interactionDate, { addSuffix: true })}
+                                      </p>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                      <p className="text-xs">{format(interactionDate, 'PP p')}</p>
+                                  </TooltipContent>
+                              </Tooltip>
+                          </div>
+                          <p className="text-muted-foreground">
+                            {interaction.feedback ? formatFeedbackLog(interaction.feedback) : interaction.notes}
                           </p>
-                          <p className="text-xs text-muted-foreground">{format(toDate(interaction.createdAt)!, 'PP p')}</p>
-                      </div>
-                      {interaction.notes && <p className="text-muted-foreground">{interaction.notes}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {!isInteractionsLoading && interactions.length === 0 && (
-                <p className="text-sm text-center text-muted-foreground p-4">No interactions have been logged yet.</p>
-              )}
-              {hasMoreInteractions && (
-                <div className="flex justify-center">
-                  <Button variant="outline" onClick={() => fetchInteractions(true)} disabled={isInteractionsLoading}>
-                    {isInteractionsLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
-                  </Button>
-                </div>
-              )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {!isInteractionsLoading && interactions.length === 0 && (
+                  <p className="text-sm text-center text-muted-foreground p-4">No interactions have been logged yet.</p>
+                )}
+                {hasMoreInteractions && (
+                  <div className="flex justify-center">
+                    <Button variant="outline" onClick={() => fetchInteractions(true)} disabled={isInteractionsLoading}>
+                      {isInteractionsLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
+                    </Button>
+                  </div>
+                )}
+              </TooltipProvider>
             </CardContent>
           </Card>
-
       </TabsContent>
     </Tabs>
   );
