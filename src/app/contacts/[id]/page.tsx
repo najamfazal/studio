@@ -5,12 +5,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { format, parseISO, formatDistanceToNowStrict } from 'date-fns';
-import { ArrowLeft, Check, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import { addDays, format, formatDistanceToNowStrict, isAfter, isToday, parseISO } from 'date-fns';
+import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment, InteractionFeedback, QuickLogType, Task } from '@/lib/types';
+import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment, InteractionFeedback, QuickLogType, Task, InteractionEventDetails, OutcomeType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -20,12 +20,14 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 const INTERACTION_PAGE_SIZE = 5;
 const TASK_PAGE_SIZE = 5;
@@ -50,6 +52,9 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: QuickLog
   { value: "Enrolled", label: "Enrolled", multistep: null },
 ];
 
+const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
+const popularTimes = ["12:00", "15:00", "17:00", "19:00"];
+
 export default function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -62,6 +67,7 @@ export default function ContactDetailPage() {
 
   // Interactions state
   const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [scheduledEvents, setScheduledEvents] = useState<Interaction[]>([]);
   const [isInteractionsLoading, setIsInteractionsLoading] = useState(true);
   const [lastInteraction, setLastInteraction] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreInteractions, setHasMoreInteractions] = useState(true);
@@ -86,10 +92,24 @@ export default function ContactDetailPage() {
   const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
   const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'submitted'>('idle');
   const [withdrawalReasons, setWithdrawalReasons] = useState<string[]>([]);
+
+  // Outcome Log State
+  const [selectedOutcome, setSelectedOutcome] = useState<OutcomeType | null>(null);
+  const [isLoggingOutcome, setIsLoggingOutcome] = useState(false);
+  const [outcomeNotes, setOutcomeNotes] = useState("");
+  const [followUpDate, setFollowUpDate] = useState<Date | undefined>(undefined);
+  const [eventDetails, setEventDetails] = useState<{ type: string, dateTime: Date | undefined }>({ type: "", dateTime: undefined });
   
-  const fetchData = useCallback(async () => {
+  // Event Management State
+  const [eventToManage, setEventToManage] = useState<Interaction | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>(undefined);
+  const [isEventActionLoading, setIsEventActionLoading] = useState(false);
+
+
+  const fetchLeadAndEvents = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Fetch lead data
       const leadDocRef = doc(db, 'leads', id);
       const leadDoc = await getDoc(leadDocRef);
       if (leadDoc.exists()) {
@@ -97,13 +117,26 @@ export default function ContactDetailPage() {
       } else {
         toast({ variant: 'destructive', title: 'Contact not found.' });
         router.push('/contacts');
+        return;
       }
-
+      
+      // Fetch App Settings
       const settingsDocRef = doc(db, 'settings', 'appConfig');
       const settingsDoc = await getDoc(settingsDocRef);
       if(settingsDoc.exists()) {
         setAppSettings(settingsDoc.data() as AppSettings);
       }
+      
+      // Fetch active scheduled events
+      const eventsQuery = query(
+        collection(db, "interactions"), 
+        where("leadId", "==", id), 
+        where("outcome", "==", "Event Scheduled"),
+        where("eventDetails.status", "==", "Scheduled")
+      );
+      const eventsSnapshot = await getDocs(eventsQuery);
+      const eventData = eventsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Interaction));
+      setScheduledEvents(eventData);
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -147,7 +180,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast]); // Removed lastInteraction from dependencies
+  }, [id, toast]); // lastInteraction removed from deps to fix infinite loop
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -155,9 +188,9 @@ export default function ContactDetailPage() {
     
     try {
       const isCompleted = type === 'past';
-      const lastVisible = type === 'active' ? lastActiveTask : lastPastTask;
+      const lastVisible = loadMore ? (type === 'active' ? lastActiveTask : lastPastTask) : null;
 
-      const qConstraints = [
+      const qConstraints: any[] = [
         where('leadId', '==', id),
         where('completed', '==', isCompleted),
         orderBy('createdAt', 'desc'),
@@ -194,10 +227,10 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     if (id) {
-      fetchData();
+      fetchLeadAndEvents();
       fetchInteractions();
     }
-  }, [id, fetchData, fetchInteractions]);
+  }, [id, fetchLeadAndEvents, fetchInteractions]);
 
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksLoaded) {
@@ -361,17 +394,129 @@ export default function ContactDetailPage() {
         return;
     }
     setIsLoggingFeedback(true);
-    await addDoc(collection(db, "interactions"), {
-      feedback,
+    try {
+      await addDoc(collection(db, "interactions"), {
+        feedback,
+        leadId: id,
+        createdAt: new Date().toISOString(),
+      });
+      setFeedback({});
+      setActiveChipCategory(null);
+      toast({ title: "Feedback logged" });
+      fetchInteractions();
+    } catch (e) {
+      toast({variant: 'destructive', title: 'Failed to log feedback.'})
+    } finally {
+      setIsLoggingFeedback(false);
+    }
+  }
+
+  const handleLogOutcome = async () => {
+    if (!selectedOutcome) return;
+    setIsLoggingOutcome(true);
+
+    let interactionPayload: Partial<Interaction> = {
       leadId: id,
       createdAt: new Date().toISOString(),
-    });
-    setFeedback({});
-    setActiveChipCategory(null);
-    setIsLoggingFeedback(false);
-    toast({ title: "Feedback logged" });
-    fetchInteractions();
-  }
+      outcome: selectedOutcome,
+    };
+
+    if (selectedOutcome === 'Info') {
+      if (!outcomeNotes) {
+        toast({ variant: 'destructive', title: 'Info notes cannot be empty.' });
+        setIsLoggingOutcome(false);
+        return;
+      }
+      interactionPayload.notes = outcomeNotes;
+    } else if (selectedOutcome === 'Later') {
+      if (!followUpDate) {
+        toast({ variant: 'destructive', title: 'Please select a follow-up date.' });
+        setIsLoggingOutcome(false);
+        return;
+      }
+      interactionPayload.followUpDate = followUpDate.toISOString();
+    } else if (selectedOutcome === 'Event Scheduled') {
+      if (!eventDetails.type || !eventDetails.dateTime) {
+        toast({ variant: 'destructive', title: 'Please select event type and date/time.' });
+        setIsLoggingOutcome(false);
+        return;
+      }
+      interactionPayload.eventDetails = {
+        type: eventDetails.type,
+        dateTime: eventDetails.dateTime.toISOString(),
+        status: 'Scheduled',
+      };
+    }
+
+    try {
+      await addDoc(collection(db, 'interactions'), interactionPayload);
+      toast({ title: 'Outcome logged successfully.' });
+      // Reset state and refetch data
+      setSelectedOutcome(null);
+      setOutcomeNotes('');
+      setFollowUpDate(undefined);
+      setEventDetails({ type: '', dateTime: undefined });
+      fetchInteractions(); // refresh logs
+      fetchLeadAndEvents(); // refresh summary & event pill
+    } catch (error) {
+      console.error("Error logging outcome:", error);
+      toast({ variant: 'destructive', title: 'Failed to log outcome.' });
+    } finally {
+      setIsLoggingOutcome(false);
+    }
+  };
+  
+  const handleEventManagement = async (action: 'Completed' | 'Cancelled' | 'Rescheduled') => {
+    if (!eventToManage) return;
+    setIsEventActionLoading(true);
+
+    try {
+        if (action === 'Rescheduled') {
+            if (!rescheduleDate) {
+                toast({variant: 'destructive', title: 'Please select a new date.'});
+                setIsEventActionLoading(false);
+                return;
+            }
+            // Update original event to cancelled
+            await updateDoc(doc(db, 'interactions', eventToManage.id), { 'eventDetails.status': 'Cancelled' });
+            // Create new event
+            await addDoc(collection(db, 'interactions'), {
+                leadId: id,
+                createdAt: new Date().toISOString(),
+                outcome: 'Event Scheduled',
+                eventDetails: {
+                    ...eventToManage.eventDetails,
+                    status: 'Scheduled',
+                    dateTime: rescheduleDate.toISOString(),
+                    rescheduledFrom: eventToManage.eventDetails?.dateTime,
+                },
+                notes: `Rescheduled from ${format(toDate(eventToManage.eventDetails!.dateTime)!, 'PPp')}`
+            });
+            toast({title: 'Event Rescheduled'});
+
+        } else { // Completed or Cancelled
+            await updateDoc(doc(db, 'interactions', eventToManage.id), { 'eventDetails.status': action });
+            await addDoc(collection(db, 'interactions'), {
+                leadId: id,
+                createdAt: new Date().toISOString(),
+                notes: `Event marked as ${action}`
+            });
+            toast({title: `Event ${action}`});
+        }
+        
+        // Refresh data
+        fetchLeadAndEvents();
+        fetchInteractions();
+        setEventToManage(null);
+        setRescheduleDate(undefined);
+
+    } catch (error) {
+        console.error(`Error handling event ${action}:`, error);
+        toast({variant: 'destructive', title: `Failed to update event.`});
+    } finally {
+        setIsEventActionLoading(false);
+    }
+  };
 
   const availableTraits = useMemo(() => {
     if (!appSettings?.commonTraits || !lead?.traits) return [];
@@ -403,21 +548,28 @@ export default function ContactDetailPage() {
     if (quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) return true;
     return false;
   }
+  
+  const setEventTime = (time: string) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    const newDateTime = produce(eventDetails.dateTime || new Date(), draft => {
+      draft.setHours(hours, minutes, 0, 0);
+    });
+    setEventDetails(prev => ({...prev, dateTime: newDateTime}));
+  }
 
   const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
-    const parts: string[] = [];
-    for (const key in feedbackData) {
-        const category = key as FeedbackCategory;
-        const feedbackItem = feedbackData[category];
-        if (feedbackItem) {
+    return (Object.keys(feedbackData) as FeedbackCategory[])
+        .map(category => {
+            const feedbackItem = feedbackData[category];
+            if (!feedbackItem) return '';
             let part = `${category}: ${feedbackItem.perception}`;
             if (feedbackItem.objections && feedbackItem.objections.length > 0) {
                 part += ` (${feedbackItem.objections.join(', ')})`;
             }
-            parts.push(part);
-        }
-    }
-    return parts.join('; ');
+            return part;
+        })
+        .filter(Boolean)
+        .join('; ');
   };
   
   const formatRelativeTime = (date: Date) => {
@@ -436,15 +588,26 @@ export default function ContactDetailPage() {
   }
   
   const renderLeadView = () => {
+    const upcomingEvent = scheduledEvents.length > 0 ? scheduledEvents[0] : null;
+
     return (
       <Tabs defaultValue="summary" onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks</TabsTrigger>
+          <TabsTrigger value="tasks">Tasks/Events</TabsTrigger>
         </TabsList>
         
         <TabsContent value="summary" className="space-y-4">
+          {upcomingEvent && (
+            <Card>
+              <CardContent className="p-3">
+                <p className="text-sm font-semibold text-center">
+                  Upcoming: {upcomingEvent.eventDetails?.type} on {format(toDate(upcomingEvent.eventDetails!.dateTime)!, 'MMM d @ p')}
+                </p>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader className="p-4"><CardTitle className="text-lg">Commitment Snapshot</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0 space-y-4">
@@ -507,7 +670,7 @@ export default function ContactDetailPage() {
           </div>
         </TabsContent>
         
-        <TabsContent value="logs" className="space-y-6">
+        <TabsContent value="logs" className="space-y-4">
             <Card className="relative overflow-hidden min-h-[148px]">
               <AnimatePresence initial={false}>
                 <motion.div
@@ -520,13 +683,13 @@ export default function ContactDetailPage() {
                 >
                   {quickLogStep === 'initial' && (
                     <>
-                      <CardHeader className="flex-row items-center justify-between">
+                      <CardHeader className="flex-row items-center justify-between p-4">
                           <CardTitle className="text-lg font-normal">Quick Log</CardTitle>
                           <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
                               {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                           </Button>
                       </CardHeader>
-                      <CardContent className="flex flex-wrap gap-2">
+                      <CardContent className="flex flex-wrap gap-2 p-4 pt-0">
                         {quickLogOptions.map(opt => (
                           <Button 
                               key={opt.value} 
@@ -542,7 +705,7 @@ export default function ContactDetailPage() {
                   )}
                   {quickLogStep === 'withdrawn' && (
                     <>
-                      <CardHeader>
+                      <CardHeader className="p-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
@@ -556,7 +719,7 @@ export default function ContactDetailPage() {
                               </Button>
                         </div>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-4 pt-0">
                         <div className="flex flex-wrap gap-2">
                           {(appSettings.withdrawalReasons || []).map(reason => (
                             <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
@@ -583,13 +746,13 @@ export default function ContactDetailPage() {
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between p-4">
                 <CardTitle className="text-lg font-normal">Log Feedback</CardTitle>
                 <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
                   {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
                 </Button>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 p-4 pt-0">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   {(['content', 'schedule', 'price'] as FeedbackCategory[]).map(category => (
                     <div key={category}>
@@ -628,12 +791,102 @@ export default function ContactDetailPage() {
                 )}
               </CardContent>
             </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between p-4">
+                  <CardTitle className="text-lg font-normal">Log Outcome</CardTitle>
+                  <Button onClick={handleLogOutcome} disabled={isLoggingOutcome || !selectedOutcome} size="icon" variant="ghost">
+                      {isLoggingOutcome ? <Loader2 className="animate-spin" /> : <Send />}
+                  </Button>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4 pt-0">
+                  <div className="flex items-center justify-center gap-2">
+                      {(['Info', 'Later', 'Event Scheduled'] as OutcomeType[]).map(outcome => (
+                          <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} onClick={() => setSelectedOutcome(o => o === outcome ? null : outcome)}>
+                              {outcome === 'Info' && <Info className="mr-2 h-4 w-4"/>}
+                              {outcome === 'Later' && <CalendarClock className="mr-2 h-4 w-4"/>}
+                              {outcome === 'Event Scheduled' && <CalendarPlus className="mr-2 h-4 w-4"/>}
+                              {outcome === 'Event Scheduled' ? 'Event' : outcome}
+                          </Button>
+                      ))}
+                  </div>
+
+                  {selectedOutcome && <Separator />}
+
+                  {selectedOutcome === 'Info' && (
+                      <Textarea placeholder="Enter info/details to be sent to the lead..." value={outcomeNotes} onChange={e => setOutcomeNotes(e.target.value)} />
+                  )}
+
+                  {selectedOutcome === 'Later' && (
+                      <div className="space-y-2">
+                          <p className="text-sm font-medium text-center">When to follow up?</p>
+                          <div className="flex justify-center">
+                              <Popover>
+                                  <PopoverTrigger asChild>
+                                      <Button variant="outline">
+                                          <CalendarIcon className="mr-2 h-4 w-4" />
+                                          {followUpDate ? format(followUpDate, 'PPP') : 'Select a date'}
+                                      </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0">
+                                      <Calendar mode="single" selected={followUpDate} onSelect={setFollowUpDate} initialFocus />
+                                  </PopoverContent>
+                              </Popover>
+                          </div>
+                           <div className="flex justify-center gap-2">
+                              <Button size="sm" variant="ghost" onClick={() => setFollowUpDate(addDays(new Date(), 1))}>Tomorrow</Button>
+                              <Button size="sm" variant="ghost" onClick={() => setFollowUpDate(addDays(new Date(), 2))}>Day-after</Button>
+                              <Button size="sm" variant="ghost" onClick={() => setFollowUpDate(addDays(new Date(), 7))}>Next Week</Button>
+                          </div>
+                      </div>
+                  )}
+
+                  {selectedOutcome === 'Event Scheduled' && (
+                      <div className="space-y-4">
+                          <Select value={eventDetails.type} onValueChange={val => setEventDetails(prev => ({...prev, type: val}))}>
+                              <SelectTrigger>
+                                  <SelectValue placeholder="Select event type..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  {eventTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                              </SelectContent>
+                          </Select>
+                          <div className="flex items-center justify-center gap-2">
+                              <Popover>
+                                  <PopoverTrigger asChild>
+                                      <Button variant="outline" className="w-full justify-start font-normal">
+                                          <CalendarIcon className="mr-2 h-4 w-4" />
+                                          {eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select date'}
+                                      </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0">
+                                      <Calendar mode="single" selected={eventDetails.dateTime} onSelect={d => setEventDetails(prev => ({...prev, dateTime: d}))} initialFocus />
+                                  </PopoverContent>
+                              </Popover>
+                               <Popover>
+                                  <PopoverTrigger asChild>
+                                      <Button variant="outline" className="w-full justify-start font-normal">
+                                          <CalendarClock className="mr-2 h-4 w-4" />
+                                          {eventDetails.dateTime ? format(eventDetails.dateTime, 'p') : 'Select time'}
+                                      </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-2">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {popularTimes.map(time => <Button key={time} variant="ghost" size="sm" onClick={() => setEventTime(time)}>{time}</Button>)}
+                                      </div>
+                                  </PopoverContent>
+                              </Popover>
+                          </div>
+                      </div>
+                  )}
+              </CardContent>
+          </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="p-4">
                 <CardTitle className="text-lg font-normal">Log History</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 p-4 pt-0">
                 <TooltipProvider>
                   {(isInteractionsLoading && interactions.length === 0) && (
                     <div className="flex justify-center p-4">
@@ -665,8 +918,10 @@ export default function ContactDetailPage() {
                                     </TooltipContent>
                                 </Tooltip>
                             </div>
-                            <p className="text-muted-foreground capitalize">
-                              {interaction.feedback ? formatFeedbackLog(interaction.feedback) : interaction.notes}
+                            <p className="text-muted-foreground capitalize text-xs">
+                              {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
+                               : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
+                               : interaction.notes}
                             </p>
                           </div>
                         )
@@ -689,11 +944,25 @@ export default function ContactDetailPage() {
         </TabsContent>
         
         <TabsContent value="tasks" className="space-y-4">
+          {scheduledEvents.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground px-1">Upcoming Events</h3>
+              {scheduledEvents.map(event => (
+                <Button key={event.id} variant="outline" className="w-full justify-between h-auto py-2" onClick={() => setEventToManage(event)}>
+                  <div className="text-left">
+                    <p className="font-semibold">{event.eventDetails?.type}</p>
+                    <p className="text-xs text-muted-foreground">{format(toDate(event.eventDetails!.dateTime)!, 'PP @ p')}</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground"/>
+                </Button>
+              ))}
+            </div>
+          )}
           <Card>
             <CardHeader className="p-4"><CardTitle className="text-lg">Active Tasks</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0">
               {isTasksLoading && activeTasks.length === 0 && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
-              {!isTasksLoading && activeTasks.length > 0 && (
+              {activeTasks.length > 0 && (
                 <div className="space-y-2">
                   {activeTasks.map(task => (
                     <div key={task.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
@@ -718,7 +987,7 @@ export default function ContactDetailPage() {
             <CardHeader className="p-4"><CardTitle className="text-lg">Past Tasks</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0">
               {isTasksLoading && pastTasks.length === 0 && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
-              {!isTasksLoading && pastTasks.length > 0 && (
+              {pastTasks.length > 0 && (
                  <div className="space-y-2">
                   {pastTasks.map(task => (
                     <div key={task.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
@@ -800,6 +1069,47 @@ export default function ContactDetailPage() {
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         {lead.relationship === 'Learner' ? renderLearnerView() : renderLeadView()}
       </main>
+
+       <AlertDialog open={!!eventToManage} onOpenChange={(open) => {if (!open) setEventToManage(null)}}>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                  <AlertDialogTitle>Manage Event: {eventToManage?.eventDetails?.type}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      What would you like to do with this event?
+                  </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="py-4 space-y-4">
+                  <Button variant="outline" className="w-full" onClick={() => handleEventManagement('Completed')}>Mark as Completed</Button>
+                  <Button variant="outline" className="w-full" onClick={() => handleEventManagement('Cancelled')}>Cancel Event</Button>
+                  <div className="space-y-2">
+                      <p className="text-sm font-medium text-center">Or reschedule:</p>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" className="w-full">
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {rescheduleDate ? format(rescheduleDate, 'PPP p') : 'Select new date & time'}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={rescheduleDate} onSelect={setRescheduleDate} />
+                                <div className="p-2 border-t grid grid-cols-2 gap-2">
+                                    {popularTimes.map(time => {
+                                        const [h,m] = time.split(':').map(Number);
+                                        return <Button key={time} variant="ghost" size="sm" onClick={() => setRescheduleDate(d => { const newD = d || new Date(); newD.setHours(h,m,0,0); return new Date(newD); })}>{time}</Button>
+                                    })}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                        <Button className="w-full" onClick={() => handleEventManagement('Rescheduled')} disabled={!rescheduleDate || isEventActionLoading}>
+                          {isEventActionLoading && <Loader2 className="animate-spin mr-2"/>} Reschedule
+                        </Button>
+                  </div>
+              </div>
+               <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setEventToManage(null)}>Close</AlertDialogCancel>
+                </AlertDialogFooter>
+          </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

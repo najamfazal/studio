@@ -97,6 +97,8 @@ export type InteractionEventDetails = {
 
 export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged' | 'Followup';
 
+export type OutcomeType = 'Info' | 'Later' | 'Event Scheduled';
+
 export type Interaction = {
   id: string;
   leadId: string;
@@ -108,7 +110,8 @@ export type Interaction = {
 
   // For detailed logs from the lead page
   feedback?: InteractionFeedback;
-  outcome?: string; // e.g. "Event Scheduled"
+  outcome?: OutcomeType;
+  followUpDate?: string; // For 'Later' outcome
   eventDetails?: InteractionEventDetails;
   notes?: string;
 };
