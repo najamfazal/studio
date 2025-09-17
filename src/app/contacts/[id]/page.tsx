@@ -120,7 +120,7 @@ export default function ContactDetailPage() {
       const qConstraints = [
         where('leadId', '==', id),
         orderBy('createdAt', 'desc'),
-        limit(INTERACTION_PAGE_SIZE)
+        limit(loadMore ? 10 : INTERACTION_PAGE_SIZE)
       ];
 
       if (loadMore && lastInteraction) {
@@ -131,7 +131,7 @@ export default function ContactDetailPage() {
       const snapshot = await getDocs(q);
       const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
 
-      setHasMoreInteractions(newInteractions.length === INTERACTION_PAGE_SIZE);
+      setHasMoreInteractions(newInteractions.length === (loadMore ? 10 : INTERACTION_PAGE_SIZE));
       setLastInteraction(snapshot.docs[snapshot.docs.length - 1] || null);
 
       setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
@@ -432,10 +432,10 @@ export default function ContactDetailPage() {
           <TabsTrigger value="tasks">Tasks</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="summary" className="space-y-6">
+        <TabsContent value="summary" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>Commitment Snapshot</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+            <CardHeader className="p-4"><CardTitle className="text-lg">Commitment Snapshot</CardTitle></CardHeader>
+            <CardContent className="p-4 pt-0 space-y-4">
               <div className="flex items-start gap-4">
                 <div className="flex-grow-[3]">
                   <EditableField label="Course" value={lead.commitmentSnapshot?.course || ""} onSave={(val) => handleUpdate('commitmentSnapshot.course', val)} type="select" selectOptions={appSettings.courseNames || []} placeholder="Select a course"/>
@@ -453,10 +453,10 @@ export default function ContactDetailPage() {
             </CardContent>
           </Card>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
-              <CardHeader><CardTitle>Traits</CardTitle></CardHeader>
-              <CardContent>
+              <CardHeader className="p-4"><CardTitle className="text-lg">Traits</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0">
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-2">
                     {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
@@ -479,8 +479,8 @@ export default function ContactDetailPage() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle>Insights</CardTitle></CardHeader>
-              <CardContent>
+              <CardHeader className="p-4"><CardTitle className="text-lg">Insights</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0">
                   <div className="space-y-4">
                       <div className="flex flex-wrap gap-2">
                           {(lead.insights || []).map(insight => <Badge key={insight} variant="outline">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
@@ -572,9 +572,7 @@ export default function ContactDetailPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg font-normal">Log Feedback</CardTitle>
-                </div>
+                <CardTitle className="text-lg font-normal">Log Feedback</CardTitle>
                 <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
                   {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
                 </Button>
@@ -678,10 +676,10 @@ export default function ContactDetailPage() {
             </Card>
         </TabsContent>
         
-        <TabsContent value="tasks" className="space-y-6">
+        <TabsContent value="tasks" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>Active Tasks</CardTitle></CardHeader>
-            <CardContent>
+            <CardHeader className="p-4"><CardTitle className="text-lg">Active Tasks</CardTitle></CardHeader>
+            <CardContent className="p-4 pt-0">
               {isTasksLoading && activeTasks.length === 0 && <div className="flex justify-center"><Loader2 className="animate-spin" /></div>}
               {activeTasks.length > 0 ? (
                 <div className="space-y-2">
@@ -704,8 +702,8 @@ export default function ContactDetailPage() {
             </CardContent>
           </Card>
            <Card>
-            <CardHeader><CardTitle>Past Tasks</CardTitle></CardHeader>
-            <CardContent>
+            <CardHeader className="p-4"><CardTitle className="text-lg">Past Tasks</CardTitle></CardHeader>
+            <CardContent className="p-4 pt-0">
               {isTasksLoading && pastTasks.length === 0 && <div className="flex justify-center"><Loader2 className="animate-spin" /></div>}
               {pastTasks.length > 0 ? (
                  <div className="space-y-2">
@@ -792,4 +790,3 @@ export default function ContactDetailPage() {
   );
 }
 
-    
