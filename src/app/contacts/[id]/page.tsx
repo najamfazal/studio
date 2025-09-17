@@ -333,7 +333,7 @@ export default function ContactDetailPage() {
         const category = key as FeedbackCategory;
         const feedbackItem = feedbackData[category];
         if (feedbackItem) {
-            let part = `Feedback on ${category}: ${feedbackItem.perception}`;
+            let part = `${category}: ${feedbackItem.perception}`;
             if (feedbackItem.objections && feedbackItem.objections.length > 0) {
                 part += ` (${feedbackItem.objections.join(', ')})`;
             }
@@ -342,265 +342,279 @@ export default function ContactDetailPage() {
     }
     return parts.join('; ');
   };
+  
+  const formatRelativeTime = (date: Date) => {
+    const distance = formatDistanceToNowStrict(date, { addSuffix: true });
+    // Manual replacements for shorter versions
+    return distance
+      .replace(/ seconds| second/, 's')
+      .replace(/ minutes| minute/, 'm')
+      .replace(/ hours| hour/, 'h')
+      .replace(/ days| day/, 'd')
+      .replace(/ months| month/, 'mo')
+      .replace(/ years| year/, 'y');
+  };
 
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  const renderLeadView = () => (
-    <Tabs defaultValue="summary">
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="summary">Summary</TabsTrigger>
-        <TabsTrigger value="logs">Logs</TabsTrigger>
-      </TabsList>
-      
-      <TabsContent value="summary" className="space-y-6">
-        <Card>
-          <CardHeader><CardTitle>Commitment Snapshot</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="flex-grow-[3]">
-                <EditableField label="Course" value={lead.commitmentSnapshot?.course || ""} onSave={(val) => handleUpdate('commitmentSnapshot.course', val)} type="select" selectOptions={appSettings.courseNames || []} placeholder="Select a course"/>
-              </div>
-              <div className="flex-grow-[1]">
-                <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
-              </div>
-            </div>
-             <div>
-               <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || ""} onSave={(val) => handleUpdate('commitmentSnapshot.schedule', val)} placeholder="Enter schedule"/>
-             </div>
-            <div>
-              <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
-            </div>
-          </CardContent>
-        </Card>
+  const renderLeadView = () => {
+    return (
+      <Tabs defaultValue="summary">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="summary">Summary</TabsTrigger>
+          <TabsTrigger value="logs">Logs</TabsTrigger>
+        </TabsList>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TabsContent value="summary" className="space-y-6">
           <Card>
-            <CardHeader><CardTitle>Traits</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
+            <CardHeader><CardTitle>Commitment Snapshot</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-grow-[3]">
+                  <EditableField label="Course" value={lead.commitmentSnapshot?.course || ""} onSave={(val) => handleUpdate('commitmentSnapshot.course', val)} type="select" selectOptions={appSettings.courseNames || []} placeholder="Select a course"/>
                 </div>
-                 <Select onValueChange={(value) => handleAddChip('traits', value)} value="">
-                    <SelectTrigger>
-                        <SelectValue placeholder="Add a trait..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {availableTraits.length > 0 ? (
-                            availableTraits.map(trait => (
-                                <SelectItem key={trait} value={trait}>{trait}</SelectItem>
-                            ))
-                        ) : (
-                            <div className="p-2 text-sm text-muted-foreground text-center">No more traits to add.</div>
-                        )}
-                    </SelectContent>
-                </Select>
+                <div className="flex-grow-[1]">
+                  <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle>Insights</CardTitle></CardHeader>
-            <CardContent>
-                <div className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                        {(lead.insights || []).map(insight => <Badge key={insight} variant="outline">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
-                    </div>
-                    <div className="flex gap-2">
-                        <Input value={newInsight} onChange={e => setNewInsight(e.target.value)} placeholder="Add an insight..."/>
-                        <Button size="icon" onClick={() => handleAddChip('insights', newInsight)}><Plus/></Button>
-                    </div>
-                </div>
-            </CardContent>
-          </Card>
-        </div>
-      </TabsContent>
-      
-      <TabsContent value="logs" className="space-y-6">
-          <Card className="relative overflow-hidden">
-            <AnimatePresence initial={false}>
-              <motion.div
-                key={quickLogStep}
-                className="w-full"
-                initial={{ opacity: 0, x: quickLogStep === 'initial' ? 0 : 300 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -300, position: 'absolute' }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-              >
-                {quickLogStep === 'initial' && (
-                  <>
-                    <CardHeader className="flex-row items-center justify-between">
-                        <CardTitle className="text-lg font-normal">Quick Log</CardTitle>
-                        <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
-                            {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
-                        </Button>
-                    </CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
-                      {quickLogOptions.map(opt => (
-                        <Button 
-                            key={opt.value} 
-                            variant={selectedQuickLog === opt.value ? 'default' : 'outline'} 
-                            size="sm" 
-                            onClick={() => handleQuickLogChipClick(opt.value)} 
-                            disabled={submissionState !== 'idle'}>
-                                {opt.label}
-                        </Button>
-                      ))}
-                    </CardContent>
-                  </>
-                )}
-                {quickLogStep === 'withdrawn' && (
-                  <>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
-                            <div>
-                                <CardDescription>Quick Log - Withdrawn</CardDescription>
-                                <CardTitle className="text-lg font-normal">Select Reason</CardTitle>
-                            </div>
-                          </div>
-                           <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
-                                {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
-                            </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2">
-                        {(appSettings.withdrawalReasons || []).map(reason => (
-                          <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </>
-                )}
-              </motion.div>
-            </AnimatePresence>
-            <AnimatePresence>
-              {submissionState !== 'idle' && (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center"
-                >
-                  {submissionState === 'submitting' && <p>Submitting...</p>}
-                  {submissionState === 'submitted' && <p className="text-primary">Submitted</p>}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+               <div>
+                 <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || ""} onSave={(val) => handleUpdate('commitmentSnapshot.schedule', val)} placeholder="Enter schedule"/>
+               </div>
               <div>
-                <CardTitle className="text-lg font-normal">Log Feedback</CardTitle>
+                <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
               </div>
-              <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
-                {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                {(['content', 'schedule', 'price'] as FeedbackCategory[]).map(category => (
-                  <div key={category}>
-                    <h4 className="font-semibold capitalize mb-2">{category}</h4>
-                    <div className="flex items-center justify-center gap-3">
-                      <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn(feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
-                        <ThumbsUp className="h-5 w-5 text-green-600" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'negative')} className={cn(feedback[category]?.perception === 'negative' && 'bg-red-100 dark:bg-red-900')}>
-                        <ThumbsDown className="h-5 w-5 text-red-600" />
-                      </Button>
+            </CardContent>
+          </Card>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader><CardTitle>Traits</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
+                  </div>
+                   <Select onValueChange={(value) => handleAddChip('traits', value)} value="">
+                      <SelectTrigger>
+                          <SelectValue placeholder="Add a trait..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {availableTraits.length > 0 ? (
+                              availableTraits.map(trait => (
+                                  <SelectItem key={trait} value={trait}>{trait}</SelectItem>
+                              ))
+                          ) : (
+                              <div className="p-2 text-sm text-muted-foreground text-center">No more traits to add.</div>
+                          )}
+                      </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>Insights</CardTitle></CardHeader>
+              <CardContent>
+                  <div className="space-y-4">
+                      <div className="flex flex-wrap gap-2">
+                          {(lead.insights || []).map(insight => <Badge key={insight} variant="outline">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
+                      </div>
+                      <div className="flex gap-2">
+                          <Input value={newInsight} onChange={e => setNewInsight(e.target.value)} placeholder="Add an insight..."/>
+                          <Button size="icon" onClick={() => handleAddChip('insights', newInsight)}><Plus/></Button>
+                      </div>
+                  </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="logs" className="space-y-6">
+            <Card className="relative overflow-hidden">
+              <AnimatePresence initial={false}>
+                <motion.div
+                  key={quickLogStep}
+                  className="w-full"
+                  initial={{ opacity: 0, x: quickLogStep === 'initial' ? 0 : 300 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -300, position: 'absolute' }}
+                  transition={{ duration: 0.3, ease: 'easeInOut' }}
+                >
+                  {quickLogStep === 'initial' && (
+                    <>
+                      <CardHeader className="flex-row items-center justify-between">
+                          <CardTitle className="text-lg font-normal">Quick Log</CardTitle>
+                          <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
+                              {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
+                          </Button>
+                      </CardHeader>
+                      <CardContent className="flex flex-wrap gap-2">
+                        {quickLogOptions.map(opt => (
+                          <Button 
+                              key={opt.value} 
+                              variant={selectedQuickLog === opt.value ? 'default' : 'outline'} 
+                              size="sm" 
+                              onClick={() => handleQuickLogChipClick(opt.value)} 
+                              disabled={submissionState !== 'idle'}>
+                                  {opt.label}
+                          </Button>
+                        ))}
+                      </CardContent>
+                    </>
+                  )}
+                  {quickLogStep === 'withdrawn' && (
+                    <>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
+                              <div>
+                                  <CardDescription>Quick Log - Withdrawn</CardDescription>
+                                  <CardTitle className="text-lg font-normal">Select Reason</CardTitle>
+                              </div>
+                            </div>
+                             <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
+                                  {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
+                              </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {(appSettings.withdrawalReasons || []).map(reason => (
+                            <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+              <AnimatePresence>
+                {submissionState !== 'idle' && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center"
+                  >
+                    {submissionState === 'submitting' && <p>Submitting...</p>}
+                    {submissionState === 'submitted' && <p className="text-primary">Submitted</p>}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg font-normal">Log Feedback</CardTitle>
+                </div>
+                <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
+                  {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  {(['content', 'schedule', 'price'] as FeedbackCategory[]).map(category => (
+                    <div key={category}>
+                      <h4 className="font-semibold capitalize mb-2">{category}</h4>
+                      <div className="flex items-center justify-center gap-3">
+                        <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn(feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
+                          <ThumbsUp className="h-5 w-5 text-green-600" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'negative')} className={cn(feedback[category]?.perception === 'negative' && 'bg-red-100 dark:bg-red-900')}>
+                          <ThumbsDown className="h-5 w-5 text-red-600" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {activeChipCategory && (
+                  <div>
+                    <Separator className="my-4" />
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {(appSettings.feedbackChips[activeChipCategory] || []).map(objection => (
+                        <Badge
+                          key={objection}
+                          variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"}
+                          onClick={() => handleObjectionToggle(activeChipCategory, objection)}
+                          className="cursor-pointer"
+                        >
+                          {objection}
+                        </Badge>
+                      ))}
+                      {(appSettings.feedbackChips[activeChipCategory] || []).length === 0 && (
+                        <p className="text-xs text-muted-foreground">No objection reasons configured for &quot;{activeChipCategory}&quot;.</p>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-
-              {activeChipCategory && (
-                <div>
-                  <Separator className="my-4" />
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {(appSettings.feedbackChips[activeChipCategory] || []).map(objection => (
-                      <Badge
-                        key={objection}
-                        variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"}
-                        onClick={() => handleObjectionToggle(activeChipCategory, objection)}
-                        className="cursor-pointer"
-                      >
-                        {objection}
-                      </Badge>
-                    ))}
-                    {(appSettings.feedbackChips[activeChipCategory] || []).length === 0 && (
-                      <p className="text-xs text-muted-foreground">No objection reasons configured for &quot;{activeChipCategory}&quot;.</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-normal">Log History</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <TooltipProvider>
-                {isInteractionsLoading && interactions.length === 0 && (
-                  <div className="flex justify-center p-4">
-                    <Loader2 className="animate-spin" />
-                  </div>
                 )}
-                {interactions.length > 0 && (
-                  <div className="space-y-3">
-                    {interactions.map(interaction => {
-                      const interactionDate = toDate(interaction.createdAt)!;
-                      return (
-                        <div key={interaction.id} className="text-sm p-3 bg-muted/50 rounded-lg">
-                          <div className="flex justify-between items-center mb-1">
-                              <p className="font-semibold capitalize">
-                                  {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
-                                  interaction.feedback ? 'Feedback' :
-                                  interaction.outcome ? `Outcome: ${interaction.outcome}` : 
-                                  interaction.notes ? 'Note' :
-                                  'Interaction'}
-                              </p>
-                              <Tooltip delayDuration={300}>
-                                  <TooltipTrigger>
-                                      <p className="text-xs text-muted-foreground hover:text-foreground cursor-default">
-                                          {formatDistanceToNowStrict(interactionDate, { addSuffix: true })}
-                                      </p>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                      <p className="text-xs">{format(interactionDate, 'PP p')}</p>
-                                  </TooltipContent>
-                              </Tooltip>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-normal">Log History</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <TooltipProvider>
+                  {isInteractionsLoading && interactions.length === 0 && (
+                    <div className="flex justify-center p-4">
+                      <Loader2 className="animate-spin" />
+                    </div>
+                  )}
+                  {interactions.length > 0 && (
+                    <div className="space-y-3">
+                      {interactions.map(interaction => {
+                        const interactionDate = toDate(interaction.createdAt)!;
+                        return (
+                          <div key={interaction.id} className="text-sm p-3 bg-muted/50 rounded-lg">
+                            <div className="flex justify-between items-center mb-1">
+                                <p className="font-semibold capitalize">
+                                    {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
+                                    interaction.feedback ? 'Feedback' :
+                                    interaction.outcome ? `Outcome: ${interaction.outcome}` : 
+                                    interaction.notes ? 'Note' :
+                                    'Interaction'}
+                                </p>
+                                <Tooltip delayDuration={300}>
+                                    <TooltipTrigger>
+                                        <p className="text-xs text-muted-foreground hover:text-foreground cursor-default">
+                                            {formatRelativeTime(interactionDate)}
+                                        </p>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p className="text-xs">{format(interactionDate, 'PP p')}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                            <p className="text-muted-foreground capitalize">
+                              {interaction.feedback ? formatFeedbackLog(interaction.feedback) : interaction.notes}
+                            </p>
                           </div>
-                          <p className="text-muted-foreground">
-                            {interaction.feedback ? formatFeedbackLog(interaction.feedback) : interaction.notes}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                {!isInteractionsLoading && interactions.length === 0 && (
-                  <p className="text-sm text-center text-muted-foreground p-4">No interactions have been logged yet.</p>
-                )}
-                {hasMoreInteractions && (
-                  <div className="flex justify-center">
-                    <Button variant="outline" onClick={() => fetchInteractions(true)} disabled={isInteractionsLoading}>
-                      {isInteractionsLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
-                    </Button>
-                  </div>
-                )}
-              </TooltipProvider>
-            </CardContent>
-          </Card>
-      </TabsContent>
-    </Tabs>
-  );
+                        )
+                      })}
+                    </div>
+                  )}
+                  {!isInteractionsLoading && interactions.length === 0 && (
+                    <p className="text-sm text-center text-muted-foreground p-4">No interactions have been logged yet.</p>
+                  )}
+                  {hasMoreInteractions && (
+                    <div className="flex justify-center">
+                      <Button variant="outline" onClick={() => fetchInteractions(true)} disabled={isInteractionsLoading}>
+                        {isInteractionsLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
+                      </Button>
+                    </div>
+                  )}
+                </TooltipProvider>
+              </CardContent>
+            </Card>
+        </TabsContent>
+      </Tabs>
+    );
+  };
   
   const renderLearnerView = () => (
     <Tabs defaultValue="overview">
