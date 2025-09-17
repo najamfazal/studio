@@ -413,3 +413,5 @@ def reset_afc_for_engagement(lead_id: str, lead_name: str):
     due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
     create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
+
+    
