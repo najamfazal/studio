@@ -6,7 +6,7 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, lim
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
 import { format, parseISO } from 'date-fns';
-import { ArrowLeft, Loader2, Mail, Phone, Plus, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
@@ -57,6 +57,7 @@ export default function ContactDetailPage() {
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
   const [feedback, setFeedback] = useState<InteractionFeedback>({});
   const [isLoggingFeedback, setIsLoggingFeedback] = useState(false);
+  const [activeChipCategory, setActiveChipCategory] = useState<FeedbackCategory | null>(null);
   
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -193,11 +194,23 @@ export default function ContactDetailPage() {
 
   const handlePerceptionChange = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
     setFeedback(produce(draft => {
-        if (!draft[category] || draft[category]?.perception !== perception) {
-            draft[category] = { perception, objections: [] };
-        } else {
-            // If clicking the same perception again, clear it.
+        const currentPerception = draft[category]?.perception;
+        
+        if (currentPerception === perception) {
+            // Toggling off the current perception
             delete draft[category];
+            setActiveChipCategory(null);
+        } else {
+            // Setting a new perception
+            draft[category] = { perception, objections: [] };
+            if (perception === 'negative') {
+                setActiveChipCategory(category);
+            } else {
+                 // If switching from negative to positive, clear active category if it was this one
+                if (activeChipCategory === category) {
+                    setActiveChipCategory(null);
+                }
+            }
         }
     }));
   };
@@ -226,6 +239,7 @@ export default function ContactDetailPage() {
     setIsLoggingFeedback(true);
     await handleLogInteraction({ feedback });
     setFeedback({});
+    setActiveChipCategory(null);
     setIsLoggingFeedback(false);
   }
 
@@ -319,53 +333,53 @@ export default function ContactDetailPage() {
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
                 <CardTitle>Log Feedback</CardTitle>
                 <CardDescription>Record the lead's feedback on key aspects.</CardDescription>
+              </div>
+              <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
+                {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
+              </Button>
             </CardHeader>
-            <CardContent className="space-y-6">
-                 {(['content', 'schedule', 'price'] as FeedbackCategory[]).map(category => (
-                    <div key={category}>
-                        <div className="flex items-center justify-between">
-                            <h4 className="font-semibold capitalize">{category}</h4>
-                            <div className="flex items-center gap-3">
-                                <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn(feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
-                                    <ThumbsUp className="h-5 w-5 text-green-600"/>
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'negative')} className={cn(feedback[category]?.perception === 'negative' && 'bg-red-100 dark:bg-red-900')}>
-                                    <ThumbsDown className="h-5 w-5 text-red-600"/>
-                                </Button>
-                            </div>
-                        </div>
-                        {feedback[category]?.perception === 'negative' && (
-                            <div className="pt-3">
-                                <div className="flex flex-wrap gap-2">
-                                    {(appSettings.feedbackChips[category] || []).map(objection => (
-                                        <Badge
-                                            key={objection}
-                                            variant={feedback[category]?.objections?.includes(objection) ? "default" : "secondary"}
-                                            onClick={() => handleObjectionToggle(category, objection)}
-                                            className="cursor-pointer"
-                                        >
-                                            {objection}
-                                        </Badge>
-                                    ))}
-                                    {(appSettings.feedbackChips[category] || []).length === 0 && (
-                                        <p className="text-xs text-muted-foreground">No objection reasons configured in settings.</p>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                        <Separator className="mt-4"/>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                {(['content', 'schedule', 'price'] as FeedbackCategory[]).map(category => (
+                  <div key={category}>
+                    <h4 className="font-semibold capitalize mb-2">{category}</h4>
+                    <div className="flex items-center justify-center gap-3">
+                      <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn(feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
+                        <ThumbsUp className="h-5 w-5 text-green-600" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'negative')} className={cn(feedback[category]?.perception === 'negative' && 'bg-red-100 dark:bg-red-900')}>
+                        <ThumbsDown className="h-5 w-5 text-red-600" />
+                      </Button>
                     </div>
+                  </div>
                 ))}
+              </div>
+
+              {activeChipCategory && (
+                <div>
+                  <Separator className="my-4" />
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {(appSettings.feedbackChips[activeChipCategory] || []).map(objection => (
+                      <Badge
+                        key={objection}
+                        variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"}
+                        onClick={() => handleObjectionToggle(activeChipCategory, objection)}
+                        className="cursor-pointer"
+                      >
+                        {objection}
+                      </Badge>
+                    ))}
+                    {(appSettings.feedbackChips[activeChipCategory] || []).length === 0 && (
+                      <p className="text-xs text-muted-foreground">No objection reasons configured in settings for &quot;{activeChipCategory}&quot;.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
-            <CardFooter>
-                 <Button onClick={handleLogFeedback} disabled={isLoggingFeedback} className="w-full">
-                    {isLoggingFeedback && <Loader2 className="animate-spin mr-2" />}
-                    Log Feedback
-                </Button>
-            </CardFooter>
           </Card>
       </TabsContent>
     </Tabs>
