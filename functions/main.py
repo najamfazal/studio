@@ -35,18 +35,35 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
-@https_fn.on_request(cors=CorsOptions(cors_origins="*"))
+@https_fn.on_request()
 def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
     """
     An HTTP-triggered function to import contacts from a CSV file.
-    Expects a JSON payload with 'csvData', 'relationship', and 'isNew'.
+    Handles CORS pre-flight requests manually for robustness.
     """
+    # --- START OF CORS HANDLING ---
+    # Set CORS headers for the pre-flight request
+    if req.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '3600'
+        }
+        return https_fn.Response("", status=204, headers=headers)
+
+    # Set CORS headers for the main request
+    cors_headers = {
+        'Access-Control-Allow-Origin': '*'
+    }
+    # --- END OF CORS HANDLING ---
     try:
         req_data = req.get_json(silent=True)
         if not req_data:
              return https_fn.Response(
                 {"error": "Invalid JSON payload."},
                 status=400,
+                headers=cors_headers
             )
 
         csv_data_string = req_data.get('csvData')
@@ -57,6 +74,7 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
             return https_fn.Response(
                 {"error": "No CSV data provided."},
                 status=400,
+                headers=cors_headers
             )
             
         file_like_object = io.StringIO(csv_data_string)
@@ -124,11 +142,11 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
             "created": created_count,
             "updated": updated_count,
             "skipped": skipped_count
-        }, status=200)
+        }, status=200, headers=cors_headers)
 
     except Exception as e:
         print(f"Error during CSV import: {e}")
-        return https_fn.Response({"error": str(e)}, status=500)
+        return https_fn.Response({"error": str(e)}, status=500, headers=cors_headers)
 
 
 @firestore_fn.on_document_created(document="leads/{leadId}")
@@ -420,4 +438,5 @@ def reset_afc_for_engagement(lead_id: str, lead_name: str):
     
 
     
+
 
