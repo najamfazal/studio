@@ -10,7 +10,7 @@ import { ArrowLeft, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Tras
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment, InteractionFeedback } from '@/lib/types';
+import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment, InteractionFeedback, QuickLogType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -22,9 +22,9 @@ import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { QuickLogDialog } from '@/components/quick-log-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { AnimatePresence, motion } from 'framer-motion';
 
 const INTERACTION_PAGE_SIZE = 5;
 
@@ -37,6 +37,16 @@ const toDate = (dateValue: any): Date | null => {
 };
 
 type FeedbackCategory = keyof InteractionFeedback;
+type QuickLogStep = 'initial' | 'withdrawn';
+
+const quickLogOptions: { value: QuickLogType; label: string, multistep: QuickLogStep | null }[] = [
+  { value: "Followup", label: "Followup", multistep: null },
+  { value: "Initiated", label: "Initiated", multistep: null },
+  { value: "Unresponsive", label: "Unresponsive", multistep: null },
+  { value: "Unchanged", label: "Unchanged", multistep: null },
+  { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
+  { value: "Enrolled", label: "Enrolled", multistep: null },
+];
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -54,10 +64,14 @@ export default function ContactDetailPage() {
   const [hasMoreInteractions, setHasMoreInteractions] = useState(true);
   
   const [newInsight, setNewInsight] = useState("");
-  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
   const [feedback, setFeedback] = useState<InteractionFeedback>({});
   const [isLoggingFeedback, setIsLoggingFeedback] = useState(false);
   const [activeChipCategory, setActiveChipCategory] = useState<FeedbackCategory | null>(null);
+  
+  // Quick Log State
+  const [quickLogStep, setQuickLogStep] = useState<QuickLogStep>('initial');
+  const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'submitted'>('idle');
+  const [withdrawalReasons, setWithdrawalReasons] = useState<string[]>([]);
   
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -178,17 +192,26 @@ export default function ContactDetailPage() {
   };
   
   const handleLogInteraction = async (interaction: Partial<Interaction>) => {
+    setSubmissionState('submitting');
     try {
         await addDoc(collection(db, 'interactions'), {
             ...interaction,
             leadId: id,
             createdAt: new Date().toISOString(),
         });
+        setSubmissionState('submitted');
         toast({title: "Interaction logged successfully."});
         fetchInteractions(); // Refresh logs
     } catch (error) {
         console.error("Error logging interaction:", error);
         toast({variant: "destructive", title: "Failed to log interaction."});
+        setSubmissionState('idle'); // Reset on failure
+    } finally {
+        setTimeout(() => {
+            setSubmissionState('idle');
+            setQuickLogStep('initial');
+            setWithdrawalReasons([]);
+        }, 1000);
     }
   }
 
@@ -237,10 +260,16 @@ export default function ContactDetailPage() {
         return;
     }
     setIsLoggingFeedback(true);
-    await handleLogInteraction({ feedback });
+    await addDoc(collection(db, "interactions"), {
+      feedback,
+      leadId: id,
+      createdAt: new Date().toISOString(),
+    });
     setFeedback({});
     setActiveChipCategory(null);
     setIsLoggingFeedback(false);
+    toast({ title: "Feedback logged" });
+    fetchInteractions();
   }
 
   const availableTraits = useMemo(() => {
@@ -248,6 +277,26 @@ export default function ContactDetailPage() {
     return appSettings.commonTraits.filter(trait => !lead.traits.includes(trait));
   }, [appSettings?.commonTraits, lead?.traits]);
 
+  const handleQuickLogChipClick = (logType: QuickLogType, multistep: QuickLogStep | null) => {
+    if (multistep) {
+        setQuickLogStep(multistep);
+    } else {
+        handleLogInteraction({ quickLogType: logType });
+    }
+  };
+
+  const handleToggleWithdrawalReason = (reason: string) => {
+    setWithdrawalReasons(prev => 
+      prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]
+    );
+  };
+
+  const handleLogWithdrawn = () => {
+    handleLogInteraction({
+        quickLogType: 'Withdrawn',
+        withdrawalReasons: withdrawalReasons,
+    });
+  };
 
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -325,11 +374,67 @@ export default function ContactDetailPage() {
       
       <TabsContent value="logs" className="space-y-6">
           <Card>
-            <CardHeader><CardTitle>Quick Log</CardTitle></CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">Log a common interaction status in one click.</p>
-                <Button onClick={() => setIsQuickLogOpen(true)}>Open Quick Log</Button>
-            </CardContent>
+            <div className="relative overflow-hidden">
+                <AnimatePresence initial={false}>
+                    <motion.div
+                        key={quickLogStep}
+                        initial={{ opacity: 0, x: quickLogStep === 'initial' ? 0 : 300 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -300 }}
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    >
+                        {quickLogStep === 'initial' && (
+                            <>
+                                <CardHeader><CardTitle>Quick Log</CardTitle></CardHeader>
+                                <CardContent className="flex flex-wrap gap-2">
+                                    {quickLogOptions.map(opt => (
+                                        <Button key={opt.value} variant="outline" size="sm" onClick={() => handleQuickLogChipClick(opt.value, opt.multistep)} disabled={submissionState !== 'idle'}>{opt.label}</Button>
+                                    ))}
+                                </CardContent>
+                            </>
+                        )}
+                        {quickLogStep === 'withdrawn' && (
+                           <>
+                                <CardHeader>
+                                    <div className="flex items-center gap-2">
+                                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setQuickLogStep('initial')}><ArrowLeft/></Button>
+                                        <div>
+                                            <CardDescription>Quick Log - Withdrawn</CardDescription>
+                                            <CardTitle>Select Reason</CardTitle>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex flex-wrap gap-2">
+                                        {(appSettings.withdrawalReasons || []).map(reason => (
+                                            <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button onClick={handleLogWithdrawn} disabled={submissionState !== 'idle' || withdrawalReasons.length === 0}>
+                                        <Send className="mr-2 h-4 w-4"/> Submit
+                                    </Button>
+                                </CardFooter>
+                           </>
+                        )}
+                    </motion.div>
+                </AnimatePresence>
+
+                 <AnimatePresence>
+                    {submissionState !== 'idle' && (
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center"
+                        >
+                            {submissionState === 'submitting' && <p>Submitting...</p>}
+                            {submissionState === 'submitted' && <p className="text-primary">Submitted</p>}
+                        </motion.div>
+                    )}
+                 </AnimatePresence>
+            </div>
           </Card>
 
           <Card>
@@ -374,7 +479,7 @@ export default function ContactDetailPage() {
                       </Badge>
                     ))}
                     {(appSettings.feedbackChips[activeChipCategory] || []).length === 0 && (
-                      <p className="text-xs text-muted-foreground">No objection reasons configured in settings for &quot;{activeChipCategory}&quot;.</p>
+                      <p className="text-xs text-muted-foreground">No objection reasons configured for &quot;{activeChipCategory}&quot;.</p>
                     )}
                   </div>
                 </div>
@@ -438,14 +543,8 @@ export default function ContactDetailPage() {
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         {lead.relationship === 'Learner' ? renderLearnerView() : renderLeadView()}
       </main>
-
-       <QuickLogDialog
-        isOpen={isQuickLogOpen}
-        setIsOpen={setIsQuickLogOpen}
-        lead={lead}
-        onLogSaved={fetchInteractions}
-        appSettings={appSettings}
-      />
     </div>
   );
 }
+
+    

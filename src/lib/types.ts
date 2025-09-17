@@ -95,7 +95,7 @@ export type InteractionEventDetails = {
   rescheduledFrom?: string; // ISO string of original date
 };
 
-export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged';
+export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged' | 'Followup';
 
 export type Interaction = {
   id: string;
@@ -125,3 +125,5 @@ export type AppSettings = {
     price: string[];
   }
 }
+
+    
