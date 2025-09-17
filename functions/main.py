@@ -4,13 +4,10 @@ from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
 import csv
 import io
-from firebase_functions.options import CorsOptions
 
 # Initialize Firebase Admin SDK
 initialize_app()
 db = firestore.client()
-options.set_global_options(region="us-central1")
-
 
 # --- AFC (Automated Follow-up Cycle) Configuration ---
 AFC_SCHEDULE = {
@@ -35,7 +32,7 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
-@https_fn.on_request(cors=True)
+@https_fn.on_request(region="us-central1", cors=True)
 def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
     """
     An HTTP-triggered function to import contacts from a CSV file.
@@ -131,7 +128,7 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response({"error": str(e)}, status=500)
 
 
-@firestore_fn.on_document_created(document="leads/{leadId}")
+@firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1")
 def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
     Initializes the Automated Follow-up Cycle (AFC) for a new lead.
@@ -158,7 +155,7 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
 
 
-@firestore_fn.on_document_created(document="interactions/{interactionId}")
+@firestore_fn.on_document_created(document="interactions/{interactionId}", region="us-central1")
 def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
     The 'brain' of the application. Processes new interactions, completes
@@ -294,7 +291,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     reset_afc_for_engagement(lead_id, lead_name)
 
 
-@scheduler_fn.on_schedule(schedule="30 9,18 * * *", timezone="Asia/Dubai")
+@scheduler_fn.on_schedule(schedule="30 9,18 * * *", timezone="Asia/Dubai", region="us-central1")
 def afcDailyAdvancer(event: scheduler_fn.ScheduledEvent) -> None:
     """
     Runs daily to advance the AFC for leads with overdue tasks, signifying
@@ -332,7 +329,7 @@ def afcDailyAdvancer(event: scheduler_fn.ScheduledEvent) -> None:
         
         print(f"Logged 'Unresponsive' for lead {lead_id} to advance AFC.")
 
-@firestore_fn.on_document_updated(document="tasks/{taskId}")
+@firestore_fn.on_document_updated(document="tasks/{taskId}", region="us-central1")
 def onTaskUpdate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
     Triggers when a task is updated, specifically to handle AFC logic
@@ -423,5 +420,7 @@ def reset_afc_for_engagement(lead_id: str, lead_name: str):
 
 
 
+
+    
 
     
