@@ -40,6 +40,7 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
     An HTTP-triggered function to import contacts from a CSV file.
     Expects a JSON payload with 'csvData', 'relationship', and 'isNew'.
     """
+    # Force redeploy comment
     # Handle CORS preflight requests
     if req.method == "OPTIONS":
         headers = {
@@ -391,17 +392,19 @@ def delete_pending_followups(lead_id: str):
 def delete_event_tasks(lead_id: str, event_type: str):
     """Deletes reminder and confirmation tasks for a given event."""
     tasks_ref = db.collection("tasks")
-    reminder_query = tasks_ref.where("leadId", "==", lead_id) \
-                               .where("description", "==", f"Remind about {event_type}").stream()
-    confirmation_query = tasks_ref.where("leadId", "==", lead_id) \
-                                  .where("description", "==", f"Confirm attendance for {event_type}").stream()
+    # This query needs to be less specific to catch rescheduled tasks
+    q = tasks_ref.where("leadId", "==", lead_id).where("completed", "==", False)
+    
+    reminder_desc = f"Remind about {event_type}"
+    confirm_desc = f"Confirm attendance for {event_type}"
 
-    for task in reminder_query:
-        task.reference.delete()
-        print(f"Deleted reminder task {task.id} for lead {lead_id}")
-    for task in confirmation_query:
-        task.reference.delete()
-        print(f"Deleted confirmation task {task.id} for lead {lead_id}")
+    for task in q.stream():
+        task_data = task.to_dict()
+        description = task_data.get("description", "")
+        if description == reminder_desc or description == confirm_desc:
+            task.reference.delete()
+            print(f"Deleted event-related task {task.id} for lead {lead_id}: {description}")
+
 
 def reset_afc_for_engagement(lead_id: str, lead_name: str):
     """Resets the AFC cycle for an engaged lead."""
