@@ -81,3 +81,48 @@ export async function migrateLeadsToContactsAction() {
     return { success: false, error: 'An unknown error occurred during migration.' };
   }
 }
+
+
+export async function importContactsAction(formData: FormData) {
+  const file = formData.get('file') as File;
+  const relationship = formData.get('relationship') as string;
+  const isNew = formData.get('isNew') === 'true';
+  
+  if (!file) {
+    return { success: false, error: 'No file provided.' };
+  }
+
+  try {
+    const fileContent = await file.text();
+    
+    // We assume the import function is deployed in the same region and project.
+    // Replace with your actual region and project ID if different.
+    const region = process.env.LOCATION || 'us-central1';
+    const projectId = process.env.GCLOUD_PROJECT;
+    const functionUrl = `https://${region}-${projectId}.cloudfunctions.net/importContactsCsv`;
+
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        csvData: fileContent,
+        relationship,
+        isNew,
+      }),
+    });
+    
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to process import.');
+    }
+
+    return { success: true, ...result };
+  } catch (error) {
+    console.error('Error in importContactsAction:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    return { success: false, error: errorMessage };
+  }
+}

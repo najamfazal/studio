@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useTransition } from "react";
 import {
   collection,
   getDocs,
@@ -45,6 +45,7 @@ import {
 import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
+import { importContactsAction } from "@/app/actions";
 
 const PAGE_SIZE = 10;
 
@@ -69,6 +70,7 @@ export default function ContactsPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   
   const [statusFilters, setStatusFilters] = useState<LeadStatus[]>([]);
+  const [isImporting, startImportTransition] = useTransition();
 
   const { toast } = useToast();
 
@@ -234,12 +236,35 @@ export default function ContactsPage() {
   };
 
   const handleImportSave = (data: { file: File, relationship: string, isNew: boolean }) => {
-    console.log("Importing data:", data);
-    toast({
-      title: "Import starting...",
-      description: "This feature is not fully implemented yet."
-    });
     setIsImportDialogOpen(false);
+    toast({
+      title: "Importing contacts...",
+      description: "This may take a moment. The page will refresh upon completion.",
+    });
+
+    startImportTransition(async () => {
+      const formData = new FormData();
+      formData.append('file', data.file);
+      formData.append('relationship', data.relationship);
+      formData.append('isNew', String(data.isNew));
+
+      const result = await importContactsAction(formData);
+
+      if (result.success) {
+        toast({
+          title: "Import Successful",
+          description: `${result.created} created, ${result.updated} updated, ${result.skipped} skipped.`,
+        });
+        // Re-fetch leads to show the new data
+        fetchLeads(false, statusFilters);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Import Failed",
+          description: result.error || "An unknown error occurred during import.",
+        });
+      }
+    });
   }
 
 
@@ -284,7 +309,7 @@ export default function ContactsPage() {
                     </DropdownMenuContent>
                 </DropdownMenu>
                 <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)}>
-                    <Upload className="h-4 w-4" />
+                    {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                     <span className="sr-only">Import Contacts</span>
                 </Button>
                 <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }}>
@@ -367,6 +392,7 @@ export default function ContactsPage() {
         setIsOpen={setIsImportDialogOpen}
         onSave={handleImportSave}
         relationshipTypes={appSettings?.relationshipTypes || []}
+        isImporting={isImporting}
       />
     </div>
   );

@@ -1,7 +1,9 @@
 
-from firebase_functions import firestore_fn, options, scheduler_fn
+from firebase_functions import firestore_fn, options, scheduler_fn, https_fn
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
+import csv
+import io
 
 # Initialize Firebase Admin SDK
 initialize_app()
@@ -32,6 +34,109 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
+@https_fn.on_request()
+def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
+    """
+    An HTTP-triggered function to import contacts from a CSV file.
+    Expects a JSON payload with 'csvData', 'relationship', and 'isNew'.
+    """
+    # Handle CORS preflight requests
+    if req.method == "OPTIONS":
+        headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST",
+            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Max-Age": "3600",
+        }
+        return https_fn.Response("", headers=headers)
+
+    headers = {"Access-Control-Allow-Origin": "*"}
+    
+    try:
+        req_data = req.get_json()
+        csv_data_string = req_data['csvData']
+        default_relationship = req_data.get('relationship', 'Lead')
+        is_new_mode = req_data.get('isNew', True)
+
+        if not csv_data_string:
+            return https_fn.Response(
+                {"error": "No CSV data provided."},
+                status=400,
+                headers=headers
+            )
+            
+        file_like_object = io.StringIO(csv_data_string)
+        reader = csv.DictReader(file_like_object)
+        
+        leads_ref = db.collection("leads")
+        
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+
+        for row in reader:
+            name = row.get("name", "").strip()
+            email = row.get("email", "").strip()
+
+            if not name:
+                skipped_count += 1
+                continue
+            
+            # --- Prepare Lead Data ---
+            phones = []
+            if row.get("phone1", "").strip():
+                phones.append({"number": row.get("phone1").strip(), "type": row.get("phone1Type", "both").strip().lower() or "both"})
+            if row.get("phone2", "").strip():
+                phones.append({"number": row.get("phone2").strip(), "type": row.get("phone2Type", "both").strip().lower() or "both"})
+
+            lead_data = {
+                "name": name,
+                "email": email,
+                "phones": phones,
+                "relationship": row.get("relationship", "").strip() or default_relationship,
+                "commitmentSnapshot": {
+                    "course": row.get("courseName", "").strip() or ""
+                },
+                "status": "Active",
+                "afc_step": 0,
+                "hasEngaged": False,
+                "onFollowList": False,
+                "traits": [],
+                "insights": [],
+                "createdAt": firestore.SERVER_TIMESTAMP,
+            }
+            
+            # --- DB Operation ---
+            existing_doc_ref = None
+            if email:
+                existing_docs_query = leads_ref.where("email", "==", email).limit(1).stream()
+                for doc in existing_docs_query:
+                    existing_doc_ref = doc.reference
+
+            if existing_doc_ref and not is_new_mode:
+                # Update existing contact
+                existing_doc_ref.update(lead_data)
+                updated_count += 1
+            elif not existing_doc_ref:
+                # Create new contact
+                leads_ref.add(lead_data)
+                created_count += 1
+            else:
+                # Skip existing contact in 'new only' mode
+                skipped_count +=1
+        
+        return https_fn.Response({
+            "message": "Import completed successfully.",
+            "created": created_count,
+            "updated": updated_count,
+            "skipped": skipped_count
+        }, status=200, headers=headers)
+
+    except Exception as e:
+        print(f"Error during CSV import: {e}")
+        return https_fn.Response({"error": str(e)}, status=500, headers=headers)
+
+
 @firestore_fn.on_document_created(document="leads/{leadId}")
 def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
@@ -41,6 +146,11 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     lead_data = event.data.to_dict()
     lead_name = lead_data.get("name")
     
+    # Do not run for imported leads that already have status, etc.
+    if lead_data.get("status"):
+        print(f"Lead {lead_name} ({lead_id}) is imported or already initialized. Skipping AFC initiation.")
+        return
+
     if not lead_id or not lead_name:
         print("Lead data is missing ID or name. Aborting AFC initiation.")
         return
@@ -48,7 +158,7 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     print(f"New lead created: {lead_name} ({lead_id}). Initializing AFC.")
     
     # Set initial AFC step and schedule the first follow-up.
-    event.data.reference.update({"afc_step": 1})
+    event.data.reference.update({"afc_step": 1, "status": "Active"})
     due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
     create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
@@ -303,7 +413,3 @@ def reset_afc_for_engagement(lead_id: str, lead_name: str):
     due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
     create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
-
-    
-
-    

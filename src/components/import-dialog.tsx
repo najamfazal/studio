@@ -16,12 +16,14 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Switch } from "./ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 interface ImportDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onSave: (data: { file: File, relationship: string, isNew: boolean }) => void;
   relationshipTypes: string[];
+  isImporting?: boolean;
 }
 
 export function ImportDialog({
@@ -29,6 +31,7 @@ export function ImportDialog({
   setIsOpen,
   onSave,
   relationshipTypes,
+  isImporting,
 }: ImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [relationship, setRelationship] = useState<string>("Lead");
@@ -54,6 +57,7 @@ export function ImportDialog({
   };
   
   const handleOpenChange = (open: boolean) => {
+    if (isImporting) return;
     if (!open) {
       // Reset state when closing
       setFile(null);
@@ -69,8 +73,7 @@ export function ImportDialog({
         <DialogHeader>
           <DialogTitle>Import Contacts from CSV</DialogTitle>
           <DialogDescription>
-            Upload a CSV file to bulk-add or update contacts. Ensure your file
-            has columns for 'name', 'email', and 'phone'.
+            Upload a CSV with columns: name, email, phone1, phone1Type, phone2, phone2Type, relationship, courseName. Only name is required.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -79,7 +82,7 @@ export function ImportDialog({
             <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="relationship-type">Relationship</Label>
+            <Label htmlFor="relationship-type">Default Relationship</Label>
              <Select value={relationship} onValueChange={setRelationship}>
                 <SelectTrigger id="relationship-type">
                     <SelectValue placeholder="Select a relationship type" />
@@ -95,26 +98,26 @@ export function ImportDialog({
             <div className="space-y-0.5">
                 <Label>Import Mode</Label>
                 <p className="text-xs text-muted-foreground">
-                    {isNew ? "Create new contacts." : "Update existing contacts matching email."}
+                    {isNew ? "Only create new contacts." : "Update existing contacts by email."}
                 </p>
             </div>
             <div className="flex items-center space-x-2">
-                <Label htmlFor="import-mode" className="text-sm font-normal text-muted-foreground">Existing</Label>
+                <Label htmlFor="import-mode" className="text-sm font-normal text-muted-foreground">Update</Label>
                 <Switch id="import-mode" checked={isNew} onCheckedChange={setIsNew} />
                 <Label htmlFor="import-mode" className="text-sm font-normal">New</Label>
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>
+          <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isImporting}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!file}>
-            Import
+          <Button onClick={handleSave} disabled={!file || isImporting}>
+            {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isImporting ? "Processing..." : "Import"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
