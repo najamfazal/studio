@@ -69,7 +69,7 @@ export default function ContactsPage() {
   const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   
-  const [statusFilters, setStatusFilters] = useState<LeadStatus[]>([]);
+  const [statusFilters, setStatusFilters] = useState<LeadStatus[]>(['Active']);
   const [isImporting, startImportTransition] = useTransition();
 
   const { toast } = useToast();
