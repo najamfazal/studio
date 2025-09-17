@@ -69,7 +69,8 @@ export default function ContactDetailPage() {
   // Tasks state
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   const [pastTasks, setPastTasks] = useState<Task[]>([]);
-  const [isTasksLoading, setIsTasksLoading] = useState(true);
+  const [isTasksLoading, setIsTasksLoading] = useState(false);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
   const [lastActiveTask, setLastActiveTask] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [lastPastTask, setLastPastTask] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreActiveTasks, setHasMoreActiveTasks] = useState(true);
@@ -145,7 +146,7 @@ export default function ContactDetailPage() {
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
-    setIsTasksLoading(true);
+    if (!loadMore) setIsTasksLoading(true);
     
     try {
       const isCompleted = type === 'past';
@@ -190,10 +191,16 @@ export default function ContactDetailPage() {
     if (id) {
       fetchData();
       fetchInteractions();
+    }
+  }, [id, fetchData, fetchInteractions]);
+
+  const handleTabChange = (value: string) => {
+    if (value === 'tasks' && !tasksLoaded) {
       fetchTasks('active');
       fetchTasks('past');
+      setTasksLoaded(true);
     }
-  }, [id]);
+  };
 
   const handleUpdate = async (field: keyof Lead | string, value: any) => {
     if (!lead) return;
@@ -425,7 +432,7 @@ export default function ContactDetailPage() {
   
   const renderLeadView = () => {
     return (
-      <Tabs defaultValue="summary">
+      <Tabs defaultValue="summary" onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -496,14 +503,14 @@ export default function ContactDetailPage() {
         </TabsContent>
         
         <TabsContent value="logs" className="space-y-6">
-            <Card className="relative overflow-hidden">
+            <Card className="relative overflow-hidden min-h-[148px]">
               <AnimatePresence initial={false}>
                 <motion.div
                   key={quickLogStep}
                   className="w-full"
                   initial={{ opacity: 0, x: quickLogStep === 'initial' ? 0 : 300 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -300, position: 'absolute' }}
+                  exit={{ opacity: 0, x: -300, position: 'absolute', top: 0, left: 0, right: 0 }}
                   transition={{ duration: 0.3, ease: 'easeInOut' }}
                 >
                   {quickLogStep === 'initial' && (
@@ -680,8 +687,8 @@ export default function ContactDetailPage() {
           <Card>
             <CardHeader className="p-4"><CardTitle className="text-lg">Active Tasks</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0">
-              {isTasksLoading && activeTasks.length === 0 && <div className="flex justify-center"><Loader2 className="animate-spin" /></div>}
-              {activeTasks.length > 0 ? (
+              {isTasksLoading && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
+              {!isTasksLoading && activeTasks.length > 0 && (
                 <div className="space-y-2">
                   {activeTasks.map(task => (
                     <div key={task.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
@@ -691,11 +698,12 @@ export default function ContactDetailPage() {
                     </div>
                   ))}
                 </div>
-              ) : !isTasksLoading && <p className="text-sm text-center text-muted-foreground p-4">No active tasks.</p>}
-              {hasMoreActiveTasks && (
+              )}
+              {!isTasksLoading && activeTasks.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">No active tasks.</p>}
+              {hasMoreActiveTasks && !isTasksLoading && (
                 <div className="flex justify-center mt-4">
-                  <Button variant="outline" onClick={() => fetchTasks('active', true)} disabled={isTasksLoading}>
-                    {isTasksLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
+                  <Button variant="outline" size="sm" onClick={() => fetchTasks('active', true)} disabled={isTasksLoading}>
+                    Load More
                   </Button>
                 </div>
               )}
@@ -704,8 +712,8 @@ export default function ContactDetailPage() {
            <Card>
             <CardHeader className="p-4"><CardTitle className="text-lg">Past Tasks</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0">
-              {isTasksLoading && pastTasks.length === 0 && <div className="flex justify-center"><Loader2 className="animate-spin" /></div>}
-              {pastTasks.length > 0 ? (
+              {isTasksLoading && pastTasks.length === 0 && !tasksLoaded && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
+              {!isTasksLoading && pastTasks.length > 0 && (
                  <div className="space-y-2">
                   {pastTasks.map(task => (
                     <div key={task.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
@@ -717,11 +725,12 @@ export default function ContactDetailPage() {
                     </div>
                   ))}
                 </div>
-              ) : !isTasksLoading && <p className="text-sm text-center text-muted-foreground p-4">No past tasks.</p>}
-              {hasMorePastTasks && (
+              )}
+              {!isTasksLoading && pastTasks.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">No past tasks.</p>}
+              {hasMorePastTasks && !isTasksLoading && (
                 <div className="flex justify-center mt-4">
-                  <Button variant="outline" onClick={() => fetchTasks('past', true)} disabled={isTasksLoading}>
-                    {isTasksLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
+                  <Button variant="outline" size="sm" onClick={() => fetchTasks('past', true)} disabled={isTasksLoading}>
+                    Load More
                   </Button>
                 </div>
               )}
@@ -789,4 +798,3 @@ export default function ContactDetailPage() {
     </div>
   );
 }
-
