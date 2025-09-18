@@ -202,7 +202,7 @@ export default function ContactsPage() {
         const docRef = await addDoc(collection(db, "leads"), {
           ...dataToSave,
           createdAt: new Date().toISOString(),
-          status: 'Active',
+          // status: 'Active', // Let the backend function handle this
           afc_step: 0,
           hasEngaged: false,
           onFollowList: false,
@@ -210,7 +210,8 @@ export default function ContactsPage() {
           insights: [],
         });
         const newLead = { ...dataToSave, id: docRef.id };
-        setLeads((prev) => [newLead, ...prev]);
+        // We add status here for the UI to update instantly, backend will confirm it.
+        setLeads((prev) => [{ ...newLead, status: 'Active' }, ...prev]);
         toast({ title: "Contact Added" });
       }
       setIsLeadDialogOpen(false);
@@ -397,3 +398,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    
