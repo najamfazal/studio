@@ -414,12 +414,48 @@ def reset_afc_for_engagement(lead_id: str, lead_name: str):
     create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
 
+
+# --- New Function for Cascading Deletes ---
+@firestore_fn.on_document_deleted(document="leads/{leadId}", region="us-central1")
+def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
+    """
+    Handles the cascading deletion of a lead's associated data (tasks and interactions).
+    """
+    lead_id = event.params.get("leadId")
+    print(f"Lead {lead_id} deleted. Cleaning up associated data...")
+
+    batch = db.batch()
+    deleted_tasks_count = 0
+    deleted_interactions_count = 0
+
+    # Delete associated tasks
+    tasks_ref = db.collection("tasks")
+    tasks_query = tasks_ref.where("leadId", "==", lead_id).stream()
+    for task in tasks_query:
+        batch.delete(task.reference)
+        deleted_tasks_count += 1
+
+    # Delete associated interactions (logs, events, etc.)
+    interactions_ref = db.collection("interactions")
+    interactions_query = interactions_ref.where("leadId", "==", lead_id).stream()
+    for interaction in interactions_query:
+        batch.delete(interaction.reference)
+        deleted_interactions_count += 1
+    
+    # Commit the batched deletions
+    if deleted_tasks_count > 0 or deleted_interactions_count > 0:
+        batch.commit()
+        print(f"Cleanup for lead {lead_id} complete. Deleted {deleted_tasks_count} tasks and {deleted_interactions_count} interactions.")
+    else:
+        print(f"No associated tasks or interactions found for lead {lead_id}.")
     
 
     
 
 
 
+
+    
 
     
 
