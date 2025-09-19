@@ -31,7 +31,13 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
-@https_fn.on_request(region="us-central1", cors=True)
+@https_fn.on_request(
+    region="us-central1",
+            cors=options.CorsOptions(
+                    cors_origins=["https://studio--leadtrack-solo.us-central1.hosted.app"], # Add your app's URL
+                    cors_methods=["get", "post", "options"] # Add all methods your app uses
+                )
+)
 def importContactsJson(req: https_fn.Request) -> https_fn.Response:
     """
     An HTTP-triggered function to import contacts from a JSON payload.
