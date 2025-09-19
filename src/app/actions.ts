@@ -83,23 +83,19 @@ export async function migrateLeadsToContactsAction() {
 }
 
 
-export async function importContactsAction(formData: FormData) {
-  const file = formData.get('file') as File;
-  const relationship = formData.get('relationship') as string;
-  const isNew = formData.get('isNew') === 'true';
+export async function importContactsAction(formData: { jsonData: string; relationship: string; isNew: boolean }) {
+  const { jsonData, relationship, isNew } = formData;
   
-  if (!file) {
-    return { success: false, error: 'No file provided.' };
+  if (!jsonData) {
+    return { success: false, error: 'No JSON data provided.' };
   }
 
   try {
-    const fileContent = await file.text();
-    
     // We assume the import function is deployed in the same region and project.
     // Replace with your actual region and project ID if different.
     const region = process.env.LOCATION || 'us-central1';
     const projectId = process.env.GCLOUD_PROJECT;
-    const functionUrl = `https://${region}-${projectId}.cloudfunctions.net/importContactsCsv`;
+    const functionUrl = `https://${region}-${projectId}.cloudfunctions.net/importContactsJson`;
 
     const response = await fetch(functionUrl, {
       method: 'POST',
@@ -107,7 +103,7 @@ export async function importContactsAction(formData: FormData) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        csvData: fileContent,
+        jsonData,
         relationship,
         isNew,
       }),
@@ -126,3 +122,5 @@ export async function importContactsAction(formData: FormData) {
     return { success: false, error: errorMessage };
   }
 }
+
+    

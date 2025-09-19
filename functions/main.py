@@ -2,8 +2,7 @@
 from firebase_functions import firestore_fn, options, scheduler_fn, https_fn
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
-import csv
-import io
+import json
 
 # Initialize Firebase Admin SDK
 initialize_app()
@@ -33,9 +32,9 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
 @https_fn.on_request(region="us-central1", cors=True)
-def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
+def importContactsJson(req: https_fn.Request) -> https_fn.Response:
     """
-    An HTTP-triggered function to import contacts from a CSV file.
+    An HTTP-triggered function to import contacts from a JSON payload.
     CORS is handled by the `cors=True` parameter in the decorator.
     """
     try:
@@ -46,26 +45,33 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
                 status=400
             )
 
-        csv_data_string = req_data.get('csvData')
+        json_data_string = req_data.get('jsonData')
         default_relationship = req_data.get('relationship', 'Lead')
         is_new_mode = req_data.get('isNew', True)
 
-        if not csv_data_string:
+        if not json_data_string:
             return https_fn.Response(
-                {"error": "No CSV data provided."},
+                {"error": "No JSON data provided."},
                 status=400
             )
-            
-        file_like_object = io.StringIO(csv_data_string)
-        reader = csv.DictReader(file_like_object)
         
+        try:
+            contacts = json.loads(json_data_string)
+            if not isinstance(contacts, list):
+                 return https_fn.Response({"error": "JSON data must be an array of contact objects."}, status=400)
+        except json.JSONDecodeError:
+            return https_fn.Response({"error": "Invalid JSON format."}, status=400)
+            
         leads_ref = db.collection("leads")
         
         created_count = 0
         updated_count = 0
         skipped_count = 0
+        batch = db.batch()
+        batch_count = 0
+        BATCH_LIMIT = 499 # Firestore batch limit is 500
 
-        for row in reader:
+        for row in contacts:
             name = row.get("name", "").strip()
             email = row.get("email", "").strip()
 
@@ -106,15 +112,28 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
 
             if existing_doc_ref and not is_new_mode:
                 # Update existing contact
-                existing_doc_ref.update(lead_data)
+                batch.update(existing_doc_ref, lead_data)
                 updated_count += 1
+                batch_count += 1
             elif not existing_doc_ref:
                 # Create new contact
-                leads_ref.add(lead_data)
+                new_doc_ref = leads_ref.document()
+                batch.set(new_doc_ref, lead_data)
                 created_count += 1
+                batch_count += 1
             else:
                 # Skip existing contact in 'new only' mode
                 skipped_count +=1
+            
+            # Commit batch if limit is reached
+            if batch_count >= BATCH_LIMIT:
+                batch.commit()
+                batch = db.batch()
+                batch_count = 0
+        
+        # Commit any remaining operations in the last batch
+        if batch_count > 0:
+            batch.commit()
         
         return https_fn.Response({
             "message": "Import completed successfully.",
@@ -124,7 +143,7 @@ def importContactsCsv(req: https_fn.Request) -> https_fn.Response:
         }, status=200)
 
     except Exception as e:
-        print(f"Error during CSV import: {e}")
+        print(f"Error during JSON import: {e}")
         return https_fn.Response({"error": str(e)}, status=500)
 
 
@@ -454,6 +473,8 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
 
 
+
+    
 
     
 

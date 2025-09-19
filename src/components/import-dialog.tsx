@@ -11,17 +11,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Switch } from "./ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { Textarea } from "./ui/textarea";
 
 interface ImportDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onSave: (data: { file: File, relationship: string, isNew: boolean }) => void;
+  onSave: (data: { jsonData: string, relationship: string, isNew: boolean }) => void;
   relationshipTypes: string[];
   isImporting?: boolean;
 }
@@ -33,53 +33,71 @@ export function ImportDialog({
   relationshipTypes,
   isImporting,
 }: ImportDialogProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [jsonData, setJsonData] = useState("");
   const [relationship, setRelationship] = useState<string>("Lead");
   const [isNew, setIsNew] = useState(true);
   const { toast } = useToast();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFile(e.target.files[0]);
-    }
-  };
-
   const handleSave = () => {
-    if (!file) {
+    if (!jsonData.trim()) {
       toast({
         variant: "destructive",
-        title: "No file selected",
-        description: "Please select a CSV file to import.",
+        title: "No data provided",
+        description: "Please paste your JSON data into the text area.",
       });
       return;
     }
-    onSave({ file, relationship, isNew });
+    onSave({ jsonData, relationship, isNew });
   };
   
   const handleOpenChange = (open: boolean) => {
     if (isImporting) return;
     if (!open) {
       // Reset state when closing
-      setFile(null);
+      setJsonData("");
       setRelationship("Lead");
       setIsNew(true);
     }
     setIsOpen(open);
   }
 
+  const sampleJson = `[
+  {
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "phone1": "123-456-7890",
+    "phone1Type": "calling"
+  },
+  {
+    "name": "Jane Smith",
+    "email": "jane.smith@example.com",
+    "courseName": "Example Course 1"
+  }
+]`;
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Import Contacts from CSV</DialogTitle>
+          <DialogTitle>Import Contacts from JSON</DialogTitle>
           <DialogDescription>
-            Upload a CSV with columns: name, email, phone1, phone1Type, phone2, phone2Type, relationship, courseName. Only name is required.
+            Paste an array of contact objects in JSON format. Only 'name' is required.
+             <details className="text-xs mt-2 text-muted-foreground">
+                <summary>View example format</summary>
+                <pre className="bg-muted p-2 rounded-md mt-1 text-xs whitespace-pre-wrap">{sampleJson}</pre>
+            </details>
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="csv-file">CSV File</Label>
-            <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} />
+            <Label htmlFor="json-data">JSON Data</Label>
+            <Textarea 
+              id="json-data" 
+              value={jsonData}
+              onChange={(e) => setJsonData(e.target.value)}
+              placeholder="Paste your JSON array here..."
+              className="h-32"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="relationship-type">Default Relationship</Label>
@@ -112,7 +130,7 @@ export function ImportDialog({
           <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isImporting}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!file || isImporting}>
+          <Button onClick={handleSave} disabled={!jsonData.trim() || isImporting}>
             {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isImporting ? "Processing..." : "Import"}
           </Button>
@@ -121,3 +139,5 @@ export function ImportDialog({
     </Dialog>
   );
 }
+
+    

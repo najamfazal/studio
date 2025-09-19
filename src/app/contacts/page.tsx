@@ -46,12 +46,20 @@ import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
 import { importContactsAction } from "@/app/actions";
+import { Progress } from "@/components/ui/progress";
 
 const PAGE_SIZE = 10;
 
 const ALL_STATUSES: LeadStatus[] = [
   'Active', 'Paused', 'Snoozed', 'Cooling', 'Dormant', 'Enrolled', 'Withdrawn', 'Archived', 'Graduated'
 ];
+
+type ImportProgress = {
+  active: boolean;
+  value: number;
+  total: number;
+  message: string;
+}
 
 export default function ContactsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -71,6 +79,8 @@ export default function ContactsPage() {
   
   const [statusFilters, setStatusFilters] = useState<LeadStatus[]>(['Active']);
   const [isImporting, startImportTransition] = useTransition();
+
+  const [importProgress, setImportProgress] = useState<ImportProgress>({ active: false, value: 0, total: 0, message: '' });
 
   const { toast } = useToast();
 
@@ -236,35 +246,49 @@ export default function ContactsPage() {
     // The useEffect will now handle the re-fetch
   };
 
-  const handleImportSave = (data: { file: File, relationship: string, isNew: boolean }) => {
+  const handleImportSave = (data: { jsonData: string, relationship: string, isNew: boolean }) => {
     setIsImportDialogOpen(false);
-    toast({
-      title: "Importing contacts...",
-      description: "This may take a moment. The page will refresh upon completion.",
-    });
+    
+    let totalContacts = 0;
+    try {
+        const parsed = JSON.parse(data.jsonData);
+        totalContacts = Array.isArray(parsed) ? parsed.length : 0;
+    } catch(e) {
+        toast({ variant: "destructive", title: "Invalid JSON", description: "The provided text is not valid JSON."});
+        return;
+    }
 
+    if (totalContacts === 0) {
+        toast({ variant: "destructive", title: "No contacts found", description: "The JSON array is empty."});
+        return;
+    }
+
+    setImportProgress({ active: true, value: 0, total: totalContacts, message: "Starting import..." });
+    
     startImportTransition(async () => {
-      const formData = new FormData();
-      formData.append('file', data.file);
-      formData.append('relationship', data.relationship);
-      formData.append('isNew', String(data.isNew));
+        const result = await importContactsAction(data);
 
-      const result = await importContactsAction(formData);
-
-      if (result.success) {
-        toast({
-          title: "Import Successful",
-          description: `${result.created} created, ${result.updated} updated, ${result.skipped} skipped.`,
-        });
-        // Re-fetch leads to show the new data
-        fetchLeads(false, statusFilters);
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Import Failed",
-          description: result.error || "An unknown error occurred during import.",
-        });
-      }
+        if (result.success) {
+            const { created = 0, updated = 0, skipped = 0 } = result;
+            setImportProgress({ active: true, value: created + updated + skipped, total: totalContacts, message: "Import complete!" });
+            toast({
+                title: "Import Successful",
+                description: `${created} created, ${updated} updated, ${skipped} skipped.`,
+            });
+            fetchLeads(false, statusFilters);
+        } else {
+            setImportProgress({ active: false, value: 0, total: 0, message: "" });
+            toast({
+                variant: "destructive",
+                title: "Import Failed",
+                description: result.error || "An unknown error occurred during import.",
+            });
+        }
+        
+        // Hide progress bar after a delay
+        setTimeout(() => {
+            setImportProgress(prev => ({ ...prev, active: false }));
+        }, 4000);
     });
   }
 
@@ -319,6 +343,12 @@ export default function ContactsPage() {
                 </Button>
             </div>
         </div>
+         {importProgress.active && (
+          <div className="mt-4 space-y-1">
+             <Progress value={(importProgress.value / importProgress.total) * 100} className="w-full h-2" />
+             <p className="text-xs text-muted-foreground">{importProgress.message} ({importProgress.value} / {importProgress.total})</p>
+          </div>
+        )}
       </header>
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         {isLoading && <div className="flex justify-center"><Loader2 className="animate-spin text-primary"/></div>}
