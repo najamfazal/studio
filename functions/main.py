@@ -46,8 +46,8 @@ def importContactsJson(req: https_fn.Request) -> https_fn.Response:
             )
 
         json_data_string = req_data.get('jsonData')
-        default_relationship = req_data.get('relationship', 'Lead')
         is_new_mode = req_data.get('isNew', True)
+        default_relationship = "Lead" # Hardcoded default relationship
 
         if not json_data_string:
             return https_fn.Response(

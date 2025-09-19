@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Switch } from "./ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -21,8 +20,7 @@ import { Textarea } from "./ui/textarea";
 interface ImportDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onSave: (data: { jsonData: string, relationship: string, isNew: boolean }) => void;
-  relationshipTypes: string[];
+  onSave: (data: { jsonData: string; isNew: boolean }) => void;
   isImporting?: boolean;
 }
 
@@ -30,11 +28,9 @@ export function ImportDialog({
   isOpen,
   setIsOpen,
   onSave,
-  relationshipTypes,
   isImporting,
 }: ImportDialogProps) {
   const [jsonData, setJsonData] = useState("");
-  const [relationship, setRelationship] = useState<string>("Lead");
   const [isNew, setIsNew] = useState(true);
   const { toast } = useToast();
 
@@ -47,7 +43,7 @@ export function ImportDialog({
       });
       return;
     }
-    onSave({ jsonData, relationship, isNew });
+    onSave({ jsonData, isNew });
   };
   
   const handleOpenChange = (open: boolean) => {
@@ -55,7 +51,6 @@ export function ImportDialog({
     if (!open) {
       // Reset state when closing
       setJsonData("");
-      setRelationship("Lead");
       setIsNew(true);
     }
     setIsOpen(open);
@@ -99,19 +94,6 @@ export function ImportDialog({
               className="h-32"
             />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="relationship-type">Default Relationship</Label>
-             <Select value={relationship} onValueChange={setRelationship}>
-                <SelectTrigger id="relationship-type">
-                    <SelectValue placeholder="Select a relationship type" />
-                </SelectTrigger>
-                <SelectContent>
-                    {relationshipTypes.map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-          </div>
            <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
             <div className="space-y-0.5">
                 <Label>Import Mode</Label>
@@ -139,5 +121,3 @@ export function ImportDialog({
     </Dialog>
   );
 }
-
-    

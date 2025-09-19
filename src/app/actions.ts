@@ -83,8 +83,8 @@ export async function migrateLeadsToContactsAction() {
 }
 
 
-export async function importContactsAction(formData: { jsonData: string; relationship: string; isNew: boolean }) {
-  const { jsonData, relationship, isNew } = formData;
+export async function importContactsAction(formData: { jsonData: string; isNew: boolean }) {
+  const { jsonData, isNew } = formData;
   
   if (!jsonData) {
     return { success: false, error: 'No JSON data provided.' };
@@ -104,7 +104,6 @@ export async function importContactsAction(formData: { jsonData: string; relatio
       },
       body: JSON.stringify({
         jsonData,
-        relationship,
         isNew,
       }),
     });
@@ -122,5 +121,3 @@ export async function importContactsAction(formData: { jsonData: string; relatio
     return { success: false, error: errorMessage };
   }
 }
-
-    

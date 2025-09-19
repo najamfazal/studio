@@ -212,7 +212,6 @@ export default function ContactsPage() {
         const docRef = await addDoc(collection(db, "leads"), {
           ...dataToSave,
           createdAt: new Date().toISOString(),
-          // status: 'Active', // Let the backend function handle this
           afc_step: 0,
           hasEngaged: false,
           onFollowList: false,
@@ -220,8 +219,7 @@ export default function ContactsPage() {
           insights: [],
         });
         const newLead = { ...dataToSave, id: docRef.id };
-        // We add status here for the UI to update instantly, backend will confirm it.
-        setLeads((prev) => [{ ...newLead, status: 'Active' }, ...prev]);
+        setLeads((prev) => [{ ...newLead }, ...prev]);
         toast({ title: "Contact Added" });
       }
       setIsLeadDialogOpen(false);
@@ -246,7 +244,7 @@ export default function ContactsPage() {
     // The useEffect will now handle the re-fetch
   };
 
-  const handleImportSave = (data: { jsonData: string, relationship: string, isNew: boolean }) => {
+  const handleImportSave = (data: { jsonData: string; isNew: boolean }) => {
     setIsImportDialogOpen(false);
     
     let totalContacts = 0;
@@ -422,11 +420,8 @@ export default function ContactsPage() {
         isOpen={isImportDialogOpen}
         setIsOpen={setIsImportDialogOpen}
         onSave={handleImportSave}
-        relationshipTypes={appSettings?.relationshipTypes || []}
         isImporting={isImporting}
       />
     </div>
   );
 }
-
-    
