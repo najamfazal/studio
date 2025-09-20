@@ -3,7 +3,7 @@
 
 import {enrichLeadProfile} from '@/ai/flows/enrich-lead-profile';
 import {db} from '@/lib/firebase';
-import {collection, getDocs, writeBatch, query, where} from 'firebase/firestore';
+import {collection, getDocs, writeBatch, query, where, getFunctions, httpsCallable} from 'firebase/firestore';
 
 export async function enrichLeadAction(lead: {name: string; email: string; phone: string}) {
   try {
@@ -90,46 +90,28 @@ export async function importContactsAction(formData: { jsonData: string; isNew: 
   }
 
   try {
-    // We get the functions instance on the server and call it.
-    // This requires server-side Firebase Admin SDK to be initialized.
-    // For this environment, we'll assume a simplified direct-to-URL call
-    // is still preferred to avoid complex Admin SDK setup in the Next.js server environment.
-    const region = process.env.LOCATION || 'us-central1';
-    const projectId = process.env.GCLOUD_PROJECT;
+    // This action is running on the server, but it needs to call a Cloud Function.
+    // We'll use the Node.js Admin SDK's ability to get the functions and call it.
+    // For this to work, the server environment must have Firebase Admin initialized.
+    // In a real deployed environment (like App Hosting), this requires specific
+    // service account setup. In a local emulator, it connects automatically.
     
-    if (!projectId) {
-      throw new Error("GCLOUD_PROJECT environment variable not set. Cannot determine function URL.");
-    }
-    
-    // The endpoint for a callable function is different from a standard HTTP trigger.
-    const functionUrl = `https://${region}-${projectId}.cloudfunctions.net/importContactsJson`;
+    const functions = getFunctions(); // Assumes getFunctions is available in the context
+    const importContactsJson = httpsCallable(functions, 'importContactsJson');
 
-    const response = await fetch(functionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // The body of a callable function request needs a 'data' wrapper.
-      body: JSON.stringify({
-        data: {
-          jsonData,
-          isNew,
-        }
-      }),
+    const result = await importContactsJson({
+        jsonData,
+        isNew,
     });
     
-    const result = await response.json();
+    // The `result.data` from a callable function contains the object returned by the Python function.
+    return { success: true, ...(result.data as any) };
 
-    if (!response.ok) {
-       // Callable functions wrap errors in result.error
-      throw new Error(result.error?.message || 'Failed to process import.');
-    }
-
-    // Successful callable functions wrap their response in result.data
-    return { success: true, ...result.data };
   } catch (error) {
     console.error('Error in importContactsAction:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    // Callable functions can throw HttpsError which has more details
+    const httpsError = error as any;
+    const errorMessage = httpsError.message || 'An unknown error occurred.';
     return { success: false, error: errorMessage };
   }
 }
