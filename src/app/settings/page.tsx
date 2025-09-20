@@ -10,13 +10,14 @@ import { Logo } from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Plus, Settings, Trash2, X } from 'lucide-react';
+import { Loader2, Plus, Settings, Trash2, X, Pencil, Check } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
+type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes';
 
 export default function SettingsPage() {
     const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -29,6 +30,8 @@ export default function SettingsPage() {
     const [newWithdrawalReason, setNewWithdrawalReason] = useState("");
     const [newRelationshipType, setNewRelationshipType] = useState("");
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
+
+    const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
 
     const fetchSettings = useCallback(async () => {
         setIsLoading(true);
@@ -95,6 +98,38 @@ export default function SettingsPage() {
             setIsSaving(false);
         }
     };
+    
+    const handleRenameItem = () => {
+        if (!editingItem || !settings) return;
+
+        const { field, index, value } = editingItem;
+        if (!value.trim()) {
+            toast({ variant: 'destructive', title: 'Item name cannot be empty.' });
+            return;
+        }
+
+        const newSettings = produce(settings, draft => {
+            if (field.startsWith('feedbackChips.')) {
+                const category = field.split('.')[1] as FeedbackCategory;
+                draft.feedbackChips[category][index] = value;
+            } else {
+                (draft[field as AppSettingsField] as string[])[index] = value;
+            }
+        });
+
+        const updatePath = field;
+        const updatePayload: { [key: string]: any } = {};
+        if (updatePath.includes('.')) {
+            const [parent] = updatePath.split('.') as ['feedbackChips'];
+            updatePayload[parent] = { ...newSettings.feedbackChips };
+        } else {
+            updatePayload[updatePath] = newSettings[updatePath as keyof AppSettings];
+        }
+
+        handleSave(updatePayload, newSettings);
+        setEditingItem(null);
+    }
+
 
     const handleAddItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | `feedbackChips.${FeedbackCategory}`) => {
         if (!settings) return;
@@ -189,6 +224,46 @@ export default function SettingsPage() {
         handleSave(updatePayload, newSettings);
     };
 
+    const renderChipList = (
+        field: AppSettingsField | `feedbackChips.${FeedbackCategory}`,
+        items: string[]
+    ) => {
+        return (
+            <div className="flex flex-wrap gap-2">
+                {items.map((item, index) => {
+                    const isEditing = editingItem?.field === field && editingItem?.index === index;
+                    return (
+                        <div key={`${field}-${index}`}>
+                            {isEditing ? (
+                                <div className="flex items-center gap-1">
+                                    <Input
+                                        value={editingItem.value}
+                                        onChange={e => setEditingItem({ ...editingItem, value: e.target.value })}
+                                        onKeyDown={e => e.key === 'Enter' && handleRenameItem()}
+                                        autoFocus
+                                        className="h-7 text-xs"
+                                    />
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleRenameItem}><Check className="h-4 w-4 text-green-600"/></Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingItem(null)}><X className="h-4 w-4"/></Button>
+                                </div>
+                            ) : (
+                                <Badge variant="secondary" className="text-sm items-center">
+                                    {item}
+                                    <button onClick={() => setEditingItem({ field, index, value: item })} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
+                                        <Pencil className="h-3 w-3" />
+                                    </button>
+                                    <button onClick={() => handleRemoveItem(field, item)} className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5">
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </Badge>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -223,16 +298,7 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-2">
-                                <div className="flex flex-wrap gap-2">
-                                    {settings.relationshipTypes.map(rtype => (
-                                        <Badge key={rtype} variant="secondary" className="text-sm">
-                                            {rtype}
-                                            <button onClick={() => handleRemoveItem('relationshipTypes', rtype)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
-                                                <X className="h-3 w-3"/>
-                                            </button>
-                                        </Badge>
-                                    ))}
-                                </div>
+                                {renderChipList('relationshipTypes', settings.relationshipTypes)}
                                 <div className="flex gap-2 pt-2">
                                     <Input value={newRelationshipType} onChange={e => setNewRelationshipType(e.target.value)} placeholder="Add new type..." onKeyDown={e => e.key === 'Enter' && handleAddItem('relationshipTypes')} />
                                     <Button onClick={() => handleAddItem('relationshipTypes')} disabled={isSaving || !newRelationshipType}>
@@ -250,16 +316,7 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-2">
-                                <div className="flex flex-wrap gap-2">
-                                    {settings.courseNames.map(course => (
-                                        <Badge key={course} variant="secondary" className="text-sm">
-                                            {course}
-                                            <button onClick={() => handleRemoveItem('courseNames', course)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
-                                                <X className="h-3 w-3"/>
-                                            </button>
-                                        </Badge>
-                                    ))}
-                                </div>
+                                {renderChipList('courseNames', settings.courseNames)}
                                 <div className="flex gap-2 pt-2">
                                     <Input value={newCourseName} onChange={e => setNewCourseName(e.target.value)} placeholder="Add new course..." onKeyDown={e => e.key === 'Enter' && handleAddItem('courseNames')} />
                                     <Button onClick={() => handleAddItem('courseNames')} disabled={isSaving || !newCourseName}>
@@ -277,16 +334,7 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent>
                              <div className="space-y-2">
-                                <div className="flex flex-wrap gap-2">
-                                    {settings.commonTraits.map(trait => (
-                                        <Badge key={trait} variant="secondary" className="text-sm">
-                                            {trait}
-                                            <button onClick={() => handleRemoveItem('commonTraits', trait)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
-                                                <X className="h-3 w-3"/>
-                                            </button>
-                                        </Badge>
-                                    ))}
-                                </div>
+                                {renderChipList('commonTraits', settings.commonTraits)}
                                 <div className="flex gap-2 pt-2">
                                     <Input value={newTrait} onChange={e => setNewTrait(e.target.value)} placeholder="Add new trait..." onKeyDown={e => e.key === 'Enter' && handleAddItem('commonTraits')} />
                                     <Button onClick={() => handleAddItem('commonTraits')} disabled={isSaving || !newTrait}>
@@ -304,16 +352,7 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent>
                              <div className="space-y-2">
-                                <div className="flex flex-wrap gap-2">
-                                    {(settings.withdrawalReasons || []).map(reason => (
-                                        <Badge key={reason} variant="secondary" className="text-sm">
-                                            {reason}
-                                            <button onClick={() => handleRemoveItem('withdrawalReasons', reason)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
-                                                <X className="h-3 w-3"/>
-                                            </button>
-                                        </Badge>
-                                    ))}
-                                </div>
+                                {renderChipList('withdrawalReasons', settings.withdrawalReasons || [])}
                                 <div className="flex gap-2 pt-2">
                                     <Input value={newWithdrawalReason} onChange={e => setNewWithdrawalReason(e.target.value)} placeholder="Add new reason..." onKeyDown={e => e.key === 'Enter' && handleAddItem('withdrawalReasons')} />
                                     <Button onClick={() => handleAddItem('withdrawalReasons')} disabled={isSaving || !newWithdrawalReason}>
@@ -334,16 +373,7 @@ export default function SettingsPage() {
                                 <div key={category}>
                                     <h3 className="font-semibold capitalize mb-2">{category}</h3>
                                      <div className="space-y-2">
-                                        <div className="flex flex-wrap gap-2">
-                                            {settings.feedbackChips[category].map(chip => (
-                                                <Badge key={chip} variant="secondary" className="text-sm">
-                                                    {chip}
-                                                    <button onClick={() => handleRemoveItem(`feedbackChips.${category}`, chip)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5">
-                                                        <X className="h-3 w-3"/>
-                                                    </button>
-                                                </Badge>
-                                            ))}
-                                        </div>
+                                        {renderChipList(`feedbackChips.${category}`, settings.feedbackChips[category])}
                                         <div className="flex gap-2 pt-2">
                                             <Input 
                                               value={newFeedbackChip.category === category ? newFeedbackChip.value : ""} 
@@ -374,3 +404,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
