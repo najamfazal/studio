@@ -31,42 +31,42 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
-@https_fn.on_request(
-    region="us-central1",
-            cors=options.CorsOptions(
-                    cors_origins=["https://studio--leadtrack-solo.us-central1.hosted.app"], # Add your app's URL
-                    cors_methods=["get", "post", "options"] # Add all methods your app uses
-                )
-)
-def importContactsJson(req: https_fn.Request) -> https_fn.Response:
+@https_fn.on_call(region="us-central1")
+def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
-    An HTTP-triggered function to import contacts from a JSON payload.
-    CORS is handled by the `cors=True` parameter in the decorator.
+    An onCall function to import contacts from a JSON payload.
+    CORS is handled automatically by on_call.
     """
     try:
-        req_data = req.get_json(silent=True)
-        if not req_data:
-             return https_fn.Response(
-                {"error": "Invalid JSON payload."},
-                status=400
+        # For on_call functions, data is in req.data
+        if not req.data:
+             raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                message="Request payload is missing."
             )
 
-        json_data_string = req_data.get('jsonData')
-        is_new_mode = req_data.get('isNew', True)
+        json_data_string = req.data.get('jsonData')
+        is_new_mode = req.data.get('isNew', True)
         default_relationship = "Lead" # Hardcoded default relationship
 
         if not json_data_string:
-            return https_fn.Response(
-                {"error": "No JSON data provided."},
-                status=400
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                message="No JSON data provided in payload."
             )
         
         try:
             contacts = json.loads(json_data_string)
             if not isinstance(contacts, list):
-                 return https_fn.Response({"error": "JSON data must be an array of contact objects."}, status=400)
+                 raise https_fn.HttpsError(
+                    code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                    message="JSON data must be an array of contact objects."
+                )
         except json.JSONDecodeError:
-            return https_fn.Response({"error": "Invalid JSON format."}, status=400)
+             raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                message="Invalid JSON format."
+            )
             
         leads_ref = db.collection("leads")
         
@@ -96,7 +96,7 @@ def importContactsJson(req: https_fn.Request) -> https_fn.Response:
                 "name": name,
                 "email": email,
                 "phones": phones,
-                "relationship": row.get("relationship", "").strip() or default_relationship,
+                "relationship": default_relationship,
                 "commitmentSnapshot": {
                     "course": row.get("courseName", "").strip() or ""
                 },
@@ -141,16 +141,24 @@ def importContactsJson(req: https_fn.Request) -> https_fn.Response:
         if batch_count > 0:
             batch.commit()
         
-        return https_fn.Response({
+        # Return a dictionary directly for on_call functions
+        return {
             "message": "Import completed successfully.",
             "created": created_count,
             "updated": updated_count,
             "skipped": skipped_count
-        }, status=200)
+        }
 
+    except https_fn.HttpsError as e:
+        # Re-throw HttpsError to be properly handled by the client
+        raise e
     except Exception as e:
         print(f"Error during JSON import: {e}")
-        return https_fn.Response({"error": str(e)}, status=500)
+        # Throw a generic HttpsError for other exceptions
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred: {e}"
+        )
 
 
 @firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1")

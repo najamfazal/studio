@@ -50,10 +50,9 @@ export async function migrateLeadsToContactsAction() {
 
         batch.update(doc.ref, {
           status: 'Active',
-          relationship: 'Lead',
-          afc_step: data.afc_step ?? 0,
-          hasEngaged: data.hasEngaged ?? false,
-          onFollowList: data.onFollowList ?? false,
+          afc_step: 0,
+          hasEngaged: false,
+          onFollowList: false,
           traits: data.traits || [],
           insights: data.insights || [],
           commitmentSnapshot: data.commitmentSnapshot || {},
@@ -91,10 +90,18 @@ export async function importContactsAction(formData: { jsonData: string; isNew: 
   }
 
   try {
-    // We assume the import function is deployed in the same region and project.
-    // Replace with your actual region and project ID if different.
+    // We get the functions instance on the server and call it.
+    // This requires server-side Firebase Admin SDK to be initialized.
+    // For this environment, we'll assume a simplified direct-to-URL call
+    // is still preferred to avoid complex Admin SDK setup in the Next.js server environment.
     const region = process.env.LOCATION || 'us-central1';
     const projectId = process.env.GCLOUD_PROJECT;
+    
+    if (!projectId) {
+      throw new Error("GCLOUD_PROJECT environment variable not set. Cannot determine function URL.");
+    }
+    
+    // The endpoint for a callable function is different from a standard HTTP trigger.
     const functionUrl = `https://${region}-${projectId}.cloudfunctions.net/importContactsJson`;
 
     const response = await fetch(functionUrl, {
@@ -102,19 +109,24 @@ export async function importContactsAction(formData: { jsonData: string; isNew: 
       headers: {
         'Content-Type': 'application/json',
       },
+      // The body of a callable function request needs a 'data' wrapper.
       body: JSON.stringify({
-        jsonData,
-        isNew,
+        data: {
+          jsonData,
+          isNew,
+        }
       }),
     });
     
     const result = await response.json();
 
     if (!response.ok) {
-      throw new Error(result.error || 'Failed to process import.');
+       // Callable functions wrap errors in result.error
+      throw new Error(result.error?.message || 'Failed to process import.');
     }
 
-    return { success: true, ...result };
+    // Successful callable functions wrap their response in result.data
+    return { success: true, ...result.data };
   } catch (error) {
     console.error('Error in importContactsAction:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
