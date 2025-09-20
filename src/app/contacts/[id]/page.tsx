@@ -670,6 +670,30 @@ export default function ContactDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          <Card>
+              <CardHeader className="p-4"><CardTitle className="text-lg">Contact Details</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0 space-y-2">
+                {lead.email && (
+                  <div className="flex items-center gap-3">
+                    <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <a href={`mailto:${lead.email}`} className="text-sm hover:underline">
+                      {lead.email}
+                    </a>
+                  </div>
+                )}
+                {(lead.phones || []).map((phone, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                        <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <a href={`tel:${phone.number}`} className="text-sm">
+                          {phone.number}
+                        </a>
+                        {phone.type !== 'both' && <Badge variant="secondary" className="text-xs capitalize">{phone.type}</Badge>}
+                    </div>
+                ))}
+              </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="p-4"><CardTitle className="text-lg">Commitment Snapshot</CardTitle></CardHeader>
             <CardContent className="p-4 pt-0 space-y-4">
@@ -1175,5 +1199,3 @@ export default function ContactDetailPage() {
     </div>
   );
 }
-
-    

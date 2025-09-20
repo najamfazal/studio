@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useTransition } from "react";
+import { useState, useEffect, useCallback, useTransition, useMemo } from "react";
 import {
   collection,
   getDocs,
@@ -15,7 +15,7 @@ import {
   DocumentData,
   where,
 } from "firebase/firestore";
-import { Plus, Users, Loader2, Filter, Upload } from "lucide-react";
+import { Plus, Users, Loader2, Filter, Upload, Search } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
@@ -47,6 +47,8 @@ import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
 import { importContactsAction } from "@/app/actions";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/hooks/use-debounce";
 
 const PAGE_SIZE = 10;
 
@@ -63,6 +65,7 @@ type ImportProgress = {
 
 export default function ContactsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [allLeads, setAllLeads] = useState<Lead[]>([]); // For client-side search
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] =
@@ -77,10 +80,13 @@ export default function ContactsPage() {
   const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   
-  const [statusFilters, setStatusFilters] = useState<LeadStatus[]>(['Active']);
+  const [statusFilters, setStatusFilters] = useState<LeadStatus[]>([]);
   const [isImporting, startImportTransition] = useTransition();
 
   const [importProgress, setImportProgress] = useState<ImportProgress>({ active: false, value: 0, total: 0, message: '' });
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { toast } = useToast();
 
@@ -110,7 +116,8 @@ export default function ContactsPage() {
     try {
       const leadsRef = collection(db, "leads");
       const queryConstraints = [];
-
+      
+      // If filters are active, use them. Otherwise, don't filter by status.
       if (currentFilters.length > 0) {
         queryConstraints.push(where("status", "in", currentFilters));
       }
@@ -135,10 +142,11 @@ export default function ContactsPage() {
       setLastVisible(newLastVisible);
       setHasMore(newLeads.length === PAGE_SIZE);
       
-      if (loadMore) {
-          setLeads(prev => [...prev, ...newLeads]);
-      } else {
-          setLeads(newLeads);
+      const combinedLeads = loadMore ? [...leads, ...newLeads] : newLeads;
+      setLeads(combinedLeads);
+      if (currentFilters.length === 0) {
+        // If no filters, we store all for searching
+        setAllLeads(combinedLeads)
       }
 
     } catch (error) {
@@ -152,7 +160,7 @@ export default function ContactsPage() {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, lastVisible, statusFilters]);
+  }, [toast, lastVisible, statusFilters, leads]);
 
 
   useEffect(() => {
@@ -160,6 +168,23 @@ export default function ContactsPage() {
     fetchLeads(false, statusFilters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilters]); // Re-fetch when filters change
+
+  const filteredLeads = useMemo(() => {
+    if (!debouncedSearchTerm) {
+      return leads;
+    }
+    
+    // When filters are active, Firestore does the filtering. We search within the results.
+    const sourceData = statusFilters.length > 0 ? leads : allLeads;
+
+    return sourceData.filter(lead => {
+        const term = debouncedSearchTerm.toLowerCase();
+        const nameMatch = lead.name.toLowerCase().includes(term);
+        const phoneMatch = lead.phones?.some(p => p.number.replace(/\s+/g, '').includes(term));
+        return nameMatch || phoneMatch;
+    });
+
+  }, [debouncedSearchTerm, leads, allLeads, statusFilters.length]);
 
   const handleEdit = (lead: Lead) => {
     setLeadToEdit(lead);
@@ -171,6 +196,7 @@ export default function ContactsPage() {
     try {
       await deleteDoc(doc(db, "leads", leadToDelete));
       setLeads((prev) => prev.filter((lead) => lead.id !== leadToDelete));
+      setAllLeads((prev) => prev.filter((lead) => lead.id !== leadToDelete));
       toast({
         title: "Contact Deleted",
         description: "The contact has been successfully removed.",
@@ -203,8 +229,12 @@ export default function ContactsPage() {
         // Update existing lead
         const leadRef = doc(db, "leads", leadToEdit.id);
         await updateDoc(leadRef, dataToSave);
+        const updatedLead = { ...leadToEdit, ...dataToSave };
         setLeads((prev) =>
-          prev.map((l) => (l.id === leadToEdit.id ? { ...l, ...dataToSave, id: l.id } : l))
+          prev.map((l) => (l.id === leadToEdit.id ? updatedLead : l))
+        );
+        setAllLeads((prev) =>
+          prev.map((l) => (l.id === leadToEdit.id ? updatedLead : l))
         );
         toast({ title: "Contact Updated" });
       } else {
@@ -212,15 +242,12 @@ export default function ContactsPage() {
         const docRef = await addDoc(collection(db, "leads"), {
           ...dataToSave,
           createdAt: new Date().toISOString(),
-          // status: 'Active', // Let the cloud function handle this
-          // afc_step: 0,
-          // hasEngaged: false,
-          // onFollowList: false,
           traits: [],
           insights: [],
         });
         const newLead = { ...dataToSave, id: docRef.id, status: 'Active' }; // Assume Active for UI
         setLeads((prev) => [{ ...newLead } as Lead, ...prev]);
+        setAllLeads((prev) => [{ ...newLead } as Lead, ...prev]);
         toast({ title: "Contact Added" });
       }
       setIsLeadDialogOpen(false);
@@ -242,7 +269,6 @@ export default function ContactsPage() {
       ? statusFilters.filter(s => s !== status)
       : [...statusFilters, status];
     setStatusFilters(newFilters);
-    // The useEffect will now handle the re-fetch
   };
 
   const handleImportSave = (data: { jsonData: string; isNew: boolean }) => {
@@ -290,7 +316,6 @@ export default function ContactsPage() {
             });
         }
         
-        // Hide progress bar after a delay
         setTimeout(() => {
             setImportProgress(prev => ({ ...prev, active: false }));
         }, 4000);
@@ -298,7 +323,7 @@ export default function ContactsPage() {
   }
 
 
-  if (isLoading && leads.length === 0 && statusFilters.length === 0) {
+  if (isLoading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Logo className="h-12 w-12 animate-spin text-primary" />
@@ -331,7 +356,7 @@ export default function ContactsPage() {
                                 key={status}
                                 checked={statusFilters.includes(status)}
                                 onCheckedChange={() => handleFilterChange(status)}
-                                onSelect={(e) => e.preventDefault()} // Prevents dropdown from closing
+                                onSelect={(e) => e.preventDefault()}
                             >
                                 {status}
                             </DropdownMenuCheckboxItem>
@@ -348,6 +373,15 @@ export default function ContactsPage() {
                 </Button>
             </div>
         </div>
+        <div className="relative mt-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or phone..."
+              className="pl-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+        </div>
          {importProgress.active && (
           <div className="mt-4 space-y-1">
              <Progress value={(importProgress.value / importProgress.total) * 100} className="w-full h-2" />
@@ -357,9 +391,9 @@ export default function ContactsPage() {
       </header>
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         {isLoading && <div className="flex justify-center"><Loader2 className="animate-spin text-primary"/></div>}
-        {!isLoading && leads.length > 0 ? (
+        {!isLoading && filteredLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {leads.map((lead) => (
+            {filteredLeads.map((lead) => (
               <ContactCard
                 key={lead.id}
                 lead={lead}
@@ -376,14 +410,14 @@ export default function ContactsPage() {
               No contacts found
             </h2>
             <p className="mt-2 max-w-xs">
-              {statusFilters.length > 0 ? "No contacts match the current filter." : "Click the \"+\" button to add your first contact."}
+              {searchTerm ? `No results for "${searchTerm}".` : (statusFilters.length > 0 ? "No contacts match the current filter." : "Click the \"+\" button to add your first contact.")}
             </p>
           </div>
         )}
 
-        {hasMore && !isLoadingMore && (
+        {hasMore && !isLoadingMore && !debouncedSearchTerm && (
             <div className="flex justify-center mt-8">
-                <Button onClick={() => fetchLeads(true)} disabled={isLoadingMore}>
+                <Button variant="link" onClick={() => fetchLeads(true)} disabled={isLoadingMore}>
                     {isLoadingMore ? "Loading..." : "Load More"}
                 </Button>
             </div>
@@ -432,5 +466,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-    

@@ -24,6 +24,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import type { Lead } from "@/lib/types";
+import { cn } from '@/lib/utils';
 
 interface ContactCardProps {
   lead: Lead;
@@ -41,12 +42,12 @@ export function ContactCard({
   return (
     <Card className="p-4 flex flex-col">
       <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 space-y-1 pr-2">
+        <div className="flex-1 space-y-1 pr-2 min-w-0">
             <Link href={`/contacts/${lead.id}`} className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-base hover:underline leading-tight">{lead.name}</h3>
+              <h3 className="font-semibold text-base hover:underline leading-tight truncate max-w-[150px]">{lead.name}</h3>
               <p className="text-xs text-muted-foreground">{lead.relationship || 'Lead'}</p>
-              <Badge variant={lead.status === 'Active' ? "default" : "secondary"} className="text-xs">{lead.status || 'Active'}</Badge>
             </Link>
+             <Badge variant={lead.status === 'Active' ? "default" : "secondary"} className="text-xs mt-1">{lead.status || 'Active'}</Badge>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -75,7 +76,7 @@ export function ContactCard({
         </DropdownMenu>
       </div>
 
-      <CardContent className="p-0 text-sm flex items-start justify-between">
+      <CardContent className="p-0 text-sm flex flex-col items-start justify-between mt-auto">
          <div className="space-y-1">
             {(lead.phones || []).map((phone, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -83,21 +84,15 @@ export function ContactCard({
                     <a href={`tel:${phone.number}`} className="truncate text-xs">
                       {phone.number}
                     </a>
-                    {phone.type !== 'both' && <span className="text-xs text-muted-foreground capitalize">({phone.type})</span>}
                 </div>
             ))}
+             {(lead.phones || []).length === 0 && (
+                 <div className="flex items-center gap-2 text-muted-foreground">
+                    <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                    <p className="text-xs">No phone number</p>
+                 </div>
+             )}
         </div>
-        {lead.email && (
-            <div className="flex items-center gap-2">
-              <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              <a
-                href={`mailto:${lead.email}`}
-                className="hover:underline truncate text-xs"
-              >
-                {lead.email}
-              </a>
-            </div>
-        )}
       </CardContent>
     </Card>
   );
