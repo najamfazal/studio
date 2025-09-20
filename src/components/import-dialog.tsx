@@ -77,11 +77,11 @@ export function ImportDialog({
           <DialogTitle>Import Contacts from JSON</DialogTitle>
           <DialogDescription>
             Paste an array of contact objects in JSON format. Only 'name' is required.
-             <details className="text-xs mt-2 text-muted-foreground">
-                <summary>View example format</summary>
-                <pre className="bg-muted p-2 rounded-md mt-1 text-xs whitespace-pre-wrap">{sampleJson}</pre>
-            </details>
           </DialogDescription>
+          <details className="text-xs mt-2 text-muted-foreground">
+              <summary>View example format</summary>
+              <pre className="bg-muted p-2 rounded-md mt-1 text-xs whitespace-pre-wrap">{sampleJson}</pre>
+          </details>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
