@@ -3,7 +3,6 @@ from firebase_functions import firestore_fn, options, scheduler_fn, https_fn
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
 import json
-import csv
 import io
 
 # Initialize Firebase Admin SDK
@@ -34,9 +33,9 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
 @https_fn.on_call(region="us-central1")
-def importContactsCsv(req: https_fn.CallableRequest) -> dict:
+def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
-    An onCall function to import contacts from a CSV payload.
+    An onCall function to import contacts from a JSON payload.
     """
     try:
         if not req.data:
@@ -45,25 +44,24 @@ def importContactsCsv(req: https_fn.CallableRequest) -> dict:
                 message="Request payload is missing."
             )
 
-        csv_data_string = req.data.get('csvData')
+        json_data_string = req.data.get('jsonData')
         is_new_mode = req.data.get('isNew', True)
         default_relationship = "Lead"
 
-        if not csv_data_string:
+        if not json_data_string:
             raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message="No CSV data provided in payload."
+                message="No JSON data provided in payload."
             )
         
         try:
-            # Use io.StringIO to treat the string as a file
-            csv_file = io.StringIO(csv_data_string)
-            reader = csv.DictReader(csv_file)
-            contacts = list(reader)
-        except Exception as e:
+            contacts = json.loads(json_data_string)
+            if not isinstance(contacts, list):
+                raise ValueError("JSON data must be an array of contact objects.")
+        except (json.JSONDecodeError, ValueError) as e:
              raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message=f"Invalid CSV format: {e}"
+                message=f"Invalid JSON format: {e}"
             )
             
         leads_ref = db.collection("leads")
@@ -87,10 +85,26 @@ def importContactsCsv(req: https_fn.CallableRequest) -> dict:
             # --- Prepare Lead Data ---
             phones = []
             
-            # Handle "phone" (generic) from CSV
-            phone_generic = row.get("phone", row.get("Phone", ""))
-            if phone_generic:
-                phones.append({"number": str(phone_generic).strip(), "type": "both"})
+            # Handle Phone1
+            phone1_num = row.get("Phone1", row.get("phone1"))
+            if phone1_num:
+                phone1_type_raw = str(row.get("Phone1 Type", row.get("phone1_type", "both"))).strip().lower()
+                phone1_type = phone1_type_raw if phone1_type_raw in ["calling", "chat", "both"] else "both"
+                phones.append({"number": str(phone1_num).strip(), "type": phone1_type})
+
+            # Handle Phone2
+            phone2_num = row.get("Phone2", row.get("phone2"))
+            if phone2_num:
+                phone2_type_raw = str(row.get("Phone2 Type", row.get("phone2_type", "both"))).strip().lower()
+                phone2_type = phone2_type_raw if phone2_type_raw in ["calling", "chat", "both"] else "both"
+                phones.append({"number": str(phone2_num).strip(), "type": phone2_type})
+            
+            # Fallback for generic 'phone' if no Phone1/Phone2
+            if not phones:
+                phone_generic = row.get("phone", row.get("Phone", ""))
+                if phone_generic:
+                    phones.append({"number": str(phone_generic).strip(), "type": "both"})
+
 
             lead_data = {
                 "name": name,
@@ -151,7 +165,7 @@ def importContactsCsv(req: https_fn.CallableRequest) -> dict:
     except https_fn.HttpsError as e:
         raise e
     except Exception as e:
-        print(f"Error during CSV import: {e}")
+        print(f"Error during JSON import: {e}")
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"An internal error occurred: {e}"
@@ -497,4 +511,5 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
     
 
+    
     

@@ -83,19 +83,19 @@ export async function migrateLeadsToContactsAction() {
 }
 
 
-export async function importContactsAction(formData: { csvData: string; isNew: boolean }) {
-  const { csvData, isNew } = formData;
+export async function importContactsAction(formData: { jsonData: string; isNew: boolean }) {
+  const { jsonData, isNew } = formData;
   
-  if (!csvData) {
-    return { success: false, error: 'No CSV data provided.' };
+  if (!jsonData) {
+    return { success: false, error: 'No JSON data provided.' };
   }
 
   try {
     const functions = getFunctions();
-    const importContactsCsv = httpsCallable(functions, 'importContactsCsv');
+    const importContactsJson = httpsCallable(functions, 'importContactsJson');
 
-    const result = await importContactsCsv({
-        csvData,
+    const result = await importContactsJson({
+        jsonData,
         isNew,
     });
     
@@ -110,3 +110,5 @@ export async function importContactsAction(formData: { csvData: string; isNew: b
     return { success: false, error: errorMessage };
   }
 }
+
+    

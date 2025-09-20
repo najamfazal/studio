@@ -208,19 +208,19 @@ export default function ContactsPage() {
         );
         toast({ title: "Contact Updated" });
       } else {
-        // Add new lead
+        // Add new lead - note that onLeadCreate will not fire if status is set here.
         const docRef = await addDoc(collection(db, "leads"), {
           ...dataToSave,
           createdAt: new Date().toISOString(),
-          status: 'Active',
-          afc_step: 0,
-          hasEngaged: false,
-          onFollowList: false,
+          // status: 'Active', // Let the cloud function handle this
+          // afc_step: 0,
+          // hasEngaged: false,
+          // onFollowList: false,
           traits: [],
           insights: [],
         });
-        const newLead = { ...dataToSave, id: docRef.id };
-        setLeads((prev) => [{ ...newLead }, ...prev]);
+        const newLead = { ...dataToSave, id: docRef.id, status: 'Active' }; // Assume Active for UI
+        setLeads((prev) => [{ ...newLead } as Lead, ...prev]);
         toast({ title: "Contact Added" });
       }
       setIsLeadDialogOpen(false);
@@ -245,54 +245,56 @@ export default function ContactsPage() {
     // The useEffect will now handle the re-fetch
   };
 
-  const handleImportSave = (data: { file: File; isNew: boolean }) => {
+  const handleImportSave = (data: { jsonData: string; isNew: boolean }) => {
     setIsImportDialogOpen(false);
     
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const csvData = e.target?.result as string;
-        if (!csvData) {
-            toast({ variant: "destructive", title: "Empty file", description: "The selected file is empty."});
-            return;
+    if (!data.jsonData.trim()) {
+        toast({ variant: "destructive", title: "Empty JSON", description: "The provided JSON is empty."});
+        return;
+    }
+
+    let contacts;
+    try {
+        contacts = JSON.parse(data.jsonData);
+        if (!Array.isArray(contacts)) throw new Error();
+    } catch(e) {
+        toast({ variant: "destructive", title: "Invalid JSON", description: "The text you pasted is not valid JSON."});
+        return;
+    }
+    
+    const totalContacts = contacts.length;
+    if (totalContacts === 0) {
+        toast({ variant: "destructive", title: "No contacts found", description: "The JSON array is empty."});
+        return;
+    }
+
+    setImportProgress({ active: true, value: 0, total: totalContacts, message: "Starting import..." });
+    
+    startImportTransition(async () => {
+        const result = await importContactsAction({ jsonData: data.jsonData, isNew: data.isNew });
+
+        if (result.success) {
+            const { created = 0, updated = 0, skipped = 0 } = result;
+            setImportProgress({ active: true, value: created + updated + skipped, total: totalContacts, message: "Import complete!" });
+            toast({
+                title: "Import Successful",
+                description: `${created} created, ${updated} updated, ${skipped} skipped.`,
+            });
+            fetchLeads(false, statusFilters);
+        } else {
+            setImportProgress({ active: false, value: 0, total: 0, message: "" });
+            toast({
+                variant: "destructive",
+                title: "Import Failed",
+                description: result.error || "An unknown error occurred during import.",
+            });
         }
-
-        const lines = csvData.split('\n').filter(line => line.trim() !== '');
-        const totalContacts = lines.length > 1 ? lines.length - 1 : 0; // Subtract header
-
-        if (totalContacts === 0) {
-            toast({ variant: "destructive", title: "No contacts found", description: "The CSV file has no data rows."});
-            return;
-        }
-
-        setImportProgress({ active: true, value: 0, total: totalContacts, message: "Starting import..." });
         
-        startImportTransition(async () => {
-            const result = await importContactsAction({ csvData, isNew: data.isNew });
-
-            if (result.success) {
-                const { created = 0, updated = 0, skipped = 0 } = result;
-                setImportProgress({ active: true, value: created + updated + skipped, total: totalContacts, message: "Import complete!" });
-                toast({
-                    title: "Import Successful",
-                    description: `${created} created, ${updated} updated, ${skipped} skipped.`,
-                });
-                fetchLeads(false, statusFilters);
-            } else {
-                setImportProgress({ active: false, value: 0, total: 0, message: "" });
-                toast({
-                    variant: "destructive",
-                    title: "Import Failed",
-                    description: result.error || "An unknown error occurred during import.",
-                });
-            }
-            
-            // Hide progress bar after a delay
-            setTimeout(() => {
-                setImportProgress(prev => ({ ...prev, active: false }));
-            }, 4000);
-        });
-    };
-    reader.readAsText(data.file);
+        // Hide progress bar after a delay
+        setTimeout(() => {
+            setImportProgress(prev => ({ ...prev, active: false }));
+        }, 4000);
+    });
   }
 
 
@@ -430,3 +432,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    
