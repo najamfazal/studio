@@ -3,7 +3,8 @@
 
 import {enrichLeadProfile} from '@/ai/flows/enrich-lead-profile';
 import {db} from '@/lib/firebase';
-import {collection, getDocs, writeBatch, query, where, getFunctions, httpsCallable} from 'firebase/firestore';
+import {collection, getDocs, writeBatch, query, where} from 'firebase/firestore';
+import { getFunctions, httpsCallable} from 'firebase/functions';
 
 export async function enrichLeadAction(lead: {name: string; email: string; phone: string}) {
   try {
