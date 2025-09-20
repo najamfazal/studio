@@ -83,25 +83,19 @@ export async function migrateLeadsToContactsAction() {
 }
 
 
-export async function importContactsAction(formData: { jsonData: string; isNew: boolean }) {
-  const { jsonData, isNew } = formData;
+export async function importContactsAction(formData: { csvData: string; isNew: boolean }) {
+  const { csvData, isNew } = formData;
   
-  if (!jsonData) {
-    return { success: false, error: 'No JSON data provided.' };
+  if (!csvData) {
+    return { success: false, error: 'No CSV data provided.' };
   }
 
   try {
-    // This action is running on the server, but it needs to call a Cloud Function.
-    // We'll use the Node.js Admin SDK's ability to get the functions and call it.
-    // For this to work, the server environment must have Firebase Admin initialized.
-    // In a real deployed environment (like App Hosting), this requires specific
-    // service account setup. In a local emulator, it connects automatically.
-    
-    const functions = getFunctions(); // Assumes getFunctions is available in the context
-    const importContactsJson = httpsCallable(functions, 'importContactsJson');
+    const functions = getFunctions();
+    const importContactsCsv = httpsCallable(functions, 'importContactsCsv');
 
-    const result = await importContactsJson({
-        jsonData,
+    const result = await importContactsCsv({
+        csvData,
         isNew,
     });
     

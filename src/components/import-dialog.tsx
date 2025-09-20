@@ -15,12 +15,12 @@ import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-import { Textarea } from "./ui/textarea";
+import { Input } from "./ui/input";
 
 interface ImportDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onSave: (data: { jsonData: string; isNew: boolean }) => void;
+  onSave: (data: { file: File; isNew: boolean }) => void;
   isImporting?: boolean;
 }
 
@@ -30,68 +30,48 @@ export function ImportDialog({
   onSave,
   isImporting,
 }: ImportDialogProps) {
-  const [jsonData, setJsonData] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [isNew, setIsNew] = useState(true);
   const { toast } = useToast();
 
   const handleSave = () => {
-    if (!jsonData.trim()) {
+    if (!file) {
       toast({
         variant: "destructive",
-        title: "No data provided",
-        description: "Please paste your JSON data into the text area.",
+        title: "No file selected",
+        description: "Please select a CSV file to import.",
       });
       return;
     }
-    onSave({ jsonData, isNew });
+    onSave({ file, isNew });
   };
   
   const handleOpenChange = (open: boolean) => {
     if (isImporting) return;
     if (!open) {
-      // Reset state when closing
-      setJsonData("");
+      setFile(null);
       setIsNew(true);
     }
     setIsOpen(open);
   }
 
-  const sampleJson = `[
-  {
-    "name": "John Doe",
-    "email": "john.doe@example.com",
-    "phone1": "123-456-7890",
-    "phone1Type": "calling"
-  },
-  {
-    "name": "Jane Smith",
-    "email": "jane.smith@example.com",
-    "courseName": "Example Course 1"
-  }
-]`;
-
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Import Contacts from JSON</DialogTitle>
+          <DialogTitle>Import Contacts from CSV</DialogTitle>
           <DialogDescription>
-            Paste an array of contact objects in JSON format. Only 'name' is required.
+            Select a CSV file to import. Required columns: Name. Optional columns: Email, Phone, Course.
           </DialogDescription>
-          <details className="text-xs mt-2 text-muted-foreground">
-              <summary>View example format</summary>
-              <pre className="bg-muted p-2 rounded-md mt-1 text-xs whitespace-pre-wrap">{sampleJson}</pre>
-          </details>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="json-data">JSON Data</Label>
-            <Textarea 
-              id="json-data" 
-              value={jsonData}
-              onChange={(e) => setJsonData(e.target.value)}
-              placeholder="Paste your JSON array here..."
-              className="h-32"
+            <Label htmlFor="csv-file">CSV File</Label>
+            <Input 
+              id="csv-file"
+              type="file"
+              accept=".csv"
+              onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
             />
           </div>
            <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
@@ -112,7 +92,7 @@ export function ImportDialog({
           <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isImporting}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!jsonData.trim() || isImporting}>
+          <Button onClick={handleSave} disabled={!file || isImporting}>
             {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isImporting ? "Processing..." : "Import"}
           </Button>

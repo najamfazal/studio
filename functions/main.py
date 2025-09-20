@@ -3,6 +3,8 @@ from firebase_functions import firestore_fn, options, scheduler_fn, https_fn
 from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
 import json
+import csv
+import io
 
 # Initialize Firebase Admin SDK
 initialize_app()
@@ -32,40 +34,37 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
 @https_fn.on_call(region="us-central1")
-def importContactsJson(req: https_fn.CallableRequest) -> dict:
+def importContactsCsv(req: https_fn.CallableRequest) -> dict:
     """
-    An onCall function to import contacts from a JSON payload.
-    CORS is handled automatically by on_call.
+    An onCall function to import contacts from a CSV payload.
     """
     try:
-        # For on_call functions, data is in req.data
         if not req.data:
              raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
                 message="Request payload is missing."
             )
 
-        json_data_string = req.data.get('jsonData')
+        csv_data_string = req.data.get('csvData')
         is_new_mode = req.data.get('isNew', True)
-        default_relationship = "Lead" # Hardcoded default relationship
+        default_relationship = "Lead"
 
-        if not json_data_string:
-            raise https_fn.HttpsError(
+        if not csv_data_string:
+            raise https_fn
+.HttpsError(
                 code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message="No JSON data provided in payload."
+                message="No CSV data provided in payload."
             )
         
         try:
-            contacts = json.loads(json_data_string)
-            if not isinstance(contacts, list):
-                 raise https_fn.HttpsError(
-                    code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                    message="JSON data must be an array of contact objects."
-                )
-        except json.JSONDecodeError:
+            # Use io.StringIO to treat the string as a file
+            csv_file = io.StringIO(csv_data_string)
+            reader = csv.DictReader(csv_file)
+            contacts = list(reader)
+        except Exception as e:
              raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message="Invalid JSON format."
+                message=f"Invalid CSV format: {e}"
             )
             
         leads_ref = db.collection("leads")
@@ -75,7 +74,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
         skipped_count = 0
         batch = db.batch()
         batch_count = 0
-        BATCH_LIMIT = 499 # Firestore batch limit is 500
+        BATCH_LIMIT = 499
 
         for row in contacts:
             # Make field lookup case-insensitive
@@ -89,20 +88,10 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             # --- Prepare Lead Data ---
             phones = []
             
-            # Handle "phone" (generic)
+            # Handle "phone" (generic) from CSV
             phone_generic = row.get("phone", row.get("Phone", ""))
             if phone_generic:
                 phones.append({"number": str(phone_generic).strip(), "type": "both"})
-
-            # Handle "phone1"
-            phone1 = row.get("phone1", "")
-            if phone1:
-                phones.append({"number": str(phone1).strip(), "type": row.get("phone1Type", "both").strip().lower() or "both"})
-
-            # Handle "phone2"
-            phone2 = row.get("phone2", "")
-            if phone2:
-                phones.append({"number": str(phone2).strip(), "type": row.get("phone2Type", "both").strip().lower() or "both"})
 
             lead_data = {
                 "name": name,
@@ -153,7 +142,6 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
         if batch_count > 0:
             batch.commit()
         
-        # Return a dictionary directly for on_call functions
         return {
             "message": "Import completed successfully.",
             "created": created_count,
@@ -162,11 +150,9 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
         }
 
     except https_fn.HttpsError as e:
-        # Re-throw HttpsError to be properly handled by the client
         raise e
     except Exception as e:
-        print(f"Error during JSON import: {e}")
-        # Throw a generic HttpsError for other exceptions
+        print(f"Error during CSV import: {e}")
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"An internal error occurred: {e}"
