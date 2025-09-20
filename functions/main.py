@@ -78,8 +78,9 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
         BATCH_LIMIT = 499 # Firestore batch limit is 500
 
         for row in contacts:
-            name = row.get("name", "").strip()
-            email = row.get("email", "").strip()
+            # Make field lookup case-insensitive
+            name = row.get("name", row.get("Name", "")).strip()
+            email = row.get("email", row.get("Email", "")).strip()
 
             if not name:
                 skipped_count += 1
@@ -87,10 +88,21 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             
             # --- Prepare Lead Data ---
             phones = []
-            if row.get("phone1", "").strip():
-                phones.append({"number": row.get("phone1").strip(), "type": row.get("phone1Type", "both").strip().lower() or "both"})
-            if row.get("phone2", "").strip():
-                phones.append({"number": row.get("phone2").strip(), "type": row.get("phone2Type", "both").strip().lower() or "both"})
+            
+            # Handle "phone" (generic)
+            phone_generic = row.get("phone", row.get("Phone", ""))
+            if phone_generic:
+                phones.append({"number": str(phone_generic).strip(), "type": "both"})
+
+            # Handle "phone1"
+            phone1 = row.get("phone1", "")
+            if phone1:
+                phones.append({"number": str(phone1).strip(), "type": row.get("phone1Type", "both").strip().lower() or "both"})
+
+            # Handle "phone2"
+            phone2 = row.get("phone2", "")
+            if phone2:
+                phones.append({"number": str(phone2).strip(), "type": row.get("phone2Type", "both").strip().lower() or "both"})
 
             lead_data = {
                 "name": name,
@@ -98,7 +110,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "phones": phones,
                 "relationship": default_relationship,
                 "commitmentSnapshot": {
-                    "course": row.get("courseName", "").strip() or ""
+                    "course": str(row.get("courseName", row.get("Course", ""))).strip() or ""
                 },
                 "status": "Active",
                 "afc_step": 0,
@@ -487,6 +499,8 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
 
 
+
+    
 
     
 
