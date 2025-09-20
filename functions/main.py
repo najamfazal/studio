@@ -50,8 +50,7 @@ def importContactsCsv(req: https_fn.CallableRequest) -> dict:
         default_relationship = "Lead"
 
         if not csv_data_string:
-            raise https_fn
-.HttpsError(
+            raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
                 message="No CSV data provided in payload."
             )
@@ -485,6 +484,8 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
 
 
+
+    
 
     
 
