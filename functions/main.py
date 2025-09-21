@@ -315,6 +315,9 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             
             if quick_log_type == "Enrolled":
                 update_data["relationship"] = "Learner"
+                # Create a task to set up the new learner
+                due_date = datetime.now() + timedelta(days=1)
+                create_task(lead_id, lead_name, f"For {lead_name} create schedule, trainer and payplan", "Procedural", due_date)
 
             lead_ref.update(update_data)
             print(f"Lead {lead_id} status set to {new_status}. Ending AFC process.")
@@ -519,4 +522,6 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
     
     
+    
+
     
