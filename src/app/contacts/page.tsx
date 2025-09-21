@@ -275,10 +275,11 @@ export default function ContactsPage() {
   };
   
   const handleFilterChange = (status: LeadStatus) => {
-    const newFilters = statusFilters.includes(status)
-      ? statusFilters.filter(s => s !== status)
-      : [...statusFilters, status];
-    setStatusFilters(newFilters);
+    setStatusFilters(prevFilters =>
+      prevFilters.includes(status)
+        ? prevFilters.filter(s => s !== status)
+        : [...prevFilters, status]
+    );
   };
 
   const handleImportSave = (data: { jsonData: string; isNew: boolean }) => {
