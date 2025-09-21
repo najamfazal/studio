@@ -30,7 +30,7 @@ interface ContactCardProps {
   lead: Lead;
   onEdit: (lead: Lead) => void;
   onDelete: (id: string) => void;
-  onMerge: (id: string) => void;
+  onMerge: (lead: Lead) => void;
 }
 
 export function ContactCard({
@@ -39,12 +39,15 @@ export function ContactCard({
   onDelete,
   onMerge,
 }: ContactCardProps) {
+  const contactName = lead.name || "";
+  const truncatedName = contactName.length > 12 ? `${contactName.substring(0, 12)}...` : contactName;
+
   return (
     <Card className="p-4 flex flex-col">
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 space-y-1 pr-2 min-w-0">
-            <Link href={`/contacts/${lead.id}`} className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-base hover:underline leading-tight truncate max-w-[150px]">{lead.name}</h3>
+            <Link href={`/contacts/${lead.id}`} className="flex items-center gap-2 flex-wrap" title={contactName}>
+              <h3 className="font-semibold text-base hover:underline leading-tight truncate">{truncatedName}</h3>
               <p className="text-xs text-muted-foreground">{lead.relationship || 'Lead'}</p>
             </Link>
              <Badge variant={lead.status === 'Active' ? "default" : "secondary"} className="text-xs mt-1">{lead.status || 'Active'}</Badge>
@@ -61,7 +64,7 @@ export function ContactCard({
               <FilePenLine className="mr-2 h-4 w-4" />
               <span>Edit</span>
             </DropdownMenuItem>
-             <DropdownMenuItem onClick={() => onMerge(lead.id)}>
+             <DropdownMenuItem onClick={() => onMerge(lead)}>
               <GitMerge className="mr-2 h-4 w-4" />
               <span>Merge</span>
             </DropdownMenuItem>

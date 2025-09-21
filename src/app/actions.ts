@@ -111,4 +111,22 @@ export async function importContactsAction(formData: { jsonData: string; isNew: 
   }
 }
 
-    
+export async function mergeLeadsAction(data: { primaryLeadId: string; secondaryLeadId: string; }) {
+    if (!data.primaryLeadId || !data.secondaryLeadId) {
+        return { success: false, error: "Primary and secondary lead IDs are required." };
+    }
+
+    try {
+        const functions = getFunctions();
+        const mergeLeads = httpsCallable(functions, 'mergeLeads');
+
+        const result = await mergeLeads(data);
+        
+        return { success: true, ...(result.data as any) };
+    } catch (error) {
+        console.error('Error merging leads:', error);
+        const httpsError = error as any;
+        const errorMessage = httpsError.message || 'An unknown error occurred while merging.';
+        return { success: false, error: errorMessage };
+    }
+}

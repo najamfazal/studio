@@ -142,6 +142,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     batch_count += 1
             else:
                 # If contact does not exist, create it in either mode
+                # The logic for "update" mode creating a new lead is handled here
                 new_doc_ref = leads_ref.document()
                 batch.set(new_doc_ref, lead_data)
                 created_count += 1
@@ -507,30 +508,78 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     else:
         print(f"No associated tasks or interactions found for lead {lead_id}.")
     
+@https_fn.on_call(region="us-central1")
+def mergeLeads(req: https_fn.CallableRequest) -> dict:
+    """
+    Merges two leads. The secondary lead's data is migrated to the primary
+    lead, and the secondary lead is then deleted.
+    """
+    primary_lead_id = req.data.get("primaryLeadId")
+    secondary_lead_id = req.data.get("secondaryLeadId")
 
-    
+    if not primary_lead_id or not secondary_lead_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Both primaryLeadId and secondaryLeadId are required.",
+        )
 
+    if primary_lead_id == secondary_lead_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Primary and secondary leads cannot be the same.",
+        )
 
+    try:
+        # Get lead documents
+        primary_lead_ref = db.collection("leads").document(primary_lead_id)
+        secondary_lead_ref = db.collection("leads").document(secondary_lead_id)
+        primary_lead_doc = primary_lead_ref.get()
+        secondary_lead_doc = secondary_lead_ref.get()
 
+        if not primary_lead_doc.exists or not secondary_lead_doc.exists:
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.NOT_FOUND,
+                message="One or both leads could not be found.",
+            )
+        
+        primary_lead_data = primary_lead_doc.to_dict()
+        secondary_lead_data = secondary_lead_doc.to_dict()
 
-    
+        batch = db.batch()
 
-    
+        # Re-parent tasks from secondary to primary
+        tasks_query = db.collection("tasks").where("leadId", "==", secondary_lead_id).stream()
+        for task in tasks_query:
+            batch.update(task.reference, {"leadId": primary_lead_id})
 
-    
+        # Re-parent interactions from secondary to primary
+        interactions_query = db.collection("interactions").where("leadId", "==", secondary_lead_id).stream()
+        for interaction in interactions_query:
+            batch.update(interaction.reference, {"leadId": primary_lead_id})
+            
+        # Create a log entry on the primary lead about the merge
+        merge_note = (
+            f"Merged with contact '{secondary_lead_data.get('name', 'N/A')}'. "
+            f"Details: Email='{secondary_lead_data.get('email', 'N/A')}', "
+            f"Phone(s)='{[p.get('number') for p in secondary_lead_data.get('phones', [])]}'."
+        )
+        merge_interaction = {
+            "leadId": primary_lead_id,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "notes": merge_note,
+        }
+        batch.set(db.collection("interactions").document(), merge_interaction)
 
-    
+        # Delete the secondary lead
+        batch.delete(secondary_lead_ref)
 
-    
+        batch.commit()
+        
+        return {"message": f"Successfully merged {secondary_lead_data.get('name')} into {primary_lead_data.get('name')}."}
 
-    
-
-    
-    
-    
-
-    
-
-    
-
-    
+    except Exception as e:
+        print(f"Error during lead merge: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during merge: {e}",
+        )

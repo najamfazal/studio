@@ -45,10 +45,11 @@ import {
 import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
-import { importContactsAction } from "@/app/actions";
+import { importContactsAction, mergeLeadsAction } from "@/app/actions";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
+import { MergeDialog } from "@/components/merge-dialog";
 
 const PAGE_SIZE = 10;
 
@@ -87,6 +88,10 @@ export default function ContactsPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
+  const [mergeSourceLead, setMergeSourceLead] = useState<Lead | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
 
   const { toast } = useToast();
 
@@ -146,7 +151,7 @@ export default function ContactsPage() {
       setLeads(combinedLeads);
       if (currentFilters.length === 0) {
         // If no filters, we store all for searching
-        setAllLeads(combinedLeads)
+        setAllLeads(prev => loadMore ? [...prev, ...newLeads] : newLeads);
       }
 
     } catch (error) {
@@ -190,6 +195,11 @@ export default function ContactsPage() {
     setLeadToEdit(lead);
     setIsLeadDialogOpen(true);
   };
+  
+  const handleMerge = (lead: Lead) => {
+    setMergeSourceLead(lead);
+    setIsMergeDialogOpen(true);
+  }
 
   const handleDelete = async () => {
     if (!leadToDelete) return;
@@ -321,6 +331,30 @@ export default function ContactsPage() {
         }, 4000);
     });
   }
+  
+  const handleMergeSave = async (primaryLeadId: string, secondaryLeadId: string) => {
+    setIsMerging(true);
+    try {
+      const result = await mergeLeadsAction({ primaryLeadId, secondaryLeadId });
+      if (result.success) {
+        toast({ title: "Merge successful!" });
+        // Refresh leads list
+        setLeads(prev => prev.filter(l => l.id !== secondaryLeadId));
+        setAllLeads(prev => prev.filter(l => l.id !== secondaryLeadId));
+        setIsMergeDialogOpen(false);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Merge Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  };
 
 
   if (isLoading && leads.length === 0) {
@@ -399,7 +433,7 @@ export default function ContactsPage() {
                 lead={lead}
                 onEdit={handleEdit}
                 onDelete={(id) => setLeadToDelete(id)}
-                onMerge={() => toast({ title: "Merge is not yet implemented."})}
+                onMerge={handleMerge}
               />
             ))}
           </div>
@@ -417,7 +451,7 @@ export default function ContactsPage() {
 
         {hasMore && !isLoadingMore && !debouncedSearchTerm && (
             <div className="flex justify-center mt-8">
-                <Button variant="link" onClick={() => fetchLeads(true)} disabled={isLoadingMore}>
+                <Button variant="link" onClick={() => fetchLeads(true, statusFilters)} disabled={isLoadingMore}>
                     {isLoadingMore ? "Loading..." : "Load More"}
                 </Button>
             </div>
@@ -463,6 +497,16 @@ export default function ContactsPage() {
         onSave={handleImportSave}
         isImporting={isImporting}
       />
+      
+      {mergeSourceLead && (
+        <MergeDialog
+          isOpen={isMergeDialogOpen}
+          setIsOpen={setIsMergeDialogOpen}
+          sourceLead={mergeSourceLead}
+          onMerge={handleMergeSave}
+          isMerging={isMerging}
+        />
+      )}
     </div>
   );
 }
