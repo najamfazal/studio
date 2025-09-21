@@ -9,6 +9,7 @@ import {
   Phone,
   Trash2,
   GitMerge,
+  Book,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -41,6 +42,8 @@ export function ContactCard({
 }: ContactCardProps) {
   const contactName = lead.name || "";
   const truncatedName = contactName.length > 12 ? `${contactName.substring(0, 12)}...` : contactName;
+  const email = lead.email || "";
+  const truncatedEmail = email.length > 10 ? `${email.substring(0, 10)}...` : email;
 
   return (
     <Card className="p-4 flex flex-col">
@@ -79,8 +82,20 @@ export function ContactCard({
         </DropdownMenu>
       </div>
 
-      <CardContent className="p-0 text-sm flex flex-col items-start justify-between mt-auto">
-         <div className="space-y-1">
+      <CardContent className="p-0 text-sm flex flex-col items-start justify-between mt-auto space-y-2">
+         <div className="space-y-1.5 w-full">
+            {lead.commitmentSnapshot?.course && (
+                 <div className="flex items-center gap-2">
+                    <Book className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <p className="text-xs truncate">{lead.commitmentSnapshot.course}</p>
+                 </div>
+            )}
+             <div className="flex items-center gap-2">
+                <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                 <a href={`mailto:${email}`} className="truncate text-xs" title={email}>
+                    {truncatedEmail}
+                </a>
+             </div>
             {(lead.phones || []).map((phone, index) => (
                 <div key={index} className="flex items-center gap-2">
                     <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
@@ -89,12 +104,6 @@ export function ContactCard({
                     </a>
                 </div>
             ))}
-             {(lead.phones || []).length === 0 && (
-                 <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="h-3.5 w-3.5 flex-shrink-0" />
-                    <p className="text-xs">No phone number</p>
-                 </div>
-             )}
         </div>
       </CardContent>
     </Card>
