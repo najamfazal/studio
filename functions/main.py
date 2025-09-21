@@ -4,6 +4,7 @@ from firebase_admin import initialize_app, firestore
 from datetime import datetime, timedelta
 import json
 import io
+import csv
 
 # Initialize Firebase Admin SDK
 initialize_app()
@@ -310,7 +311,12 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     if quick_log_type:
         if quick_log_type in ["Enrolled", "Withdrawn"]:
             new_status = "Enrolled" if quick_log_type == "Enrolled" else "Withdrawn"
-            lead_ref.update({"status": new_status, "afc_step": 0}) # End AFC
+            update_data = {"status": new_status, "afc_step": 0}
+            
+            if quick_log_type == "Enrolled":
+                update_data["relationship"] = "Learner"
+
+            lead_ref.update(update_data)
             print(f"Lead {lead_id} status set to {new_status}. Ending AFC process.")
             # Delete any pending follow-ups for this now-closed lead
             delete_pending_followups(lead_id)
@@ -511,5 +517,6 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
     
 
+    
     
     
