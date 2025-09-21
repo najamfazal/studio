@@ -131,21 +131,22 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 for doc in existing_docs_query:
                     existing_doc_ref = doc.reference
 
-            if existing_doc_ref and not is_new_mode:
-                # Update existing contact
-                batch.update(existing_doc_ref, lead_data)
-                updated_count += 1
-                batch_count += 1
-            elif not existing_doc_ref:
-                # Create new contact
+            if existing_doc_ref:
+                if is_new_mode:
+                    # In "New Only" mode, skip existing contacts
+                    skipped_count += 1
+                else:
+                    # In "Update" mode, update existing contacts
+                    batch.update(existing_doc_ref, lead_data)
+                    updated_count += 1
+                    batch_count += 1
+            else:
+                # If contact does not exist, create it in either mode
                 new_doc_ref = leads_ref.document()
                 batch.set(new_doc_ref, lead_data)
                 created_count += 1
                 batch_count += 1
-            else:
-                # Skip existing contact in 'new only' mode
-                skipped_count +=1
-            
+
             # Commit batch if limit is reached
             if batch_count >= BATCH_LIMIT:
                 batch.commit()
@@ -526,6 +527,8 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
     
     
+    
+
     
 
     
