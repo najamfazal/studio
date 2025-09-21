@@ -176,28 +176,32 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
 @firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1")
 def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
-    Initializes the Automated Follow-up Cycle (AFC) for a new lead.
+    Handles task creation for new leads.
+    - For imported leads, creates an immediate "Send initial contact" task.
+    - For manually created leads, initializes the AFC cycle.
     """
     lead_id = event.params.get("leadId")
     lead_data = event.data.to_dict()
     lead_name = lead_data.get("name")
     
-    # Do not run for imported leads that already have status, etc.
-    if lead_data.get("status"):
-        print(f"Lead {lead_name} ({lead_id}) is imported or already initialized. Skipping AFC initiation.")
+    if not lead_id or not lead_name:
+        print("Lead data is missing ID or name. Aborting task creation.")
         return
 
-    if not lead_id or not lead_name:
-        print("Lead data is missing ID or name. Aborting AFC initiation.")
-        return
+    # If lead has a status, it's from an import.
+    if lead_data.get("status"):
+        print(f"Imported lead created: {lead_name} ({lead_id}). Creating initial contact task.")
+        due_date = datetime.now() # Due today
+        create_task(lead_id, lead_name, "Send initial contact", "Interactive", due_date)
         
-    print(f"New lead created: {lead_name} ({lead_id}). Initializing AFC.")
-    
-    # Set initial AFC step and schedule the first follow-up.
-    event.data.reference.update({"afc_step": 1, "status": "Active"})
-    due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
-    create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
-    print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
+    # If no status, it's a manually created lead.
+    else:
+        print(f"New lead created manually: {lead_name} ({lead_id}). Initializing AFC.")
+        # Set initial AFC step and schedule the first follow-up.
+        event.data.reference.update({"afc_step": 1, "status": "Active"})
+        due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
+        create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
+        print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
 
 
 @firestore_fn.on_document_created(document="interactions/{interactionId}", region="us-central1")
@@ -522,6 +526,8 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
     
     
+    
+
     
 
     
