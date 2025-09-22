@@ -78,6 +78,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             # Make field lookup case-insensitive
             name = row.get("name", row.get("Name", "")).strip()
             email = row.get("email", row.get("Email", "")).strip()
+            notes = row.get("notes", row.get("Notes", "")).strip()
 
             if not name:
                 skipped_count += 1
@@ -113,7 +114,8 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "phones": phones,
                 "relationship": default_relationship,
                 "commitmentSnapshot": {
-                    "course": str(row.get("courseName", row.get("Course", ""))).strip() or ""
+                    "course": str(row.get("courseName", row.get("Course", ""))).strip() or "",
+                    "keyNotes": notes
                 },
                 "status": "Active",
                 "afc_step": 0,
@@ -141,7 +143,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     updated_count += 1
                     batch_count += 1
             else:
-                # If contact does not exist, create it in either mode
+                # If contact does not exist, create it unless in "New Only" mode and it exists
                 # The logic for "update" mode creating a new lead is handled here
                 new_doc_ref = leads_ref.document()
                 batch.set(new_doc_ref, lead_data)
@@ -583,3 +585,5 @@ def mergeLeads(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"An internal error occurred during merge: {e}",
         )
+
+    
