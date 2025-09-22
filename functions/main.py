@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import json
 import io
 import csv
+import re
 
 # Initialize Firebase Admin SDK
 initialize_app()
@@ -33,10 +34,18 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
+def normalize_phone(phone_number: str) -> str:
+    """Strips all non-digit characters from a phone number string."""
+    if not phone_number:
+        return ""
+    return re.sub(r'\D', '', str(phone_number))
+
+
 @https_fn.on_call(region="us-central1")
 def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
     An onCall function to import contacts from a JSON payload.
+    It now uses phone number normalization for better duplicate detection.
     """
     try:
         if not req.data:
@@ -75,38 +84,33 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
         BATCH_LIMIT = 499
 
         for row in contacts:
-            # Make field lookup case-insensitive
             name = row.get("name", row.get("Name", "")).strip()
-            email = row.get("email", row.get("Email", "")).strip()
+            email = row.get("email", row.get("Email", "")).strip().lower()
             notes = row.get("notes", row.get("Notes", "")).strip()
 
             if not name:
                 skipped_count += 1
                 continue
             
-            # --- Prepare Lead Data ---
+            # --- Prepare Phone Data ---
             phones = []
             
-            # Handle Phone1
-            phone1_num = row.get("Phone1", row.get("phone1"))
+            phone1_num = normalize_phone(row.get("Phone1", row.get("phone1")))
             if phone1_num:
                 phone1_type_raw = str(row.get("Phone1 Type", row.get("phone1_type", "both"))).strip().lower()
                 phone1_type = phone1_type_raw if phone1_type_raw in ["calling", "chat", "both"] else "both"
-                phones.append({"number": str(phone1_num).strip(), "type": phone1_type})
+                phones.append({"number": phone1_num, "type": phone1_type})
 
-            # Handle Phone2
-            phone2_num = row.get("Phone2", row.get("phone2"))
+            phone2_num = normalize_phone(row.get("Phone2", row.get("phone2")))
             if phone2_num:
                 phone2_type_raw = str(row.get("Phone2 Type", row.get("phone2_type", "both"))).strip().lower()
                 phone2_type = phone2_type_raw if phone2_type_raw in ["calling", "chat", "both"] else "both"
-                phones.append({"number": str(phone2_num).strip(), "type": phone2_type})
+                phones.append({"number": phone2_num, "type": phone2_type})
             
-            # Fallback for generic 'phone' if no Phone1/Phone2
             if not phones:
-                phone_generic = row.get("phone", row.get("Phone", ""))
+                phone_generic = normalize_phone(row.get("phone", row.get("Phone", "")))
                 if phone_generic:
-                    phones.append({"number": str(phone_generic).strip(), "type": "both"})
-
+                    phones.append({"number": phone_generic, "type": "both"})
 
             lead_data = {
                 "name": name,
@@ -126,36 +130,48 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "createdAt": firestore.SERVER_TIMESTAMP,
             }
             
-            # --- DB Operation ---
+            # --- DB Operation: Find existing doc by email or phone ---
             existing_doc_ref = None
             if email:
+                # Primary check: email
                 existing_docs_query = leads_ref.where("email", "==", email).limit(1).stream()
                 for doc in existing_docs_query:
                     existing_doc_ref = doc.reference
+            
+            if not existing_doc_ref and phones:
+                # Fallback check: phone number
+                first_phone_number = phones[0]['number']
+                # This query checks if the number exists inside the 'phones' array of maps
+                existing_docs_query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": "both"}).limit(1).stream()
+                for doc in existing_docs_query:
+                    existing_doc_ref = doc.reference
+                if not existing_doc_ref:
+                    existing_docs_query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": "calling"}).limit(1).stream()
+                    for doc in existing_docs_query:
+                        existing_doc_ref = doc.reference
+                if not existing_doc_ref:
+                    existing_docs_query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": "chat"}).limit(1).stream()
+                    for doc in existing_docs_query:
+                        existing_doc_ref = doc.reference
 
             if existing_doc_ref:
                 if is_new_mode:
-                    # In "New Only" mode, skip existing contacts
                     skipped_count += 1
                 else:
-                    # In "Update" mode, update existing contacts
                     batch.update(existing_doc_ref, lead_data)
                     updated_count += 1
                     batch_count += 1
             else:
-                # If contact does not exist, create it (in both modes now)
                 new_doc_ref = leads_ref.document()
                 batch.set(new_doc_ref, lead_data)
                 created_count += 1
                 batch_count += 1
 
-            # Commit batch if limit is reached
             if batch_count >= BATCH_LIMIT:
                 batch.commit()
                 batch = db.batch()
                 batch_count = 0
         
-        # Commit any remaining operations in the last batch
         if batch_count > 0:
             batch.commit()
         
@@ -584,6 +600,8 @@ def mergeLeads(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"An internal error occurred during merge: {e}",
         )
+
+    
 
     
 
