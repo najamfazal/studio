@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -165,13 +164,14 @@ export default function ContactDetailPage() {
     setIsInteractionsLoading(true);
     
     try {
+      let lastVisible = loadMore ? lastInteraction : null;
       const qConstraints: any[] = [
         where('leadId', '==', id),
         orderBy('createdAt', 'desc'),
       ];
 
-      if (loadMore && lastInteraction) {
-          qConstraints.push(startAfter(lastInteraction));
+      if (loadMore && lastVisible) {
+          qConstraints.push(startAfter(lastVisible));
           qConstraints.push(limit(10));
       } else {
           qConstraints.push(limit(INTERACTION_PAGE_SIZE));
@@ -242,21 +242,17 @@ export default function ContactDetailPage() {
       fetchLeadAndEvents();
       fetchInteractions();
     }
-  }, [id, fetchLeadAndEvents, fetchInteractions]);
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
     if (tasksLoaded) {
-      const handler = setTimeout(() => {
         setActiveTasks([]);
         setPastTasks([]);
         setLastActiveTask(null);
         setLastPastTask(null);
         fetchTasks('active');
         fetchTasks('past');
-      }, 100);
-
-      return () => clearTimeout(handler);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksLoaded]);
@@ -264,6 +260,9 @@ export default function ContactDetailPage() {
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksLoaded) {
       setTasksLoaded(true);
+    }
+    if(value === 'schedule') {
+        fetchLeadAndEvents();
     }
   };
 
@@ -1508,3 +1507,5 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
+
+    
