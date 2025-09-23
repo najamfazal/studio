@@ -27,7 +27,7 @@ import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
@@ -146,6 +146,7 @@ export default function ContactDetailPage() {
   }, [id, router, toast]);
 
   const fetchEvents = useCallback(async () => {
+    if (!id) return;
     const eventsQuery = query(
       collection(db, "interactions"), 
       where("leadId", "==", id), 
@@ -158,6 +159,7 @@ export default function ContactDetailPage() {
   }, [id]);
 
   const fetchInteractions = useCallback(async (loadMore = false) => {
+    if (!id) return;
     setIsInteractionsLoading(true);
     
     try {
@@ -189,6 +191,7 @@ export default function ContactDetailPage() {
   }, [id, toast, lastInteraction]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
+    if (!id) return;
     if (!loadMore) setIsTasksLoading(true);
     
     try {
@@ -236,11 +239,11 @@ export default function ContactDetailPage() {
   }, [fetchInitialData]);
 
   useEffect(() => {
-    if (lead) {
+    if (id) {
       fetchEvents();
       fetchInteractions();
     }
-  }, [lead, fetchEvents, fetchInteractions]);
+  }, [id, fetchEvents, fetchInteractions]);
 
   useEffect(() => {
     if (tasksLoaded) {
@@ -336,8 +339,13 @@ export default function ContactDetailPage() {
   };
 
   const handleTabChange = (value: string) => {
+    const isLearner = lead?.relationship === 'Learner';
     if (value === 'tasks' && !tasksLoaded) {
       setTasksLoaded(true);
+    }
+    if(value === 'logs' && !isLearner && !tasksLoaded) {
+        // For non-learners, 'logs' tab contains tasks as well.
+        setTasksLoaded(true);
     }
   };
   
@@ -669,6 +677,8 @@ export default function ContactDetailPage() {
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
+  
+  const isLearner = lead.relationship === 'Learner';
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -695,14 +705,14 @@ export default function ContactDetailPage() {
       
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         <Tabs defaultValue="overview" onValueChange={handleTabChange} className="w-full">
-            <TabsList className={cn("grid w-full", lead.relationship === 'Learner' ? "grid-cols-4" : "grid-cols-3")}>
+            <TabsList className={cn("grid w-full", isLearner ? "grid-cols-4" : "grid-cols-3")}>
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              {lead.relationship === 'Learner' && <TabsTrigger value="schedule">Schedule</TabsTrigger>}
+              {isLearner && <TabsTrigger value="schedule">Schedule</TabsTrigger>}
               <TabsTrigger value="logs">Logs</TabsTrigger>
-              <TabsTrigger value="tasks">Tasks/Events</TabsTrigger>
+              <TabsTrigger value="tasks">Tasks</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="overview" className="space-y-4">
+            <TabsContent value="overview" className="space-y-4 mt-4">
               <Card>
                   <CardHeader className="p-4"><CardTitle className="text-lg">Contact Details</CardTitle></CardHeader>
                   <CardContent className="p-4 pt-0 space-y-2">
@@ -788,8 +798,8 @@ export default function ContactDetailPage() {
               </div>
             </TabsContent>
 
-            {lead.relationship === 'Learner' && (
-              <TabsContent value="schedule">
+            {isLearner && (
+              <TabsContent value="schedule" className="mt-4">
                 <Card>
                   <CardHeader>
                       <div className="flex items-center justify-between">
@@ -867,7 +877,7 @@ export default function ContactDetailPage() {
               </TabsContent>
             )}
 
-            <TabsContent value="logs" className="space-y-4">
+            <TabsContent value="logs" className="space-y-4 mt-4">
                 <Card className="relative overflow-hidden min-h-[148px]">
                 <AnimatePresence initial={false}>
                     <motion.div
@@ -1140,7 +1150,7 @@ export default function ContactDetailPage() {
                 </Card>
             </TabsContent>
             
-            <TabsContent value="tasks" className="space-y-4">
+            <TabsContent value="tasks" className="space-y-4 mt-4">
               {scheduledEvents.length > 0 && (
                   <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-muted-foreground px-1">Upcoming Events</h3>
