@@ -187,7 +187,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast, lastInteraction]);
+  }, [id, toast]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -231,7 +231,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsTasksLoading(false);
     }
-  }, [id, toast, lastActiveTask, lastPastTask]);
+  }, [id, toast]);
 
 
   useEffect(() => {
@@ -242,7 +242,7 @@ export default function ContactDetailPage() {
             fetchInteractions()
         ]).finally(() => setIsLoading(false));
     }
-}, [id, fetchLeadAndEvents, fetchInteractions]);
+  }, [id, fetchLeadAndEvents, fetchInteractions]);
 
   useEffect(() => {
     if (tasksLoaded && id) {
@@ -1547,7 +1547,6 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
   );
 }
 
-// Renamed from ToggleGroup, which seems to have been a copy-paste error
 const ToggleGroup = ({children}: {children: React.ReactNode}) => {
     return <div className="flex items-center rounded-md border">{children}</div>
 }
