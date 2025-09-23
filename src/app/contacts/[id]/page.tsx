@@ -17,7 +17,7 @@ import { Logo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -339,13 +339,8 @@ export default function ContactDetailPage() {
   };
 
   const handleTabChange = (value: string) => {
-    const isLearner = lead?.relationship === 'Learner';
     if (value === 'tasks' && !tasksLoaded) {
       setTasksLoaded(true);
-    }
-    if(value === 'logs' && !isLearner && !tasksLoaded) {
-        // For non-learners, 'logs' tab contains tasks as well.
-        setTasksLoaded(true);
     }
   };
   
@@ -678,7 +673,7 @@ export default function ContactDetailPage() {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  const isLearner = lead.relationship === 'Learner';
+  const isLearner = lead.relationship?.toLowerCase() === 'learner';
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -1416,5 +1411,7 @@ export const ToggleGroupItem = ({value, children}: {value: string, children: Rea
     const isActive = context.value === value;
     return <Button variant={isActive ? "secondary" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
 }
+
+    
 
     
