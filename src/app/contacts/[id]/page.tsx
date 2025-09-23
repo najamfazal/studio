@@ -27,12 +27,12 @@ import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-export const ToggleGroupContext = React.createContext<{value: string, onValueChange: (v:string)=>void}>({value: "", onValueChange: (v:string)=>{}});
+const ToggleGroupContext = React.createContext<{value: string, onValueChange: (v:string)=>void}>({value: "", onValueChange: (v:string)=>{}});
 
 const INTERACTION_PAGE_SIZE = 5;
 const TASK_PAGE_SIZE = 5;
@@ -188,7 +188,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, lastInteraction]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -1414,7 +1414,5 @@ export const ToggleGroup = ({children}: {children: React.ReactNode}) => {
 export const ToggleGroupItem = ({value, children}: {value: string, children: React.ReactNode}) => {
     const context = React.useContext(ToggleGroupContext);
     const isActive = context.value === value;
-    return <Button variant={isActive ? "secondary" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
+    return <Button variant={isActive ? "default" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
 }
-
-    
