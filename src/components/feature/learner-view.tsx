@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { EditableField } from '@/components/editable-field';
 import { Label } from '@/components/ui/label';
-import { LeadView } from './lead-view';
+import { LeadLogView } from './lead-log-view';
 import { ToggleGroup, ToggleGroupItem, ToggleGroupContext } from '@/app/contacts/[id]/page';
 
 interface LearnerViewProps {
@@ -194,7 +194,7 @@ export function LearnerView({ lead, appSettings, onUpdate, onScheduleEdit, onSes
         </TabsContent>
         
         <TabsContent value="leadlog">
-            <LeadView lead={lead} appSettings={appSettings} onUpdate={onUpdate} />
+            <LeadLogView lead={lead} appSettings={appSettings} />
         </TabsContent>
         </Tabs>
     );

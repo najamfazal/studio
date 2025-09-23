@@ -495,7 +495,7 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
   }
 
   const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
-    return (Object.keys(feedbackData) as FeedbackCategory[])
+    return (Object.keys(feedbackData) as (keyof InteractionFeedback)[])
         .map(category => {
             const feedbackItem = feedbackData[category];
             if (!feedbackItem) return '';
@@ -583,7 +583,7 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
                     <CardContent className="p-4 pt-0">
                         <div className="space-y-4">
                         <div className="flex flex-wrap gap-2">
-                            {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
+                            {(lead.traits || []).map(trait => <Badge key={trait} variant="secondary">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><X className="h-3 w-3 text-destructive"/></button></Badge>)}
                         </div>
                         <Select onValueChange={(value) => handleAddChip('traits', value)} value="">
                             <SelectTrigger>
@@ -607,7 +607,7 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
                     <CardContent className="p-4 pt-0">
                         <div className="space-y-4">
                             <div className="flex flex-wrap gap-2">
-                                {(lead.insights || []).map(insight => <Badge key={insight} variant="outline">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><Trash2 className="h-3 w-3 text-destructive"/></button></Badge>)}
+                                {(lead.insights || []).map(insight => <Badge key={insight} variant="outline">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-2 p-0.5 rounded-full hover:bg-destructive/20"><X className="h-3 w-3 text-destructive"/></button></Badge>)}
                             </div>
                             <div className="flex gap-2">
                                 <Input value={newInsight} onChange={e => setNewInsight(e.target.value)} placeholder="Add an insight..."/>
@@ -703,7 +703,7 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
                     </CardHeader>
                     <CardContent className="space-y-4 p-4 pt-0">
                         <div className="grid grid-cols-3 gap-4 text-center">
-                        {(['content', 'schedule', 'price'] as FeedbackCategory[]).map(category => (
+                        {(['content', 'schedule', 'price'] as (keyof InteractionFeedback)[]).map(category => (
                             <div key={category}>
                             <h4 className="font-semibold capitalize mb-2">{category}</h4>
                             <div className="flex items-center justify-center gap-3">
