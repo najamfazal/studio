@@ -1,4 +1,5 @@
 
+
 export type LeadStatus =
   | 'Active'
   | 'Paused'
@@ -22,13 +23,24 @@ export type PhoneNumber = {
   type: 'calling' | 'chat' | 'both';
 }
 
-export type CourseSchedule = {
-  id: string;
-  section: string;
+export type DayTime = {
+  day: string;
+  timeSlot: string;
+};
+
+export type SessionGroup = {
+  groupId: string;
   trainer: string;
-  slot: string;
-  days: string[];
-}
+  sections: string[];
+  mode: 'Online' | 'In-person';
+  format: '1-1' | 'Batch';
+  schedule: DayTime[];
+};
+
+export type CourseSchedule = {
+  sessionGroups: SessionGroup[];
+};
+
 
 export type PaymentInstallment = {
   id: string;
@@ -65,7 +77,7 @@ export type Lead = {
   // --- Fields for "Learner" ---
   enrolledDate?: string;
   estCompletionDate?: string;
-  courseSchedule?: CourseSchedule[];
+  courseSchedule?: CourseSchedule;
   paymentPlan?: PaymentPlan;
 };
 
@@ -122,11 +134,11 @@ export type AppSettings = {
   courseNames: string[];
   commonTraits: string[];
   withdrawalReasons: string[];
+  trainers: string[];
+  timeSlots: string[];
   feedbackChips: {
     content: string[];
     schedule: string[];
     price: string[];
   }
 }
-
-    

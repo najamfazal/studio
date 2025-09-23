@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -17,7 +18,7 @@ import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
-type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes';
+type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots';
 
 export default function SettingsPage() {
     const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -29,6 +30,8 @@ export default function SettingsPage() {
     const [newTrait, setNewTrait] = useState("");
     const [newWithdrawalReason, setNewWithdrawalReason] = useState("");
     const [newRelationshipType, setNewRelationshipType] = useState("");
+    const [newTrainer, setNewTrainer] = useState("");
+    const [newTimeSlot, setNewTimeSlot] = useState("");
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
 
     const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
@@ -45,6 +48,8 @@ export default function SettingsPage() {
                     commonTraits: data.commonTraits || [],
                     withdrawalReasons: data.withdrawalReasons || [],
                     relationshipTypes: data.relationshipTypes || ['Lead', 'Learner'],
+                    trainers: data.trainers || [],
+                    timeSlots: data.timeSlots || [],
                     feedbackChips: data.feedbackChips || { content: [], schedule: [], price: [] },
                     id: settingsDoc.id,
                 };
@@ -55,6 +60,8 @@ export default function SettingsPage() {
                     commonTraits: ["Decisive", "Budget-conscious"],
                     withdrawalReasons: ["Not interested", "Found alternative"],
                     relationshipTypes: ["Lead", "Learner", "Archived", "Graduated"],
+                    trainers: ["Jhonny", "Marie", "Faisal"],
+                    timeSlots: ["09:00 A - 11:00 A", "11:00 A - 01:00 P"],
                     feedbackChips: {
                         content: ["Not relevant", "Too complex"],
                         schedule: ["Wrong time", "Too long"],
@@ -131,11 +138,11 @@ export default function SettingsPage() {
     }
 
 
-    const handleAddItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | `feedbackChips.${FeedbackCategory}`) => {
+    const handleAddItem = (field: AppSettingsField | `feedbackChips.${FeedbackCategory}`) => {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' = 'courseNames';
+        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' = 'courseNames';
 
         if (field === 'courseNames') {
             if (!newCourseName) return;
@@ -157,6 +164,16 @@ export default function SettingsPage() {
             valueToAdd = newRelationshipType;
             fieldKey = 'relationshipTypes';
             setNewRelationshipType("");
+        } else if (field === 'trainers') {
+            if (!newTrainer) return;
+            valueToAdd = newTrainer;
+            fieldKey = 'trainers';
+            setNewTrainer("");
+        } else if (field === 'timeSlots') {
+            if (!newTimeSlot) return;
+            valueToAdd = newTimeSlot;
+            fieldKey = 'timeSlots';
+            setNewTimeSlot("");
         }
         else if (field.startsWith('feedbackChips.')) {
             const category = newFeedbackChip.category;
@@ -195,7 +212,7 @@ export default function SettingsPage() {
         handleSave(updatePayload, newSettings);
     };
 
-    const handleRemoveItem = (field: 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | `feedbackChips.${FeedbackCategory}`, itemToRemove: string) => {
+    const handleRemoveItem = (field: AppSettingsField | `feedbackChips.${FeedbackCategory}`, itemToRemove: string) => {
         if (!settings) return;
 
         const newSettings = produce(settings, draft => {
@@ -326,6 +343,42 @@ export default function SettingsPage() {
                             </div>
                         </CardContent>
                     </Card>
+                    
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Trainers</CardTitle>
+                            <CardDescription>Manage the list of available trainers for scheduling.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {renderChipList('trainers', settings.trainers)}
+                                <div className="flex gap-2 pt-2">
+                                    <Input value={newTrainer} onChange={e => setNewTrainer(e.target.value)} placeholder="Add new trainer..." onKeyDown={e => e.key === 'Enter' && handleAddItem('trainers')} />
+                                    <Button onClick={() => handleAddItem('trainers')} disabled={isSaving || !newTrainer}>
+                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Time Slots</CardTitle>
+                            <CardDescription>Manage predefined time slots for scheduling (e.g., "02:00 P - 04:00 P").</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {renderChipList('timeSlots', settings.timeSlots)}
+                                <div className="flex gap-2 pt-2">
+                                    <Input value={newTimeSlot} onChange={e => setNewTimeSlot(e.target.value)} placeholder="Add new time slot..." onKeyDown={e => e.key === 'Enter' && handleAddItem('timeSlots')} />
+                                    <Button onClick={() => handleAddItem('timeSlots')} disabled={isSaving || !newTimeSlot}>
+                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     <Card>
                         <CardHeader>
@@ -404,5 +457,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -6,7 +7,7 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, lim
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
 import { addDays, format, formatDistanceToNowStrict, isAfter, isToday, parseISO } from 'date-fns';
-import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X, Users, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
@@ -178,7 +179,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, lastInteraction]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -250,6 +251,10 @@ export default function ContactDetailPage() {
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksLoaded) {
       setTasksLoaded(true);
+    }
+    if (lead?.relationship === 'Learner' && value === 'schedule') {
+      // Re-fetch lead data when switching to schedule tab to ensure it's fresh
+      fetchLeadAndEvents();
     }
   };
 
@@ -1103,7 +1108,7 @@ export default function ContactDetailPage() {
   };
   
   const renderLearnerView = () => (
-    <Tabs defaultValue="overview">
+    <Tabs defaultValue="overview" onValueChange={handleTabChange}>
       <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="schedule">Schedule</TabsTrigger>
@@ -1111,21 +1116,78 @@ export default function ContactDetailPage() {
         <TabsTrigger value="leadlog">Lead Log</TabsTrigger>
       </TabsList>
       
-      <TabsContent value="overview">
-        {/* Implement Learner Overview Tab UI */}
+      <TabsContent value="overview" className="space-y-4">
+        <Card>
+            <CardHeader className="p-4"><CardTitle className="text-lg">Contact Details</CardTitle></CardHeader>
+            <CardContent className="p-4 pt-0 space-y-2">
+              {lead.email && (
+                <div className="flex items-center gap-3">
+                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <a href={`mailto:${lead.email}`} className="text-sm hover:underline">
+                    {lead.email}
+                  </a>
+                </div>
+              )}
+              {(lead.phones || []).map((phone, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                      <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <a href={`tel:${phone.number}`} className="text-sm">
+                        {phone.number}
+                      </a>
+                      {phone.type !== 'both' && <Badge variant="secondary" className="text-xs capitalize">{phone.type}</Badge>}
+                  </div>
+              ))}
+            </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="p-4"><CardTitle className="text-lg">Commitment Snapshot</CardTitle></CardHeader>
+          <CardContent className="p-4 pt-0 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-grow-[3]">
+                <EditableField label="Course" value={lead.commitmentSnapshot?.course || ""} onSave={(val) => handleUpdate('commitmentSnapshot.course', val)} type="select" selectOptions={appSettings.courseNames || []} placeholder="Select a course"/>
+              </div>
+              <div className="flex-grow-[1]">
+                <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
+              </div>
+            </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Schedule Summary</p>
+                <p className="text-sm">{lead.commitmentSnapshot?.schedule || 'Not set.'}</p>
+              </div>
+            <div>
+              <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
+            </div>
+          </CardContent>
+        </Card>
       </TabsContent>
       
        <TabsContent value="schedule">
-        {/* Implement Learner Schedule Tab UI */}
-      </TabsContent>
+        <p>Schedule UI coming soon!</p>
+       </TabsContent>
       
        <TabsContent value="payplan">
-        {/* Implement Learner Pay Plan Tab UI */}
-      </TabsContent>
+        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
+          <BookOpen className="h-16 w-16 mb-4" />
+          <h2 className="text-2xl font-semibold text-foreground">
+            Coming Soon
+          </h2>
+          <p className="mt-2 max-w-xs">
+            Payment plan management will be available in a future update.
+          </p>
+        </div>
+       </TabsContent>
       
        <TabsContent value="leadlog">
-        {/* Implement Learner Lead Log Tab UI */}
-      </TabsContent>
+          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
+            <Users className="h-16 w-16 mb-4" />
+            <h2 className="text-2xl font-semibold text-foreground">
+              Coming Soon
+            </h2>
+            <p className="mt-2 max-w-xs">
+              A dedicated view of the original lead interaction log will be available here. For now, please refer to the main Logs tab.
+            </p>
+          </div>
+       </TabsContent>
     </Tabs>
   );
 
