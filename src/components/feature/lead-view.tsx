@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc, writeBatch, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc, writeBatch, doc, updateDoc } from 'firebase/firestore';
 import { produce } from 'immer';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X, Users, BookOpen, User, Briefcase, Clock, ToggleLeft, ToggleRight, Radio } from 'lucide-react';
@@ -26,6 +26,7 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/comp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
+import { LeadLogView } from './lead-log-view';
 
 const INTERACTION_PAGE_SIZE = 5;
 const TASK_PAGE_SIZE = 5;
@@ -144,7 +145,7 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, lastInteraction]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!loadMore) setIsTasksLoading(true);
@@ -186,7 +187,7 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
     } finally {
       setIsTasksLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, lastActiveTask, lastPastTask]);
 
   useEffect(() => {
     fetchEvents();
@@ -493,24 +494,6 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
     newDateTime.setHours(hours, minutes, 0, 0);
     setEventDetails(prev => ({...prev, dateTime: newDateTime}));
   }
-
-  const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
-    return (Object.keys(feedbackData) as (keyof InteractionFeedback)[])
-        .map(category => {
-            const feedbackItem = feedbackData[category];
-            if (!feedbackItem) return '';
-            let part = `${category}: ${feedbackItem.perception}`;
-            if (feedbackItem.objections && feedbackItem.objections.length > 0) {
-                part += ` (${feedbackItem.objections.join(', ')})`;
-            }
-            return part;
-        }).filter(Boolean).join('; ');
-  };
-  
-  const formatRelativeTime = (date: Date) => {
-    const distance = formatDistanceToNowStrict(date, { addSuffix: true });
-    return distance.replace(/ seconds?/, 's').replace(/ minutes?/, 'm').replace(/ hours?/, 'h').replace(/ days?/, 'd').replace(/ months?/, 'mo').replace(/ years?/, 'y');
-  };
 
   const upcomingEvent = scheduledEvents.length > 0 ? scheduledEvents[0] : null;
 
@@ -829,67 +812,9 @@ export function LeadView({ lead, appSettings, onUpdate }: LeadViewProps) {
                             </div>
                         )}
                     </CardContent>
-                </Card>
-
-                    <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="text-lg font-normal">Log History</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4 p-4 pt-0">
-                        <TooltipProvider>
-                        {(isInteractionsLoading && interactions.length === 0) && (
-                            <div className="flex justify-center p-4">
-                            <Loader2 className="animate-spin" />
-                            </div>
-                        )}
-                        {interactions.length > 0 && (
-                            <div className="space-y-3">
-                            {interactions.map(interaction => {
-                                const interactionDate = toDate(interaction.createdAt)!;
-                                return (
-                                <div key={interaction.id} className="text-sm p-3 bg-muted/50 rounded-lg">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <p className="font-semibold capitalize">
-                                            {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
-                                            interaction.feedback ? 'Feedback' :
-                                            interaction.outcome ? `Outcome: ${interaction.outcome}` : 
-                                            interaction.notes ? 'Note' :
-                                            'Interaction'}
-                                        </p>
-                                        <Tooltip delayDuration={300}>
-                                            <TooltipTrigger>
-                                                <p className="text-xs text-muted-foreground hover:text-foreground cursor-default">
-                                                    {formatRelativeTime(interactionDate)}
-                                                </p>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p className="text-xs">{format(interactionDate, 'PP p')}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </div>
-                                    <p className="text-muted-foreground capitalize text-xs">
-                                    {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
-                                    : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
-                                    : interaction.notes}
-                                    </p>
-                                </div>
-                                )
-                            })}
-                            </div>
-                        )}
-                        {!isInteractionsLoading && interactions.length === 0 && (
-                            <p className="text-sm text-center text-muted-foreground p-4">No interactions have been logged yet.</p>
-                        )}
-                        {hasMoreInteractions && (
-                            <div className="flex justify-center">
-                            <Button variant="outline" onClick={() => fetchInteractions(true)} disabled={isInteractionsLoading}>
-                                {isInteractionsLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
-                            </Button>
-                            </div>
-                        )}
-                        </TooltipProvider>
-                    </CardContent>
                     </Card>
+
+                    <LeadLogView lead={lead} appSettings={appSettings} />
                 </TabsContent>
                 
                 <TabsContent value="tasks" className="space-y-4">
