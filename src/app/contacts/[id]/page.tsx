@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc, writeBatch } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
@@ -60,6 +60,7 @@ const popularTimes = ["12:00", "15:00", "17:00", "19:00"];
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+const ToggleGroupContext = React.createContext<{value: string, onValueChange: (v:string)=>void}>({value: "", onValueChange: (v:string)=>{}});
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -162,14 +163,13 @@ export default function ContactDetailPage() {
     setIsInteractionsLoading(true);
     
     try {
-      let lastVisible = loadMore ? lastInteraction : null;
-      const qConstraints: any[] = [
+      let qConstraints: any[] = [
         where('leadId', '==', id),
         orderBy('createdAt', 'desc'),
       ];
 
-      if (loadMore && lastVisible) {
-          qConstraints.push(startAfter(lastVisible));
+      if (loadMore && lastInteraction) {
+          qConstraints.push(startAfter(lastInteraction));
           qConstraints.push(limit(10));
       } else {
           qConstraints.push(limit(INTERACTION_PAGE_SIZE));
@@ -198,7 +198,6 @@ export default function ContactDetailPage() {
     
     try {
       const isCompleted = type === 'past';
-      const lastVisible = loadMore ? (type === 'active' ? lastActiveTask : lastPastTask) : null;
 
       const qConstraints: any[] = [
         where('leadId', '==', id),
@@ -207,8 +206,11 @@ export default function ContactDetailPage() {
         limit(TASK_PAGE_SIZE)
       ];
 
-      if (loadMore && lastVisible) {
-        qConstraints.push(startAfter(lastVisible));
+      if (loadMore) {
+        const lastVisible = type === 'active' ? lastActiveTask : lastPastTask;
+        if (lastVisible) {
+          qConstraints.push(startAfter(lastVisible));
+        }
       }
 
       const q = query(collection(db, 'tasks'), ...qConstraints);
@@ -246,8 +248,7 @@ export default function ContactDetailPage() {
 }, [id, fetchLeadAndEvents, fetchInteractions]);
 
   useEffect(() => {
-    if (!id) return;
-    if (tasksLoaded) {
+    if (tasksLoaded && id) {
         setActiveTasks([]);
         setPastTasks([]);
         setLastActiveTask(null);
@@ -255,8 +256,7 @@ export default function ContactDetailPage() {
         fetchTasks('active');
         fetchTasks('past');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksLoaded]);
+  }, [tasksLoaded, id, fetchTasks]);
 
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksLoaded) {
@@ -1236,38 +1236,40 @@ export default function ContactDetailPage() {
             <div className="flex items-center space-x-4 rounded-md border p-4">
                 <div className="flex items-center space-x-2">
                     <Label>Mode:</Label>
-                    <ToggleGroup 
-                        type="single" 
-                        value={currentSchedule?.sessionGroups?.[0]?.mode || 'Online'}
-                        onValueChange={(value) => {
+                    <ToggleGroupContext.Provider value={{
+                        value: currentSchedule?.sessionGroups?.[0]?.mode || 'Online',
+                        onValueChange: (value) => {
                             if (!value) return;
                             const newSchedule = produce(currentSchedule || { sessionGroups: [] }, draft => {
                                 draft.sessionGroups.forEach(g => { g.mode = value as 'Online' | 'In-person' });
                             });
                             handleScheduleSave(newSchedule);
-                        }}
-                    >
-                        <ToggleGroupItem value="Online">Online</ToggleGroupItem>
-                        <ToggleGroupItem value="In-person">In-person</ToggleGroupItem>
-                    </ToggleGroup>
+                        }
+                    }}>
+                        <ToggleGroup>
+                            <ToggleGroupItem value="Online">Online</ToggleGroupItem>
+                            <ToggleGroupItem value="In-person">In-person</ToggleGroupItem>
+                        </ToggleGroup>
+                    </ToggleGroupContext.Provider>
                 </div>
                  <Separator orientation="vertical" className="h-6"/>
                  <div className="flex items-center space-x-2">
                     <Label>Format:</Label>
-                     <ToggleGroup 
-                        type="single" 
-                        value={currentSchedule?.sessionGroups?.[0]?.format || '1-1'}
-                        onValueChange={(value) => {
-                            if (!value) return;
+                     <ToggleGroupContext.Provider value={{
+                        value: currentSchedule?.sessionGroups?.[0]?.format || '1-1',
+                        onValueChange: (value) => {
+                             if (!value) return;
                             const newSchedule = produce(currentSchedule || { sessionGroups: [] }, draft => {
                                 draft.sessionGroups.forEach(g => { g.format = value as '1-1' | 'Batch' });
                             });
                             handleScheduleSave(newSchedule);
-                        }}
-                    >
-                        <ToggleGroupItem value="1-1">1-on-1</ToggleGroupItem>
-                        <ToggleGroupItem value="Batch">Batch</ToggleGroupItem>
-                    </ToggleGroup>
+                        }
+                    }}>
+                        <ToggleGroup>
+                            <ToggleGroupItem value="1-1">1-on-1</ToggleGroupItem>
+                            <ToggleGroupItem value="Batch">Batch</ToggleGroupItem>
+                        </ToggleGroup>
+                    </ToggleGroupContext.Provider>
                 </div>
             </div>
 
@@ -1547,7 +1549,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
 }
 
 // Renamed from ToggleGroup, which seems to have been a copy-paste error
-const ToggleGroup = ({type, value, onValueChange, children}: {type: "single", value: string, onValueChange: (value:string) => void, children: React.ReactNode}) => {
+const ToggleGroup = ({children}: {children: React.ReactNode}) => {
     return <div className="flex items-center rounded-md border">{children}</div>
 }
 
@@ -1556,6 +1558,3 @@ const ToggleGroupItem = ({value, children}: {value: string, children: React.Reac
     const isActive = context.value === value;
     return <Button variant={isActive ? "secondary" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
 }
-
-const ToggleGroupContext = React.createContext({value: "", onValueChange: (v:string)=>{}});
-    
