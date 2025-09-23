@@ -7,11 +7,11 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, lim
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
 import { addDays, format, formatDistanceToNowStrict, isAfter, isToday, parseISO } from 'date-fns';
-import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X, Users, BookOpen } from 'lucide-react';
+import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X, Users, BookOpen, User, Briefcase, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment, InteractionFeedback, QuickLogType, Task, InteractionEventDetails, OutcomeType } from '@/lib/types';
+import type { AppSettings, Interaction, Lead, CourseSchedule, PaymentInstallment, InteractionFeedback, QuickLogType, Task, InteractionEventDetails, OutcomeType, DayTime, SessionGroup } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const INTERACTION_PAGE_SIZE = 5;
 const TASK_PAGE_SIZE = 5;
@@ -55,6 +58,9 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: QuickLog
 
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 const popularTimes = ["12:00", "15:00", "17:00", "19:00"];
+
+const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -105,6 +111,11 @@ export default function ContactDetailPage() {
   const [eventToManage, setEventToManage] = useState<Interaction | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>(undefined);
   const [isEventActionLoading, setIsEventActionLoading] = useState(false);
+  
+  // Schedule Management State
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<SessionGroup | null>(null);
+  const [currentSchedule, setCurrentSchedule] = useState<CourseSchedule | null>(null);
 
 
   const fetchLeadAndEvents = useCallback(async () => {
@@ -114,7 +125,9 @@ export default function ContactDetailPage() {
       const leadDocRef = doc(db, 'leads', id);
       const leadDoc = await getDoc(leadDocRef);
       if (leadDoc.exists()) {
-        setLead({ id: leadDoc.id, ...leadDoc.data() } as Lead);
+        const leadData = { id: leadDoc.id, ...leadDoc.data() } as Lead;
+        setLead(leadData);
+        setCurrentSchedule(leadData.courseSchedule || { sessionGroups: [] });
       } else {
         toast({ variant: 'destructive', title: 'Contact not found.' });
         router.push('/contacts');
@@ -252,10 +265,6 @@ export default function ContactDetailPage() {
     if (value === 'tasks' && !tasksLoaded) {
       setTasksLoaded(true);
     }
-    if (lead?.relationship === 'Learner' && value === 'schedule') {
-      // Re-fetch lead data when switching to schedule tab to ensure it's fresh
-      fetchLeadAndEvents();
-    }
   };
 
   const handleUpdate = async (field: keyof Lead | string, value: any) => {
@@ -287,6 +296,56 @@ export default function ContactDetailPage() {
       setLead(originalLead); // Revert on failure
     }
   };
+  
+   const generateScheduleSummary = (schedule: CourseSchedule | null | undefined): string => {
+    if (!schedule || !schedule.sessionGroups || schedule.sessionGroups.length === 0) {
+      return 'Not set.';
+    }
+
+    const summaryParts = schedule.sessionGroups.map(group => {
+      const days = group.schedule.map(s => s.day.substring(0, 3)).join(', ');
+      const times = [...new Set(group.schedule.map(s => s.timeSlot.replace(/\s/g, '')))].join(', ');
+      const sections = group.sections.join(', ');
+      
+      let part = `${group.trainer} (${sections}): ${days} ${times}`;
+      return part;
+    });
+
+    const mode = schedule.sessionGroups[0]?.mode || '';
+    const format = schedule.sessionGroups[0]?.format || '';
+
+    return `${mode}, ${format} | ${summaryParts.join(' | ')}`;
+  };
+
+  const handleScheduleSave = async (newSchedule: CourseSchedule) => {
+    if (!lead) return;
+    const summary = generateScheduleSummary(newSchedule);
+    
+    const updatePayload = {
+      courseSchedule: newSchedule,
+      'commitmentSnapshot.schedule': summary
+    };
+
+    setLead(prev => prev ? produce(prev, draft => {
+      draft.courseSchedule = newSchedule;
+      if (draft.commitmentSnapshot) {
+        draft.commitmentSnapshot.schedule = summary;
+      }
+    }) : null);
+    
+    try {
+      const leadRef = doc(db, 'leads', id);
+      await updateDoc(leadRef, updatePayload);
+      toast({ title: 'Schedule Updated' });
+      setIsScheduleModalOpen(false);
+      setEditingGroup(null);
+    } catch (error) {
+      console.error('Error updating schedule:', error);
+      toast({ variant: 'destructive', title: 'Failed to save schedule.' });
+      // Revert UI if needed, though state is managed locally and should be fine
+    }
+  };
+
 
   const handleTaskCompletion = async (task: Task, isCompleted: boolean) => {
     try {
@@ -1162,7 +1221,61 @@ export default function ContactDetailPage() {
       </TabsContent>
       
        <TabsContent value="schedule">
-        <p>Schedule UI coming soon!</p>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Training Schedule</CardTitle>
+                <CardDescription>Manage this learner&apos;s weekly sessions.</CardDescription>
+              </div>
+               <Button onClick={() => { setEditingGroup(null); setIsScheduleModalOpen(true); }}>
+                  <Plus className="mr-2 h-4 w-4"/> Add Session Group
+               </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+             <div className="flex items-center space-x-4 rounded-md border p-4">
+                <div className="flex items-center space-x-2">
+                    <Label htmlFor="mode-switch">Mode</Label>
+                    <Switch id="mode-switch" />
+                    <Label>{currentSchedule?.sessionGroups?.[0]?.mode || 'Online'}</Label>
+                </div>
+                 <Separator orientation="vertical" className="h-6"/>
+                 <div className="flex items-center space-x-2">
+                    <Label htmlFor="format-switch">Format</Label>
+                    <Switch id="format-switch" />
+                    <Label>{currentSchedule?.sessionGroups?.[0]?.format || '1-1'}</Label>
+                </div>
+            </div>
+
+            {currentSchedule?.sessionGroups && currentSchedule.sessionGroups.length > 0 ? (
+              currentSchedule.sessionGroups.map((group) => (
+                <Card key={group.groupId} className="overflow-hidden">
+                  <CardHeader className="bg-muted/50 p-4">
+                    <div className="flex items-center justify-between">
+                       <div className="grid gap-0.5">
+                         <CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground"/> {group.trainer}</CardTitle>
+                         <CardDescription className="flex items-center gap-2"><Briefcase className="h-4 w-4 text-muted-foreground"/>{group.sections.join(', ')}</CardDescription>
+                       </div>
+                       <Button variant="ghost" size="sm" onClick={() => { setEditingGroup(group); setIsScheduleModalOpen(true); }}>Edit</Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 text-sm">
+                     <ul className="space-y-2">
+                        {group.schedule.map((s, i) => (
+                           <li key={i} className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-muted-foreground"/> <span>{s.day} @ {s.timeSlot}</span>
+                           </li>
+                        ))}
+                     </ul>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center text-muted-foreground py-10">No schedule set up for this learner yet.</div>
+            )}
+          </CardContent>
+        </Card>
        </TabsContent>
       
        <TabsContent value="payplan">
@@ -1258,6 +1371,140 @@ export default function ContactDetailPage() {
                 </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
+      
+       {isScheduleModalOpen && (
+          <ScheduleEditorModal
+            isOpen={isScheduleModalOpen}
+            onClose={() => { setIsScheduleModalOpen(false); setEditingGroup(null); }}
+            onSave={handleScheduleSave}
+            appSettings={appSettings}
+            learnerSchedule={lead.courseSchedule}
+            editingGroup={editingGroup}
+          />
+       )}
     </div>
+  );
+}
+
+
+interface ScheduleEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (schedule: CourseSchedule) => void;
+  appSettings: AppSettings;
+  learnerSchedule: CourseSchedule | null | undefined;
+  editingGroup: SessionGroup | null;
+}
+
+function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSchedule, editingGroup }: ScheduleEditorModalProps) {
+  const [sessionGroup, setSessionGroup] = useState<Partial<SessionGroup>>({});
+  
+  useEffect(() => {
+    if (editingGroup) {
+      setSessionGroup(editingGroup);
+    } else {
+      setSessionGroup({
+        groupId: `group_${Date.now()}`,
+        sections: [],
+        schedule: [],
+      });
+    }
+  }, [editingGroup, isOpen]);
+
+  const handleSave = () => {
+    const finalGroup = sessionGroup as SessionGroup;
+    if (!finalGroup.trainer || !finalGroup.sections?.length || !finalGroup.schedule?.length) {
+      // Basic validation
+      return;
+    }
+
+    const newSchedule = produce(learnerSchedule || { sessionGroups: [] }, draft => {
+       const existingGroupIndex = draft.sessionGroups.findIndex(g => g.groupId === finalGroup.groupId);
+       if (existingGroupIndex > -1) {
+          draft.sessionGroups[existingGroupIndex] = finalGroup;
+       } else {
+          draft.sessionGroups.push(finalGroup);
+       }
+    });
+
+    onSave(newSchedule);
+  };
+  
+  const handleDayTimeChange = (index: number, day: string, time: string) => {
+    const newSchedule = produce(sessionGroup.schedule || [], draft => {
+      draft[index] = { day, timeSlot: time };
+    });
+    setSessionGroup(prev => ({ ...prev, schedule: newSchedule }));
+  };
+
+  const addDayTime = () => {
+    const newSchedule = produce(sessionGroup.schedule || [], draft => {
+        draft.push({ day: 'Monday', timeSlot: appSettings.timeSlots[0] || ''});
+    });
+    setSessionGroup(prev => ({...prev, schedule: newSchedule }));
+  };
+  
+  const removeDayTime = (index: number) => {
+    const newSchedule = produce(sessionGroup.schedule || [], draft => {
+        draft.splice(index, 1);
+    });
+    setSessionGroup(prev => ({ ...prev, schedule: newSchedule }));
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{editingGroup ? 'Edit' : 'Add'} Session Group</DialogTitle>
+        </DialogHeader>
+        <div className="py-4 space-y-4">
+          <div>
+            <Label>Trainer</Label>
+            <Select 
+              value={sessionGroup.trainer} 
+              onValueChange={trainer => setSessionGroup(prev => ({...prev, trainer}))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a trainer..." />
+              </SelectTrigger>
+              <SelectContent>
+                {appSettings.trainers.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Sections/Subjects</Label>
+            <Input 
+              placeholder="e.g. Power BI, Excel"
+              value={sessionGroup.sections?.join(', ')}
+              onChange={e => setSessionGroup(prev => ({...prev, sections: e.target.value.split(',').map(s => s.trim())}))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Schedule</Label>
+            {sessionGroup.schedule?.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Select value={s.day} onValueChange={day => handleDayTimeChange(i, day, s.timeSlot)}>
+                    <SelectTrigger><SelectValue/></SelectTrigger>
+                    <SelectContent>
+                        {daysOfWeek.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={s.timeSlot} onValueChange={time => handleDayTimeChange(i, s.day, time)}>
+                    <SelectTrigger><SelectValue/></SelectTrigger>
+                    <SelectContent>
+                        {appSettings.timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Button variant="ghost" size="icon" onClick={() => removeDayTime(i)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={addDayTime}><Plus className="mr-2 h-4 w-4"/> Add Day/Time</Button>
+          </div>
+        </div>
+        <CardFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave}>Save</Button>
+        </CardFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
