@@ -6,7 +6,7 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, lim
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
 import { addDays, format, formatDistanceToNowStrict, isAfter, isToday, parseISO } from 'date-fns';
-import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X, Users, BookOpen, User, Briefcase, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, Calendar as CalendarIcon, Check, ChevronRight, Info, CalendarPlus, CalendarClock, Loader2, Mail, Phone, Plus, Send, ThumbsDown, ThumbsUp, Trash2, X, Users, BookOpen, User, Briefcase, Clock, ToggleLeft, ToggleRight, Radio } from 'lucide-react';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
@@ -24,11 +24,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 
@@ -118,7 +118,7 @@ export default function ContactDetailPage() {
 
 
   const fetchLeadAndEvents = useCallback(async () => {
-    setIsLoading(true);
+    // No need to set isLoading here, handled by main useEffect
     try {
       // Fetch lead data
       const leadDocRef = doc(db, 'leads', id);
@@ -154,8 +154,6 @@ export default function ContactDetailPage() {
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({ variant: 'destructive', title: 'Failed to load contact data.' });
-    } finally {
-      setIsLoading(false);
     }
   }, [id, router, toast]);
 
@@ -239,10 +237,13 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     if (id) {
-      fetchLeadAndEvents();
-      fetchInteractions();
+        setIsLoading(true);
+        Promise.all([
+            fetchLeadAndEvents(),
+            fetchInteractions()
+        ]).finally(() => setIsLoading(false));
     }
-  }, [id]);
+}, [id, fetchLeadAndEvents, fetchInteractions]);
 
   useEffect(() => {
     if (!id) return;
@@ -260,9 +261,6 @@ export default function ContactDetailPage() {
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksLoaded) {
       setTasksLoaded(true);
-    }
-    if(value === 'schedule') {
-        fetchLeadAndEvents();
     }
   };
 
@@ -331,6 +329,8 @@ export default function ContactDetailPage() {
         draft.commitmentSnapshot.schedule = summary;
       }
     }) : null);
+
+    setCurrentSchedule(newSchedule);
     
     try {
       const leadRef = doc(db, 'leads', id);
@@ -716,14 +716,14 @@ export default function ContactDetailPage() {
     const upcomingEvent = scheduledEvents.length > 0 ? scheduledEvents[0] : null;
 
     return (
-      <Tabs defaultValue="summary" onValueChange={handleTabChange}>
+      <Tabs defaultValue="overview" onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="summary">Summary</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="tasks">Tasks/Events</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="summary" className="space-y-4">
+        <TabsContent value="overview" className="space-y-4">
           {upcomingEvent && (
             <Card>
               <CardContent className="p-3">
@@ -1233,17 +1233,41 @@ export default function ContactDetailPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-             <div className="flex items-center space-x-4 rounded-md border p-4">
+            <div className="flex items-center space-x-4 rounded-md border p-4">
                 <div className="flex items-center space-x-2">
-                    <Label htmlFor="mode-switch">Mode</Label>
-                    <Switch id="mode-switch" />
-                    <Label>{currentSchedule?.sessionGroups?.[0]?.mode || 'Online'}</Label>
+                    <Label>Mode:</Label>
+                    <ToggleGroup 
+                        type="single" 
+                        value={currentSchedule?.sessionGroups?.[0]?.mode || 'Online'}
+                        onValueChange={(value) => {
+                            if (!value) return;
+                            const newSchedule = produce(currentSchedule || { sessionGroups: [] }, draft => {
+                                draft.sessionGroups.forEach(g => { g.mode = value as 'Online' | 'In-person' });
+                            });
+                            handleScheduleSave(newSchedule);
+                        }}
+                    >
+                        <ToggleGroupItem value="Online">Online</ToggleGroupItem>
+                        <ToggleGroupItem value="In-person">In-person</ToggleGroupItem>
+                    </ToggleGroup>
                 </div>
                  <Separator orientation="vertical" className="h-6"/>
                  <div className="flex items-center space-x-2">
-                    <Label htmlFor="format-switch">Format</Label>
-                    <Switch id="format-switch" />
-                    <Label>{currentSchedule?.sessionGroups?.[0]?.format || '1-1'}</Label>
+                    <Label>Format:</Label>
+                     <ToggleGroup 
+                        type="single" 
+                        value={currentSchedule?.sessionGroups?.[0]?.format || '1-1'}
+                        onValueChange={(value) => {
+                            if (!value) return;
+                            const newSchedule = produce(currentSchedule || { sessionGroups: [] }, draft => {
+                                draft.sessionGroups.forEach(g => { g.format = value as '1-1' | 'Batch' });
+                            });
+                            handleScheduleSave(newSchedule);
+                        }}
+                    >
+                        <ToggleGroupItem value="1-1">1-on-1</ToggleGroupItem>
+                        <ToggleGroupItem value="Batch">Batch</ToggleGroupItem>
+                    </ToggleGroup>
                 </div>
             </div>
 
@@ -1256,7 +1280,19 @@ export default function ContactDetailPage() {
                          <CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground"/> {group.trainer}</CardTitle>
                          <CardDescription className="flex items-center gap-2"><Briefcase className="h-4 w-4 text-muted-foreground"/>{group.sections.join(', ')}</CardDescription>
                        </div>
-                       <Button variant="ghost" size="sm" onClick={() => { setEditingGroup(group); setIsScheduleModalOpen(true); }}>Edit</Button>
+                       <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => { setEditingGroup(group); setIsScheduleModalOpen(true); }}>Edit</Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => {
+                              const newSchedule = produce(currentSchedule, draft => {
+                                  if (draft) {
+                                      draft.sessionGroups = draft.sessionGroups.filter(g => g.groupId !== group.groupId);
+                                  }
+                              });
+                              if (newSchedule) handleScheduleSave(newSchedule);
+                          }}>
+                              <Trash2 className="h-4 w-4"/>
+                          </Button>
+                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-4 text-sm">
@@ -1377,7 +1413,7 @@ export default function ContactDetailPage() {
             onClose={() => { setIsScheduleModalOpen(false); setEditingGroup(null); }}
             onSave={handleScheduleSave}
             appSettings={appSettings}
-            learnerSchedule={lead.courseSchedule}
+            learnerSchedule={currentSchedule}
             editingGroup={editingGroup}
           />
        )}
@@ -1406,14 +1442,16 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
         groupId: `group_${Date.now()}`,
         sections: [],
         schedule: [],
+        mode: learnerSchedule?.sessionGroups?.[0]?.mode || 'Online',
+        format: learnerSchedule?.sessionGroups?.[0]?.format || '1-1',
       });
     }
-  }, [editingGroup, isOpen]);
+  }, [editingGroup, isOpen, learnerSchedule]);
 
   const handleSave = () => {
     const finalGroup = sessionGroup as SessionGroup;
     if (!finalGroup.trainer || !finalGroup.sections?.length || !finalGroup.schedule?.length) {
-      // Basic validation
+      toast({ variant: "destructive", title: "Please fill all fields." });
       return;
     }
 
@@ -1499,13 +1537,25 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
             <Button variant="outline" size="sm" onClick={addDayTime}><Plus className="mr-2 h-4 w-4"/> Add Day/Time</Button>
           </div>
         </div>
-        <CardFooter>
+        <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSave}>Save</Button>
-        </CardFooter>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
+// Renamed from ToggleGroup, which seems to have been a copy-paste error
+const ToggleGroup = ({type, value, onValueChange, children}: {type: "single", value: string, onValueChange: (value:string) => void, children: React.ReactNode}) => {
+    return <div className="flex items-center rounded-md border">{children}</div>
+}
+
+const ToggleGroupItem = ({value, children}: {value: string, children: React.ReactNode}) => {
+    const context = React.useContext(ToggleGroupContext);
+    const isActive = context.value === value;
+    return <Button variant={isActive ? "secondary" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
+}
+
+const ToggleGroupContext = React.createContext({value: "", onValueChange: (v:string)=>{}});
     
