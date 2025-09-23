@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc, writeBatch } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, ToggleLeft, ToggleRight, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, ToggleLeft, ToggleRight, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -27,7 +27,7 @@ import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
@@ -188,7 +188,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast, lastInteraction]);
+  }, [id, toast]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -231,7 +231,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsTasksLoading(false);
     }
-  }, [id, toast, lastActiveTask, lastPastTask]);
+  }, [id, toast]);
 
 
   useEffect(() => {
@@ -415,8 +415,10 @@ export default function ContactDetailPage() {
         toast({title: "Interaction logged successfully."});
         // After log, refresh related data
         fetchEvents();
-        fetchTasks('active', false);
-        fetchTasks('past', false);
+        if (tasksLoaded) {
+            fetchTasks('active', false);
+            fetchTasks('past', false);
+        }
         // Also refresh lead data for status change
         fetchInitialData();
     } catch (error) {
@@ -487,12 +489,12 @@ export default function ContactDetailPage() {
       setFeedback({});
       setActiveChipCategory(null);
       toast({ title: "Feedback logged" });
+      fetchInteractions(false);
     } catch (e) {
       setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
       toast({variant: 'destructive', title: 'Failed to log feedback.'})
     } finally {
       setIsLoggingFeedback(false);
-      fetchInteractions(false);
     }
   }
 
@@ -532,7 +534,7 @@ export default function ContactDetailPage() {
       toast({ title: 'Outcome logged successfully.' });
 
       if (prevSelectedOutcome === "Event Scheduled") { fetchEvents(); }
-      fetchTasks('active', false);
+      if (tasksLoaded) fetchTasks('active', false);
     } catch (error) {
       setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
       console.error("Error logging outcome:", error);
@@ -669,11 +671,11 @@ export default function ContactDetailPage() {
     return distance.replace(/ seconds?/, 's').replace(/ minutes?/, 'm').replace(/ hours?/, 'h').replace(/ days?/, 'd').replace(/ months?/, 'mo').replace(/ years?/, 'y');
   };
 
+  const isLearner = useMemo(() => lead?.relationship?.toLowerCase() === 'learner', [lead]);
+
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
-  
-  const isLearner = lead.relationship?.toLowerCase() === 'learner';
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -692,8 +694,10 @@ export default function ContactDetailPage() {
                     </div>
                 </div>
             </div>
-             <div>
-                {/* Add Actions like Edit/Delete/Merge here */}
+             <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" asChild>
+                    <Link href="/settings"><Settings/></Link>
+                </Button>
             </div>
         </div>
       </header>
@@ -1123,6 +1127,7 @@ export default function ContactDetailPage() {
                                   <p className="text-muted-foreground capitalize text-xs">
                                   {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
                                   : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
+                                  : interaction.withdrawalReasons ? `Reasons: ${interaction.withdrawalReasons.join(', ')}`
                                   : interaction.notes}
                                   </p>
                               </div>
@@ -1411,7 +1416,5 @@ export const ToggleGroupItem = ({value, children}: {value: string, children: Rea
     const isActive = context.value === value;
     return <Button variant={isActive ? "secondary" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
 }
-
-    
 
     
