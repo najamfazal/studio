@@ -119,9 +119,8 @@ export default function ContactDetailPage() {
 
 
   const fetchLeadAndEvents = useCallback(async () => {
-    // No need to set isLoading here, handled by main useEffect
+    if (!id) return;
     try {
-      // Fetch lead data
       const leadDocRef = doc(db, 'leads', id);
       const leadDoc = await getDoc(leadDocRef);
       if (leadDoc.exists()) {
@@ -134,14 +133,12 @@ export default function ContactDetailPage() {
         return;
       }
       
-      // Fetch App Settings
       const settingsDocRef = doc(db, 'settings', 'appConfig');
       const settingsDoc = await getDoc(settingsDocRef);
       if(settingsDoc.exists()) {
         setAppSettings(settingsDoc.data() as AppSettings);
       }
       
-      // Fetch active scheduled events
       const eventsQuery = query(
         collection(db, "interactions"), 
         where("leadId", "==", id), 
@@ -153,7 +150,7 @@ export default function ContactDetailPage() {
       setScheduledEvents(eventData);
 
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching lead and events:', error);
       toast({ variant: 'destructive', title: 'Failed to load contact data.' });
     }
   }, [id, router, toast]);
@@ -253,11 +250,13 @@ export default function ContactDetailPage() {
         setPastTasks([]);
         setLastActiveTask(null);
         setLastPastTask(null);
+        setHasMoreActiveTasks(true);
+        setHasMorePastTasks(true);
         fetchTasks('active');
         fetchTasks('past');
     }
   }, [tasksLoaded, id, fetchTasks]);
-
+  
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksLoaded) {
       setTasksLoaded(true);
@@ -1558,3 +1557,5 @@ const ToggleGroupItem = ({value, children}: {value: string, children: React.Reac
     const isActive = context.value === value;
     return <Button variant={isActive ? "secondary" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
 }
+
+    
