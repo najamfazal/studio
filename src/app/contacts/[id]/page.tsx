@@ -187,7 +187,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, lastInteraction]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -231,7 +231,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsTasksLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, lastActiveTask, lastPastTask]);
 
 
   useEffect(() => {
@@ -1327,15 +1327,7 @@ export default function ContactDetailPage() {
        </TabsContent>
       
        <TabsContent value="leadlog">
-          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
-            <Users className="h-16 w-16 mb-4" />
-            <h2 className="text-2xl font-semibold text-foreground">
-              Coming Soon
-            </h2>
-            <p className="mt-2 max-w-xs">
-              A dedicated view of the original lead interaction log will be available here. For now, please refer to the main Logs tab.
-            </p>
-          </div>
+          {renderLeadView()}
        </TabsContent>
     </Tabs>
   );
