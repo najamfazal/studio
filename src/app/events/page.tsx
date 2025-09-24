@@ -1,9 +1,8 @@
 
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 import { isAfter, isBefore, isSameDay, parseISO, startOfDay, endOfDay, addDays } from 'date-fns';
 import { CalendarDays, Check, Edit, X, Loader2, CalendarClock } from 'lucide-react';
 import Link from 'next/link';
@@ -330,5 +329,3 @@ function EventCategory({ title, events, onAction, onReschedule, isLoading }: { t
     </section>
   )
 }
-
-    
