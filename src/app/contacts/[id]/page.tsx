@@ -13,7 +13,7 @@ import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { db } from '@/lib/firebase';
 import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { Logo } from '@/components/icons';
+import { Logo, WhatsAppIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -121,7 +121,7 @@ export default function ContactDetailPage() {
         const leadData = { id: leadDoc.id, ...leadDoc.data() } as Lead;
         setLead(leadData);
         setCurrentSchedule(leadData.courseSchedule || { sessionGroups: [] });
-        setInteractions((leadData.interactions || []).sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
+        setInteractions((leadData.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
       } else {
         toast({ variant: 'destructive', title: 'Contact not found.' });
         router.push('/contacts');
@@ -341,31 +341,31 @@ export default function ContactDetailPage() {
 
   const handleLogInteraction = async (interactionData: Partial<Interaction>) => {
     if (!lead) return;
-
+  
     const leadRef = doc(db, 'leads', id);
     const newInteraction: Interaction = {
       id: `new-${Date.now()}`,
       ...interactionData,
       createdAt: new Date().toISOString(),
     } as Interaction;
-
-    const originalLead = lead; 
-
+  
+    const originalLead = lead;
+  
     // Optimistic UI Update
     const optimisticLead = produce(lead, draft => {
-        draft.interactions?.unshift(newInteraction);
-        
-        if (newInteraction.quickLogType) {
-            if (newInteraction.quickLogType === 'Enrolled') {
-                draft.status = 'Enrolled';
-                draft.relationship = 'Learner';
-            } else if (newInteraction.quickLogType === 'Withdrawn') {
-                draft.status = 'Withdrawn';
-            }
+      draft.interactions?.unshift(newInteraction);
+  
+      if (newInteraction.quickLogType) {
+        if (newInteraction.quickLogType === 'Enrolled') {
+          draft.status = 'Enrolled';
+          draft.relationship = 'Learner';
+        } else if (newInteraction.quickLogType === 'Withdrawn') {
+          draft.status = 'Withdrawn';
         }
+      }
     });
     setLead(optimisticLead);
-    setInteractions([...(optimisticLead.interactions || [])]);
+    setInteractions([...(optimisticLead.interactions || [])].sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
     
     try {
       await updateDoc(leadRef, {
@@ -373,8 +373,9 @@ export default function ContactDetailPage() {
       });
       toast({ title: 'Interaction Logged' });
       
+      // Instead of full reload, just refresh tasks which might have changed
       refreshTasks();
-
+  
     } catch (error) {
       console.error("Error logging interaction:", error);
       toast({ variant: "destructive", title: "Failed to log interaction." });
@@ -717,15 +718,27 @@ export default function ContactDetailPage() {
                           </a>
                       </div>
                       )}
-                      {(lead.phones || []).map((phone, index) => (
-                          <div key={index} className="flex items-center gap-3">
-                              <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <a href={`tel:${phone.number}`} className="text-sm">
-                              {phone.number}
-                              </a>
-                              {phone.type !== 'both' && <Badge variant="secondary" className="text-xs capitalize">{phone.type}</Badge>}
-                          </div>
-                      ))}
+                      {(lead.phones || []).map((phone, index) => {
+                            const cleanNumber = phone.number.replace(/\D/g, '');
+                            return (
+                            <div key={index} className="flex items-center gap-3">
+                                {phone.type === 'calling' && <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                                {(phone.type === 'chat' || phone.type === 'both') && <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" /></a>}
+                                <div className="flex items-center gap-2">
+                                  {(phone.type === 'calling' || phone.type === 'both') ? (
+                                    <a href={`tel:${cleanNumber}`} className="text-sm">
+                                      {phone.number}
+                                    </a>
+                                  ) : (
+                                    <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer" className="text-sm">
+                                      {phone.number}
+                                    </a>
+                                  )}
+                                  {phone.type !== 'both' && <Badge variant="secondary" className="text-xs capitalize">{phone.type}</Badge>}
+                                </div>
+                            </div>
+                            )
+                      })}
                   </CardContent>
               </Card>
 
@@ -1356,4 +1369,5 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
+
 
