@@ -30,9 +30,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const ToggleGroupContext = React.createContext<{value: string, onValueChange: (v:string)=>void}>({value: "", onValueChange: (v:string)=>{}});
 
 const INTERACTION_PAGE_SIZE = 5;
 const TASK_PAGE_SIZE = 5;
@@ -188,7 +189,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, lastInteraction]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -231,7 +232,6 @@ export default function ContactDetailPage() {
     } finally {
       setIsTasksLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, toast]);
 
 
@@ -257,7 +257,6 @@ export default function ContactDetailPage() {
         fetchTasks('active');
         fetchTasks('past');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksLoaded, fetchTasks]);
 
   const handleUpdate = async (field: keyof Lead | string, value: any) => {
@@ -821,28 +820,26 @@ export default function ContactDetailPage() {
                       <div className="flex items-center space-x-4 rounded-md border p-4">
                           <div className="flex items-center space-x-2">
                               <Label>Mode:</Label>
-                              <ToggleGroupContext.Provider value={{
-                                  value: lead.courseSchedule?.sessionGroups?.[0]?.mode || 'Online',
-                                  onValueChange: (value) => handleScheduleChange(value, 'mode')
-                              }}>
-                                  <ToggleGroup>
-                                      <ToggleGroupItem value="Online">Online</ToggleGroupItem>
-                                      <ToggleGroupItem value="In-person">In-person</ToggleGroupItem>
-                                  </ToggleGroup>
-                              </ToggleGroupContext.Provider>
+                                <ToggleGroup 
+                                    type="single" 
+                                    value={lead.courseSchedule?.sessionGroups?.[0]?.mode || 'Online'}
+                                    onValueChange={(value) => handleScheduleChange(value, 'mode')}
+                                    >
+                                  <ToggleGroupItem value="Online">Online</ToggleGroupItem>
+                                  <ToggleGroupItem value="In-person">In-person</ToggleGroupItem>
+                                </ToggleGroup>
                           </div>
                           <Separator orientation="vertical" className="h-6"/>
                           <div className="flex items-center space-x-2">
                               <Label>Format:</Label>
-                              <ToggleGroupContext.Provider value={{
-                                  value: lead.courseSchedule?.sessionGroups?.[0]?.format || '1-1',
-                                  onValueChange: (value) => handleScheduleChange(value, 'format')
-                              }}>
-                                  <ToggleGroup>
-                                      <ToggleGroupItem value="1-1">1-on-1</ToggleGroupItem>
-                                      <ToggleGroupItem value="Batch">Batch</ToggleGroupItem>
-                                  </ToggleGroup>
-                              </ToggleGroupContext.Provider>
+                                <ToggleGroup 
+                                    type="single" 
+                                    value={lead.courseSchedule?.sessionGroups?.[0]?.format || '1-1'}
+                                    onValueChange={(value) => handleScheduleChange(value, 'format')}
+                                    >
+                                  <ToggleGroupItem value="1-1">1-on-1</ToggleGroupItem>
+                                  <ToggleGroupItem value="Batch">Batch</ToggleGroupItem>
+                                </ToggleGroup>
                           </div>
                       </div>
 
@@ -1414,12 +1411,4 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
   );
 }
 
-export const ToggleGroup = ({children}: {children: React.ReactNode}) => {
-    return <div className="flex items-center rounded-md border">{children}</div>
-}
-
-export const ToggleGroupItem = ({value, children}: {value: string, children: React.ReactNode}) => {
-    const context = React.useContext(ToggleGroupContext);
-    const isActive = context.value === value;
-    return <Button variant={isActive ? "default" : "ghost"} onClick={() => context.onValueChange(value)} className="rounded-none first:rounded-l-md last:rounded-r-md first:border-r last:border-l">{children}</Button>
-}
+    
