@@ -231,6 +231,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsTasksLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, toast]);
 
 
@@ -256,6 +257,7 @@ export default function ContactDetailPage() {
         fetchTasks('active');
         fetchTasks('past');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksLoaded, fetchTasks]);
 
   const handleUpdate = async (field: keyof Lead | string, value: any) => {
@@ -708,7 +710,7 @@ export default function ContactDetailPage() {
       
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         <Tabs defaultValue="overview" onValueChange={handleTabChange} className="w-full">
-            <TabsList className={cn("grid w-full", isLearner ? "grid-cols-4" : "grid-cols-3")}>
+            <TabsList className={cn("grid w-full grid-cols-3", isLearner && "grid-cols-4")}>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               {isLearner && <TabsTrigger value="schedule">Schedule</TabsTrigger>}
               <TabsTrigger value="logs">Logs</TabsTrigger>
