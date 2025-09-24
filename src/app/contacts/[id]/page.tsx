@@ -188,7 +188,7 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast, lastInteraction]);
+  }, [id, toast]);
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -416,8 +416,8 @@ export default function ContactDetailPage() {
         // After log, refresh related data
         fetchEvents();
         if (tasksLoaded) {
-            fetchTasks('active', false);
-            fetchTasks('past', false);
+            setTasksLoaded(false); // This will trigger re-fetch in useEffect
+            setTimeout(() => setTasksLoaded(true), 0);
         }
         // Also refresh lead data for status change
         fetchInitialData();
@@ -534,7 +534,10 @@ export default function ContactDetailPage() {
       toast({ title: 'Outcome logged successfully.' });
 
       if (prevSelectedOutcome === "Event Scheduled") { fetchEvents(); }
-      if (tasksLoaded) fetchTasks('active', false);
+      if (tasksLoaded) {
+        setTasksLoaded(false);
+        setTimeout(() => setTasksLoaded(true), 0);
+      }
     } catch (error) {
       setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
       console.error("Error logging outcome:", error);
@@ -635,6 +638,7 @@ export default function ContactDetailPage() {
   const handleScheduleChange = (value: any, type: 'mode' | 'format') => {
     if (!value || !lead) return;
     const newSchedule = produce(lead.courseSchedule || { sessionGroups: [] }, draft => {
+        if (!draft.sessionGroups) draft.sessionGroups = [];
         draft.sessionGroups.forEach(g => { 
             if (type === 'mode') g.mode = value as 'Online' | 'In-person';
             if (type === 'format') g.format = value as '1-1' | 'Batch';
@@ -646,7 +650,7 @@ export default function ContactDetailPage() {
   const handleSessionGroupDelete = (groupId: string) => {
       if (!lead) return;
       const newSchedule = produce(lead.courseSchedule, draft => {
-          if (draft) {
+          if (draft && draft.sessionGroups) {
               draft.sessionGroups = draft.sessionGroups.filter(g => g.groupId !== groupId);
           }
       });
@@ -1116,11 +1120,11 @@ export default function ContactDetailPage() {
                                       <Tooltip delayDuration={300}>
                                           <TooltipTrigger>
                                               <p className="text-xs text-muted-foreground hover:text-foreground cursor-default">
-                                                  {formatRelativeTime(interactionDate)}
+                                                  {interactionDate ? formatRelativeTime(interactionDate) : ''}
                                               </p>
                                           </TooltipTrigger>
                                           <TooltipContent>
-                                              <p className="text-xs">{format(interactionDate, 'PP p')}</p>
+                                              <p className="text-xs">{interactionDate ? format(interactionDate, 'PP p'): ''}</p>
                                           </TooltipContent>
                                       </Tooltip>
                                   </div>
@@ -1221,7 +1225,7 @@ export default function ContactDetailPage() {
         </Tabs>
       </main>
       
-       {isScheduleModalOpen && (
+       {isScheduleModalOpen && appSettings && (
           <ScheduleEditorModal
             isOpen={isScheduleModalOpen}
             onClose={() => { setIsScheduleModalOpen(false); setEditingGroup(null); }}
@@ -1311,6 +1315,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     }
 
     const newSchedule = produce(learnerSchedule || { sessionGroups: [] }, draft => {
+        if (!draft.sessionGroups) draft.sessionGroups = [];
         const overallMode = draft.sessionGroups[0]?.mode || finalGroup.mode;
         const overallFormat = draft.sessionGroups[0]?.format || finalGroup.format;
 
@@ -1337,7 +1342,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
 
   const addDayTime = () => {
     const newSchedule = produce(sessionGroup.schedule || [], draft => {
-        draft.push({ day: 'Monday', timeSlot: appSettings.timeSlots[0] || ''});
+        draft.push({ day: 'Monday', timeSlot: appSettings.timeSlots?.[0] || ''});
     });
     setSessionGroup(prev => ({...prev, schedule: newSchedule }));
   };
@@ -1365,7 +1370,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
                 <SelectValue placeholder="Select a trainer..." />
               </SelectTrigger>
               <SelectContent>
-                {appSettings.trainers.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                {appSettings?.trainers?.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -1389,7 +1394,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
                 <Select value={s.timeSlot} onValueChange={time => handleDayTimeChange(i, s.day, time)}>
                     <SelectTrigger><SelectValue/></SelectTrigger>
                     <SelectContent>
-                        {appSettings.timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        {appSettings?.timeSlots?.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                 </Select>
                 <Button variant="ghost" size="icon" onClick={() => removeDayTime(i)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
