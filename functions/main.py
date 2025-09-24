@@ -127,6 +127,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "onFollowList": False,
                 "traits": [],
                 "insights": [],
+                "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
             }
             
@@ -223,25 +224,33 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
         print(f"AFC initialized for lead {lead_name}. Day 1 follow-up task created.")
 
 
-@firestore_fn.on_document_created(document="interactions/{interactionId}", region="us-central1")
+@firestore_fn.on_document_updated(document="leads/{leadId}", region="us-central1")
 def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
-    The 'brain' of the application. Processes new interactions, completes
-    old tasks, and schedules the next appropriate follow-up.
+    The 'brain' of the application. Processes new interactions added to a lead,
+    completes old tasks, and schedules the next appropriate follow-up.
+    Triggers when the `interactions` array is updated.
     """
-    interaction_data = event.data.to_dict()
-    lead_id = interaction_data.get("leadId")
+    data_after = event.data.after.to_dict()
+    data_before = event.data.before.to_dict()
 
+    interactions_after = data_after.get("interactions", [])
+    interactions_before = data_before.get("interactions", [])
+
+    # Check if a new interaction was added.
+    if len(interactions_after) <= len(interactions_before):
+        return
+    
+    # The new interaction is the last one in the array.
+    interaction_data = interactions_after[-1]
+    lead_id = event.params.get("leadId")
+    
     if not lead_id:
         print("Interaction is missing a leadId. Aborting.")
         return
 
-    lead_ref = db.collection("leads").document(lead_id)
-    lead_doc = lead_ref.get()
-    if not lead_doc.exists:
-        print(f"Lead {lead_id} not found. Aborting.")
-        return
-    lead_data = lead_doc.to_dict()
+    lead_ref = event.data.after.reference
+    lead_data = data_after # Use the already-fetched data
     lead_name = lead_data.get("name")
     
     # --- Shared Logic: Update last interaction date for ALL logs ---
@@ -258,7 +267,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
         if not lead_data.get("hasEngaged"):
             lead_ref.update({"hasEngaged": True})
         # This interaction implies engagement, so reset AFC
-        reset_afc_for_engagement(lead_id, lead_name)
+        reset_afc_for_engagement(lead_id, lead_name, lead_ref)
         return
 
     # --- 2. Outcome Log Processing ---
@@ -364,7 +373,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             return # End here for unresponsive, don't schedule 1st follow-up
 
     # --- AFC Reset Logic for "Followup", "Unchanged", or other responsive logs ---
-    reset_afc_for_engagement(lead_id, lead_name)
+    reset_afc_for_engagement(lead_id, lead_name, lead_ref)
 
 
 @scheduler_fn.on_schedule(schedule="30 9,18 * * *", timezone="Asia/Dubai", region="us-central1")
@@ -396,12 +405,17 @@ def afcDailyAdvancer(event: scheduler_fn.ScheduledEvent) -> None:
         
         # 2. Log an "Unresponsive" interaction to trigger the AFC advancement
         interaction = {
-            "leadId": lead_id,
+            "id": f"sys_{task.id}",
             "createdAt": firestore.SERVER_TIMESTAMP,
             "quickLogType": "Unresponsive",
             "notes": f"System generated: No response to overdue task '{task_data.get('description')}'.",
         }
-        db.collection("interactions").add(interaction)
+        
+        # Add interaction to the lead's array
+        lead_ref = db.collection("leads").document(lead_id)
+        lead_ref.update({
+            "interactions": firestore.ArrayUnion([interaction])
+        })
         
         print(f"Logged 'Unresponsive' for lead {lead_id} to advance AFC.")
 
@@ -429,12 +443,16 @@ def onTaskUpdate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
                 
                 # Log a "Followup" interaction to reset the AFC
                 interaction = {
-                    "leadId": lead_id,
+                    "id": f"sys_task_{task_id}",
                     "createdAt": firestore.SERVER_TIMESTAMP,
                     "quickLogType": "Followup",
                     "notes": f"System generated: AFC reset after completion of task '{data_after.get('description')}'.",
                 }
-                db.collection("interactions").add(interaction)
+                
+                lead_ref = db.collection("leads").document(lead_id)
+                lead_ref.update({
+                    "interactions": firestore.ArrayUnion([interaction])
+                })
 
 
 # --- Helper Functions ---
@@ -478,9 +496,8 @@ def delete_event_tasks(lead_id: str, event_type: str):
             print(f"Deleted event-related task {task.id} for lead {lead_id}: {description}")
 
 
-def reset_afc_for_engagement(lead_id: str, lead_name: str):
+def reset_afc_for_engagement(lead_id: str, lead_name: str, lead_ref):
     """Resets the AFC cycle for an engaged lead."""
-    lead_ref = db.collection("leads").document(lead_id)
     # Delete any other pending "Follow-up" tasks to avoid duplicates
     delete_pending_followups(lead_id)
         
@@ -495,35 +512,28 @@ def reset_afc_for_engagement(lead_id: str, lead_name: str):
 @firestore_fn.on_document_deleted(document="leads/{leadId}", region="us-central1")
 def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
-    Handles the cascading deletion of a lead's associated data (tasks and interactions).
+    Handles the cascading deletion of a lead's associated tasks.
+    Interactions are now deleted automatically as they are part of the lead doc.
     """
     lead_id = event.params.get("leadId")
-    print(f"Lead {lead_id} deleted. Cleaning up associated data...")
+    print(f"Lead {lead_id} deleted. Cleaning up associated tasks...")
 
     batch = db.batch()
     deleted_tasks_count = 0
-    deleted_interactions_count = 0
-
+    
     # Delete associated tasks
     tasks_ref = db.collection("tasks")
     tasks_query = tasks_ref.where("leadId", "==", lead_id).stream()
     for task in tasks_query:
         batch.delete(task.reference)
         deleted_tasks_count += 1
-
-    # Delete associated interactions (logs, events, etc.)
-    interactions_ref = db.collection("interactions")
-    interactions_query = interactions_ref.where("leadId", "==", lead_id).stream()
-    for interaction in interactions_query:
-        batch.delete(interaction.reference)
-        deleted_interactions_count += 1
     
     # Commit the batched deletions
-    if deleted_tasks_count > 0 or deleted_interactions_count > 0:
+    if deleted_tasks_count > 0:
         batch.commit()
-        print(f"Cleanup for lead {lead_id} complete. Deleted {deleted_tasks_count} tasks and {deleted_interactions_count} interactions.")
+        print(f"Cleanup for lead {lead_id} complete. Deleted {deleted_tasks_count} tasks.")
     else:
-        print(f"No associated tasks or interactions found for lead {lead_id}.")
+        print(f"No associated tasks found for lead {lead_id}.")
     
 @https_fn.on_call(region="us-central1")
 def mergeLeads(req: https_fn.CallableRequest) -> dict:
@@ -563,16 +573,19 @@ def mergeLeads(req: https_fn.CallableRequest) -> dict:
         secondary_lead_data = secondary_lead_doc.to_dict()
 
         batch = db.batch()
+        
+        # Merge interactions from secondary to primary
+        secondary_interactions = secondary_lead_data.get("interactions", [])
+        if secondary_interactions:
+            # Using ArrayUnion to merge the arrays of interactions
+             batch.update(primary_lead_ref, {
+                "interactions": firestore.ArrayUnion(secondary_interactions)
+            })
 
         # Re-parent tasks from secondary to primary
         tasks_query = db.collection("tasks").where("leadId", "==", secondary_lead_id).stream()
         for task in tasks_query:
             batch.update(task.reference, {"leadId": primary_lead_id})
-
-        # Re-parent interactions from secondary to primary
-        interactions_query = db.collection("interactions").where("leadId", "==", secondary_lead_id).stream()
-        for interaction in interactions_query:
-            batch.update(interaction.reference, {"leadId": primary_lead_id})
             
         # Create a log entry on the primary lead about the merge
         merge_note = (
@@ -581,11 +594,14 @@ def mergeLeads(req: https_fn.CallableRequest) -> dict:
             f"Phone(s)='{[p.get('number') for p in secondary_lead_data.get('phones', [])]}'."
         )
         merge_interaction = {
-            "leadId": primary_lead_id,
+            "id": f"merge_{secondary_lead_id}",
             "createdAt": firestore.SERVER_TIMESTAMP,
             "notes": merge_note,
         }
-        batch.set(db.collection("interactions").document(), merge_interaction)
+        
+        batch.update(primary_lead_ref, {
+            "interactions": firestore.ArrayUnion([merge_interaction])
+        })
 
         # Delete the secondary lead
         batch.delete(secondary_lead_ref)
@@ -601,8 +617,83 @@ def mergeLeads(req: https_fn.CallableRequest) -> dict:
             message=f"An internal error occurred during merge: {e}",
         )
 
-    
 
+@https_fn.on_call(region="us-central1")
+def migrateInteractionsToLeads(req: https_fn.CallableRequest) -> dict:
+    """
+    A one-time migration script to move interactions from the separate `interactions`
+    collection into an array within each corresponding `lead` document.
+    """
+    print("Starting migration of interactions to leads...")
     
+    try:
+        # 1. Read all interactions
+        interactions_ref = db.collection('interactions')
+        interactions_snapshot = interactions_ref.stream()
+        
+        interactions_by_lead = {}
+        interactions_to_delete = []
+        
+        for interaction in interactions_snapshot:
+            interaction_data = interaction.to_dict()
+            lead_id = interaction_data.get('leadId')
+            if lead_id:
+                if lead_id not in interactions_by_lead:
+                    interactions_by_lead[lead_id] = []
+                
+                # Add interaction data, but remove leadId as it's redundant now
+                del interaction_data['leadId']
+                
+                # Ensure each interaction has a unique ID within the array
+                if 'id' not in interaction_data:
+                    interaction_data['id'] = interaction.id
+                
+                interactions_by_lead[lead_id].append(interaction_data)
+            
+            interactions_to_delete.append(interaction.reference)
+
+        print(f"Found {len(interactions_by_lead)} leads with interactions to migrate.")
+
+        # 2. Update leads with their interactions
+        leads_ref = db.collection('leads')
+        batch = db.batch()
+        updated_leads_count = 0
+        
+        for lead_id, interactions in interactions_by_lead.items():
+            lead_ref = leads_ref.document(lead_id)
+            # Use ArrayUnion to safely merge with any existing interactions
+            batch.update(lead_ref, {'interactions': firestore.ArrayUnion(interactions)})
+            updated_leads_count += 1
+
+        batch.commit()
+        print(f"Successfully updated {updated_leads_count} leads.")
+
+        # 3. Delete old interactions
+        delete_batch = db.batch()
+        deleted_count = 0
+        for i, ref in enumerate(interactions_to_delete):
+            delete_batch.delete(ref)
+            deleted_count += 1
+            if (i + 1) % 500 == 0:
+                delete_batch.commit()
+                delete_batch = db.batch()
+        
+        if len(interactions_to_delete) % 500 != 0:
+             delete_batch.commit()
+
+        print(f"Successfully deleted {deleted_count} old interaction documents.")
+
+        return {
+            "message": "Migration completed successfully.",
+            "updated_leads": updated_leads_count,
+            "deleted_interactions": deleted_count
+        }
+
+    except Exception as e:
+        print(f"Error during interaction migration: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during migration: {e}"
+        )
 
     

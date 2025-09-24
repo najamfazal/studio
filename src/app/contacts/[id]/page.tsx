@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
 import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings } from 'lucide-react';
@@ -37,7 +37,6 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-const INTERACTION_PAGE_SIZE = 5;
 const TASK_PAGE_SIZE = 5;
 
 // Helper to safely convert Firestore Timestamps or strings to Date objects
@@ -80,17 +79,13 @@ export default function ContactDetailPage() {
 
   // Interactions state
   const [interactions, setInteractions] = useState<Interaction[]>([]);
-  const [scheduledEvents, setScheduledEvents] = useState<Interaction[]>([]);
-  const [isInteractionsLoading, setIsInteractionsLoading] = useState(true);
-  const [lastInteraction, setLastInteraction] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [hasMoreInteractions, setHasMoreInteractions] = useState(true);
 
   // Tasks state
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   const [pastTasks, setPastTasks] = useState<Task[]>([]);
   const [isTasksLoading, setIsTasksLoading] = useState(false);
-  const [lastActiveTask, setLastActiveTask] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [lastPastTask, setLastPastTask] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [lastActiveTask, setLastActiveTask] = useState<any | null>(null);
+  const [lastPastTask, setLastPastTask] = useState<any | null>(null);
   const [hasMoreActiveTasks, setHasMoreActiveTasks] = useState(true);
   const [hasMorePastTasks, setHasMorePastTasks] = useState(true);
   const [tasksTabLoaded, setTasksTabLoaded] = useState(false);
@@ -129,6 +124,7 @@ export default function ContactDetailPage() {
         const leadData = { id: leadDoc.id, ...leadDoc.data() } as Lead;
         setLead(leadData);
         setCurrentSchedule(leadData.courseSchedule || { sessionGroups: [] });
+        setInteractions((leadData.interactions || []).sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
       } else {
         toast({ variant: 'destructive', title: 'Contact not found.' });
         router.push('/contacts');
@@ -148,53 +144,11 @@ export default function ContactDetailPage() {
     }
   }, [id, router, toast]);
 
-  const fetchEvents = useCallback(async () => {
-    if (!id) return;
-    const eventsQuery = query(
-      collection(db, "interactions"), 
-      where("leadId", "==", id), 
-      where("outcome", "==", "Event Scheduled"),
-      where("eventDetails.status", "==", "Scheduled")
-    );
-    const eventsSnapshot = await getDocs(eventsQuery);
-    const eventData = eventsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Interaction));
-    setScheduledEvents(eventData);
-  }, [id]);
-
-  const fetchInteractions = useCallback(async (loadMore = false) => {
-    if (!id) return;
-    setIsInteractionsLoading(true);
-    
-    let q;
-    const commonConstraints = [
-      where('leadId', '==', id),
-      orderBy('createdAt', 'desc'),
-    ];
-
-    const currentLastInteraction = lastInteraction;
-
-    if (loadMore && currentLastInteraction) {
-      q = query(collection(db, 'interactions'), ...commonConstraints, startAfter(currentLastInteraction), limit(10));
-    } else {
-      q = query(collection(db, 'interactions'), ...commonConstraints, limit(INTERACTION_PAGE_SIZE));
-    }
-    
-    try {
-      const snapshot = await getDocs(q);
-      const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
-
-      setHasMoreInteractions(newInteractions.length === (loadMore ? 10 : INTERACTION_PAGE_SIZE));
-      setLastInteraction(snapshot.docs[snapshot.docs.length - 1] || null);
-
-      setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
-    } catch (error) {
-      console.error("Error fetching interactions:", error);
-      toast({ variant: "destructive", title: "Failed to load interactions." });
-    } finally {
-      setIsInteractionsLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, toast]);
+  const scheduledEvents = useMemo(() => {
+    return (lead?.interactions || [])
+      .filter(i => i.outcome === 'Event Scheduled' && i.eventDetails?.status === 'Scheduled')
+      .sort((a,b) => toDate(a.eventDetails!.dateTime)!.getTime() - toDate(b.eventDetails!.dateTime)!.getTime());
+  }, [lead?.interactions]);
 
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
@@ -245,13 +199,6 @@ export default function ContactDetailPage() {
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
-
-  useEffect(() => {
-    if (id) {
-      fetchEvents();
-      fetchInteractions();
-    }
-  }, [id, fetchEvents, fetchInteractions]);
   
   useEffect(() => {
     if (tasksTabLoaded) {
@@ -390,8 +337,41 @@ export default function ContactDetailPage() {
     const newList = (lead[type] || []).filter(item => item !== value);
     handleUpdate(type, newList);
   };
+
+  const handleLogInteraction = async (interactionData: Partial<Interaction>) => {
+    if (!lead) return;
+
+    const leadRef = doc(db, 'leads', id);
+    const newInteraction: Interaction = {
+      id: `new-${Date.now()}`,
+      ...interactionData,
+      createdAt: new Date().toISOString(),
+    } as Interaction;
+    
+    // Optimistic UI Update
+    const optimisticLead = produce(lead, draft => {
+      if (!draft.interactions) draft.interactions = [];
+      draft.interactions.push(newInteraction);
+    });
+    setLead(optimisticLead);
+    setInteractions(optimisticLead.interactions.sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
+    
+    try {
+      await updateDoc(leadRef, {
+        interactions: arrayUnion(newInteraction)
+      });
+      toast({ title: 'Interaction Logged' });
+      // Re-fetch lead to get latest server state (including what cloud functions might do)
+      fetchInitialData(); 
+    } catch (error) {
+      console.error("Error logging interaction:", error);
+      toast({ variant: "destructive", title: "Failed to log interaction." });
+      setLead(lead); // Revert on failure
+      setInteractions(lead.interactions || []);
+    }
+  }
   
-  const handleLogInteraction = async () => {
+  const handleQuickLog = async () => {
     if (!selectedQuickLog || !lead) return;
     
     if (quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) {
@@ -403,105 +383,36 @@ export default function ContactDetailPage() {
     
     let interaction: Partial<Interaction> = {
         quickLogType: selectedQuickLog,
-        leadId: lead.id,
-        createdAt: new Date().toISOString(),
     };
 
     if (selectedQuickLog === 'Withdrawn') {
         interaction.withdrawalReasons = withdrawalReasons;
     }
 
-    const optimisticInteraction: Interaction = { id: `optimistic-${Date.now()}`, ...interaction } as Interaction;
-    setInteractions(prev => [optimisticInteraction, ...prev]);
-
-    try {
-        const docRef = await addDoc(collection(db, 'interactions'), interaction);
-        setInteractions(prev => prev.map(i => i.id === optimisticInteraction.id ? { ...i, id: docRef.id } : i));
-        setSubmissionState('submitted');
-        toast({title: "Interaction logged successfully."});
-        // After log, refresh related data
-        fetchEvents();
-        if (tasksTabLoaded) {
-            setTasksTabLoaded(false); // This will trigger re-fetch in useEffect
-            setTimeout(() => setTasksTabLoaded(true), 0);
-        }
-        // Also refresh lead data for status change
-        fetchInitialData();
-    } catch (error) {
-        setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
-        console.error("Error logging interaction:", error);
-        toast({variant: "destructive", title: "Failed to log interaction."});
+    await handleLogInteraction(interaction);
+    
+    setSubmissionState('submitted');
+    setTimeout(() => {
         setSubmissionState('idle');
-    } finally {
-        setTimeout(() => {
-            setSubmissionState('idle');
-            setSelectedQuickLog(null);
-            setQuickLogStep('initial');
-            setWithdrawalReasons([]);
-        }, 1000);
-    }
+        setSelectedQuickLog(null);
+        setQuickLogStep('initial');
+        setWithdrawalReasons([]);
+    }, 1000);
   }
 
-  const handlePerceptionChange = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
-    setFeedback(produce(draft => {
-        const currentPerception = draft[category]?.perception;
-        
-        if (currentPerception === perception) {
-            delete draft[category];
-            setActiveChipCategory(null);
-        } else {
-            draft[category] = { perception, objections: [] };
-            if (perception === 'negative') {
-                setActiveChipCategory(category);
-            } else {
-                if (activeChipCategory === category) {
-                    setActiveChipCategory(null);
-                }
-            }
-        }
-    }));
-  };
-
-  const handleObjectionToggle = (category: FeedbackCategory, objection: string) => {
-    setFeedback(produce(draft => {
-        const categoryFeedback = draft[category];
-        if (categoryFeedback) {
-            const objections = categoryFeedback.objections || [];
-            const index = objections.indexOf(objection);
-            if (index > -1) {
-                objections.splice(index, 1);
-            } else {
-                objections.push(objection);
-            }
-            categoryFeedback.objections = objections;
-        }
-    }));
-  };
-  
   const handleLogFeedback = async () => {
     if (Object.keys(feedback).length === 0 || !lead) {
         toast({ variant: 'destructive', title: "Nothing to log", description: "Please select a perception first." });
         return;
     }
     setIsLoggingFeedback(true);
+    
+    const interactionPayload = { feedback };
+    await handleLogInteraction(interactionPayload);
 
-    const interactionPayload = { feedback, leadId: lead.id, createdAt: new Date().toISOString() };
-    const optimisticInteraction: Interaction = { id: `optimistic-${Date.now()}`, ...interactionPayload } as Interaction;
-    setInteractions(prev => [optimisticInteraction, ...prev]);
-
-    try {
-      const docRef = await addDoc(collection(db, "interactions"), interactionPayload);
-      setInteractions(prev => prev.map(i => i.id === optimisticInteraction.id ? { ...i, id: docRef.id } : i));
-      setFeedback({});
-      setActiveChipCategory(null);
-      toast({ title: "Feedback logged" });
-      fetchInteractions(false);
-    } catch (e) {
-      setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
-      toast({variant: 'destructive', title: 'Failed to log feedback.'})
-    } finally {
-      setIsLoggingFeedback(false);
-    }
+    setFeedback({});
+    setActiveChipCategory(null);
+    setIsLoggingFeedback(false);
   }
 
   const handleLogOutcome = async () => {
@@ -509,8 +420,6 @@ export default function ContactDetailPage() {
     setIsLoggingOutcome(true);
 
     let interactionPayload: Partial<Interaction> = {
-      leadId: lead.id,
-      createdAt: new Date().toISOString(),
       outcome: selectedOutcome,
     };
 
@@ -525,49 +434,27 @@ export default function ContactDetailPage() {
       interactionPayload.eventDetails = { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString(), status: 'Scheduled' };
     }
 
-    const optimisticInteraction: Interaction = { id: `optimistic-${Date.now()}`, ...interactionPayload } as Interaction;
-    setInteractions(prev => [optimisticInteraction, ...prev]);
-    
-    const prevSelectedOutcome = selectedOutcome;
+    await handleLogInteraction(interactionPayload);
+
     setSelectedOutcome(null);
     setOutcomeNotes('');
     setFollowUpDate(undefined);
     setEventDetails({ type: '', dateTime: undefined });
-
-    try {
-      const docRef = await addDoc(collection(db, 'interactions'), interactionPayload);
-      setInteractions(prev => prev.map(i => i.id === optimisticInteraction.id ? { ...i, id: docRef.id } : i));
-      toast({ title: 'Outcome logged successfully.' });
-
-      if (prevSelectedOutcome === "Event Scheduled") { fetchEvents(); }
-      if (tasksTabLoaded) {
-        setTasksTabLoaded(false);
-        setTimeout(() => setTasksTabLoaded(true), 0);
-      }
-    } catch (error) {
-      setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
-      console.error("Error logging outcome:", error);
-      toast({ variant: 'destructive', title: 'Failed to log outcome.' });
-    } finally {
-      setIsLoggingOutcome(false);
-    }
+    setIsLoggingOutcome(false);
   };
   
   const handleEventManagement = async (action: 'Completed' | 'Cancelled' | 'Rescheduled') => {
     if (!eventToManage || !lead) return;
     setIsEventActionLoading(true);
 
-    const batch = writeBatch(db);
-
     try {
-        const originalEventRef = doc(db, 'interactions', eventToManage.id);
+        let newInteraction: Partial<Interaction>;
+        let interactionToUpdateId: string = eventToManage.id;
+
         if (action === 'Rescheduled') {
             if (!rescheduleDate) { toast({variant: 'destructive', title: 'Please select a new date.'}); setIsEventActionLoading(false); return; }
             
-            const rescheduleLogRef = doc(collection(db, 'interactions'));
-            batch.set(rescheduleLogRef, {
-                leadId: lead.id,
-                createdAt: new Date().toISOString(),
+            newInteraction = {
                 outcome: 'Event Scheduled',
                 eventDetails: {
                     type: eventToManage.eventDetails?.type,
@@ -576,30 +463,44 @@ export default function ContactDetailPage() {
                     rescheduledFrom: eventToManage.eventDetails?.dateTime,
                 },
                 notes: `Rescheduled from ${format(toDate(eventToManage.eventDetails!.dateTime)!, 'PPp')}`
+            };
+            await handleLogInteraction(newInteraction);
+            
+            // Mark original as cancelled
+            const updatedLead = produce(lead, draft => {
+                const interaction = draft.interactions?.find(i => i.id === interactionToUpdateId);
+                if (interaction && interaction.eventDetails) {
+                    interaction.eventDetails.status = 'Cancelled';
+                }
             });
-            batch.update(originalEventRef, { 'eventDetails.status': 'Cancelled' });
+            await updateDoc(doc(db, 'leads', id), { interactions: updatedLead.interactions });
+
             toast({title: 'Event Rescheduled'});
 
         } else { // Completed or Cancelled
-            batch.update(originalEventRef, { 'eventDetails.status': action });
-            const actionLogRef = doc(collection(db, 'interactions'));
-            batch.set(actionLogRef, {
-                leadId: lead.id,
-                createdAt: new Date().toISOString(),
-                notes: `Event ${eventToManage.eventDetails?.type} marked as ${action}.`
+            const updatedLead = produce(lead, draft => {
+                const interaction = draft.interactions?.find(i => i.id === interactionToUpdateId);
+                if (interaction && interaction.eventDetails) {
+                    interaction.eventDetails.status = action;
+                }
             });
+            await updateDoc(doc(db, 'leads', id), { interactions: updatedLead.interactions });
+            
+            newInteraction = {
+                notes: `Event ${eventToManage.eventDetails?.type} marked as ${action}.`
+            };
+            await handleLogInteraction(newInteraction);
+
             toast({title: `Event ${action}`});
         }
         
-        await batch.commit();
-
-        fetchEvents();
-        fetchInteractions(false);
+        fetchInitialData(); // Refresh all data
         setEventToManage(null);
         setRescheduleDate(undefined);
     } catch (error) {
         console.error(`Error handling event ${action}:`, error);
         toast({variant: 'destructive', title: `Failed to update event.`});
+        fetchInitialData(); // Revert on error
     } finally {
         setIsEventActionLoading(false);
     }
@@ -780,7 +681,7 @@ export default function ContactDetailPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-muted-foreground text-xs">Schedule</Label>
-                    <p className="text-sm min-h-[2.25rem] flex items-center">
+                    <p className="text-sm min-h-[20px] flex items-center">
                         {lead.commitmentSnapshot?.schedule || "Not set. Manage in Schedule tab."}
                     </p>
                   </div>
@@ -835,7 +736,7 @@ export default function ContactDetailPage() {
             {isLearner && (
               <TabsContent value="schedule" className="mt-4">
                 <Card>
-                  <CardHeader>
+                   <CardHeader>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <CardTitle className="text-lg lg:text-xl">Training Schedule</CardTitle>
                         <Button onClick={() => setIsScheduleModalOpen(true)} size="sm">
@@ -929,7 +830,7 @@ export default function ContactDetailPage() {
                         <>
                         <CardHeader className="flex-row items-center justify-between p-4">
                             <CardTitle className="text-lg font-normal">Quick Log</CardTitle>
-                            <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
+                            <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
                                 {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                             </Button>
                         </CardHeader>
@@ -958,7 +859,7 @@ export default function ContactDetailPage() {
                                     <CardTitle className="text-lg font-normal">Select Reason</CardTitle>
                                 </div>
                                 </div>
-                                <Button onClick={handleLogInteraction} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
+                                <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
                                     {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                                 </Button>
                             </div>
@@ -1132,12 +1033,7 @@ export default function ContactDetailPage() {
                   </CardHeader>
                   <CardContent className="space-y-4 p-4 pt-0">
                       <TooltipProvider>
-                      {(isInteractionsLoading && interactions.length === 0) && (
-                          <div className="flex justify-center p-4">
-                          <Loader2 className="animate-spin" />
-                          </div>
-                      )}
-                      {interactions.length > 0 && (
+                      {interactions.length > 0 ? (
                           <div className="space-y-3">
                           {interactions.map(interaction => {
                               const interactionDate = toDate(interaction.createdAt)!;
@@ -1172,16 +1068,8 @@ export default function ContactDetailPage() {
                               )
                           })}
                           </div>
-                      )}
-                      {!isInteractionsLoading && interactions.length === 0 && (
+                      ) : (
                           <p className="text-sm text-center text-muted-foreground p-4">No interactions have been logged yet.</p>
-                      )}
-                      {hasMoreInteractions && (
-                          <div className="flex justify-center">
-                          <Button variant="outline" onClick={() => fetchInteractions(true)} disabled={isInteractionsLoading}>
-                              {isInteractionsLoading ? <Loader2 className="animate-spin" /> : 'Load More'}
-                          </Button>
-                          </div>
                       )}
                       </TooltipProvider>
                   </CardContent>
@@ -1450,3 +1338,5 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
+
+    

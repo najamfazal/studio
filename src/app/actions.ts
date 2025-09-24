@@ -39,6 +39,7 @@ export async function migrateLeadsToContactsAction() {
           commitmentSnapshot: data.commitmentSnapshot || {},
           phones: phoneData,
           createdAt: data.createdAt || new Date().toISOString(),
+          interactions: data.interactions || [],
         });
         migratedCount++;
       }
@@ -110,3 +111,21 @@ export async function mergeLeadsAction(data: { primaryLeadId: string; secondaryL
         return { success: false, error: errorMessage };
     }
 }
+
+export async function migrateInteractionsAction() {
+    try {
+        const functions = getFunctions();
+        const migrateInteractions = httpsCallable(functions, 'migrateInteractionsToLeads');
+
+        const result = await migrateInteractions();
+        
+        return { success: true, ...(result.data as any) };
+    } catch (error) {
+        console.error('Error migrating interactions:', error);
+        const httpsError = error as any;
+        const errorMessage = httpsError.message || 'An unknown error occurred during migration.';
+        return { success: false, error: errorMessage };
+    }
+}
+
+    

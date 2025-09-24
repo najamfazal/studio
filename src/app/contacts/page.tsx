@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useTransition, useMemo } from "react";
@@ -15,7 +16,7 @@ import {
   DocumentData,
   where,
 } from "firebase/firestore";
-import { Plus, Users, Loader2, Filter, Upload, Search } from "lucide-react";
+import { Plus, Users, Loader2, Filter, Upload, Search, Zap } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
@@ -45,7 +46,7 @@ import {
 import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
-import { importContactsAction, mergeLeadsAction } from "@/app/actions";
+import { importContactsAction, mergeLeadsAction, migrateInteractionsAction } from "@/app/actions";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -57,7 +58,7 @@ const ALL_STATUSES: LeadStatus[] = [
   'Active', 'Paused', 'Snoozed', 'Cooling', 'Dormant', 'Enrolled', 'Withdrawn', 'Archived', 'Graduated'
 ];
 
-type ImportProgress = {
+type ProgressState = {
   active: boolean;
   value: number;
   total: number;
@@ -84,7 +85,7 @@ export default function ContactsPage() {
   const [statusFilters, setStatusFilters] = useState<LeadStatus[]>([]);
   const [isImporting, startImportTransition] = useTransition();
 
-  const [importProgress, setImportProgress] = useState<ImportProgress>({ active: false, value: 0, total: 0, message: '' });
+  const [progress, setProgress] = useState<ProgressState>({ active: false, value: 0, total: 0, message: '' });
 
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -92,6 +93,8 @@ export default function ContactsPage() {
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
   const [mergeSourceLead, setMergeSourceLead] = useState<Lead | null>(null);
   const [isMerging, setIsMerging] = useState(false);
+  
+  const [isMigrating, startMigrationTransition] = useTransition();
 
   const { toast } = useToast();
 
@@ -227,7 +230,7 @@ export default function ContactsPage() {
     setIsSaving(true);
     try {
       const { course, ...leadData } = values;
-      const dataToSave = {
+      const dataToSave: Partial<Lead> = {
         ...leadData,
         commitmentSnapshot: {
           ...(leadToEdit?.commitmentSnapshot || {}),
@@ -239,7 +242,7 @@ export default function ContactsPage() {
         // Update existing lead
         const leadRef = doc(db, "leads", leadToEdit.id);
         await updateDoc(leadRef, dataToSave);
-        const updatedLead = { ...leadToEdit, ...dataToSave };
+        const updatedLead = { ...leadToEdit, ...dataToSave } as Lead;
         setLeads((prev) =>
           prev.map((l) => (l.id === leadToEdit.id ? updatedLead : l))
         );
@@ -254,6 +257,7 @@ export default function ContactsPage() {
           createdAt: new Date().toISOString(),
           traits: [],
           insights: [],
+          interactions: [],
         });
         const newLead = { ...dataToSave, id: docRef.id, status: 'Active' }; // Assume Active for UI
         setLeads((prev) => [{ ...newLead } as Lead, ...prev]);
@@ -305,21 +309,21 @@ export default function ContactsPage() {
         return;
     }
 
-    setImportProgress({ active: true, value: 0, total: totalContacts, message: "Starting import..." });
+    setProgress({ active: true, value: 0, total: totalContacts, message: "Starting import..." });
     
     startImportTransition(async () => {
         const result = await importContactsAction({ jsonData: data.jsonData, isNew: data.isNew });
 
         if (result.success) {
             const { created = 0, updated = 0, skipped = 0 } = result;
-            setImportProgress({ active: true, value: created + updated + skipped, total: totalContacts, message: "Import complete!" });
+            setProgress({ active: true, value: created + updated + skipped, total: totalContacts, message: "Import complete!" });
             toast({
                 title: "Import Successful",
                 description: `${created} created, ${updated} updated, ${skipped} skipped.`,
             });
             fetchLeads(false, statusFilters);
         } else {
-            setImportProgress({ active: false, value: 0, total: 0, message: "" });
+            setProgress({ active: false, value: 0, total: 0, message: "" });
             toast({
                 variant: "destructive",
                 title: "Import Failed",
@@ -328,7 +332,7 @@ export default function ContactsPage() {
         }
         
         setTimeout(() => {
-            setImportProgress(prev => ({ ...prev, active: false }));
+            setProgress(prev => ({ ...prev, active: false }));
         }, 4000);
     });
   }
@@ -356,6 +360,30 @@ export default function ContactsPage() {
       setIsMerging(false);
     }
   };
+  
+  const handleMigration = () => {
+    setProgress({ active: true, value: 0, total: 100, message: "Starting data migration..." });
+    startMigrationTransition(async () => {
+      const result = await migrateInteractionsAction();
+      if (result.success) {
+        setProgress({ active: true, value: 100, total: 100, message: "Migration complete!" });
+        toast({
+            title: "Migration Successful",
+            description: result.message,
+        });
+      } else {
+         setProgress({ active: false, value: 0, total: 0, message: "" });
+         toast({
+            variant: "destructive",
+            title: "Migration Failed",
+            description: result.error || "An unknown error occurred during migration.",
+        });
+      }
+      setTimeout(() => {
+        setProgress(prev => ({...prev, active: false}));
+      }, 4000);
+    })
+  }
 
 
   if (isLoading && leads.length === 0) {
@@ -398,11 +426,15 @@ export default function ContactsPage() {
                         ))}
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)}>
+                <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)} disabled={isImporting || isMigrating}>
                     {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                     <span className="sr-only">Import Contacts</span>
                 </Button>
-                <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }}>
+                 <Button variant="outline" size="icon" className="w-10" onClick={handleMigration} disabled={isImporting || isMigrating}>
+                    {isMigrating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                    <span className="sr-only">Migrate Data</span>
+                </Button>
+                <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }} disabled={isImporting || isMigrating}>
                     <Plus className="h-4 w-4" />
                     <span className="sr-only">Add Contact</span>
                 </Button>
@@ -417,10 +449,10 @@ export default function ContactsPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
         </div>
-         {importProgress.active && (
+         {progress.active && (
           <div className="mt-4 space-y-1">
-             <Progress value={(importProgress.value / importProgress.total) * 100} className="w-full h-2" />
-             <p className="text-xs text-muted-foreground">{importProgress.message} ({importProgress.value} / {importProgress.total})</p>
+             <Progress value={(progress.value / progress.total) * 100} className="w-full h-2" />
+             <p className="text-xs text-muted-foreground">{progress.message} ({progress.value} / {progress.total})</p>
           </div>
         )}
       </header>
@@ -511,3 +543,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    

@@ -54,6 +54,40 @@ export type PaymentPlan = {
   installments: PaymentInstallment[];
 }
 
+export type InteractionFeedback = {
+    content?: { perception: 'positive' | 'negative', objections?: string[] };
+    schedule?: { perception: 'positive' | 'negative', objections?: string[] };
+    price?: { perception: 'positive' | 'negative', objections?: string[] };
+}
+
+export type InteractionEventDetails = { 
+  type: string;
+  dateTime: string; // ISO date string
+  status?: 'Scheduled' | 'Completed' | 'Cancelled';
+  rescheduledFrom?: string; // ISO string of original date
+};
+
+export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged' | 'Followup';
+
+export type OutcomeType = 'Info' | 'Later' | 'Event Scheduled';
+
+export type Interaction = {
+  id: string;
+  createdAt: string; // ISO date string
+  
+  // For quick logs
+  quickLogType?: QuickLogType;
+  withdrawalReasons?: string[];
+
+  // For detailed logs from the lead page
+  feedback?: InteractionFeedback;
+  outcome?: OutcomeType;
+  followUpDate?: string; // For 'Later' outcome
+  eventDetails?: InteractionEventDetails;
+  notes?: string;
+};
+
+
 export type Lead = {
   id: string;
   name: string;
@@ -73,6 +107,7 @@ export type Lead = {
   traits: string[];
   insights: string[];
   commitmentSnapshot: CommitmentSnapshot;
+  interactions?: Interaction[];
 
   // --- Fields for "Learner" ---
   enrolledDate?: string;
@@ -94,40 +129,6 @@ export type Task = {
   nature: TaskNature;
 };
 
-export type InteractionFeedback = {
-    content?: { perception: 'positive' | 'negative', objections?: string[] };
-    schedule?: { perception: 'positive' | 'negative', objections?: string[] };
-    price?: { perception: 'positive' | 'negative', objections?: string[] };
-}
-
-export type InteractionEventDetails = { 
-  type: string;
-  dateTime: string; // ISO date string
-  status?: 'Scheduled' | 'Completed' | 'Cancelled';
-  rescheduledFrom?: string; // ISO string of original date
-};
-
-export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged' | 'Followup';
-
-export type OutcomeType = 'Info' | 'Later' | 'Event Scheduled';
-
-export type Interaction = {
-  id: string;
-  leadId: string;
-  createdAt: string; // ISO date string
-  
-  // For quick logs
-  quickLogType?: QuickLogType;
-  withdrawalReasons?: string[];
-
-  // For detailed logs from the lead page
-  feedback?: InteractionFeedback;
-  outcome?: OutcomeType;
-  followUpDate?: string; // For 'Later' outcome
-  eventDetails?: InteractionEventDetails;
-  notes?: string;
-};
-
 export type AppSettings = {
   id?: string;
   relationshipTypes: string[];
@@ -142,3 +143,5 @@ export type AppSettings = {
     price: string[];
   }
 }
+
+    

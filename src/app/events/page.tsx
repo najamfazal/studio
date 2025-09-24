@@ -1,8 +1,9 @@
 
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { collection, query, where, getDocs, orderBy, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { isAfter, isBefore, isSameDay, parseISO, startOfDay, endOfDay, addDays } from 'date-fns';
 import { CalendarDays, Check, Edit, X, Loader2, CalendarClock } from 'lucide-react';
 import Link from 'next/link';
@@ -33,8 +34,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { produce } from 'immer';
 
-type EventInteraction = Interaction & { leadName?: string };
+type EventInteraction = Interaction & { leadId: string; leadName?: string };
 
 const toDate = (dateValue: any): Date | null => {
   if (!dateValue) return null;
@@ -54,33 +56,27 @@ export default function EventsPage() {
   const fetchEvents = useCallback(async () => {
     setIsLoading(true);
     try {
-      const eventsQuery = query(
-        collection(db, "interactions"),
-        where("outcome", "==", "Event Scheduled"),
-        orderBy("eventDetails.dateTime", "desc")
+      const leadsQuery = query(
+        collection(db, "leads"),
+        where("interactions", "!=", [])
       );
-      const eventsSnapshot = await getDocs(eventsQuery);
+      const leadsSnapshot = await getDocs(leadsQuery);
       
-      const leadIds = [...new Set(eventsSnapshot.docs.map(d => d.data().leadId))];
+      const allEvents: EventInteraction[] = [];
       const leadsData: Record<string, Lead> = {};
 
-      if (leadIds.length > 0) {
-        const leadsQuery = query(collection(db, "leads"), where("__name__", "in", leadIds));
-        const leadsSnapshot = await getDocs(leadsQuery);
-        leadsSnapshot.forEach(doc => {
-          leadsData[doc.id] = { id: doc.id, ...doc.data() } as Lead;
-        });
-      }
+      leadsSnapshot.forEach(doc => {
+        const lead = { id: doc.id, ...doc.data() } as Lead;
+        leadsData[doc.id] = lead;
+        const leadEvents = (lead.interactions || [])
+          .filter(i => i.outcome === "Event Scheduled" && i.eventDetails?.status === 'Scheduled')
+          .map(i => ({...i, leadId: lead.id, leadName: lead.name } as EventInteraction));
+        allEvents.push(...leadEvents);
+      });
       
-      const eventsData = eventsSnapshot.docs.map(doc => {
-        const interaction = { id: doc.id, ...doc.data() } as Interaction;
-        return {
-          ...interaction,
-          leadName: leadsData[interaction.leadId]?.name || 'Unknown Contact'
-        };
-      }).filter(event => event.eventDetails?.status !== 'Cancelled' && event.eventDetails?.status !== 'Completed');
+      allEvents.sort((a, b) => toDate(b.eventDetails!.dateTime)!.getTime() - toDate(a.eventDetails!.dateTime)!.getTime());
 
-      setEvents(eventsData);
+      setEvents(allEvents);
 
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -94,23 +90,37 @@ export default function EventsPage() {
     fetchEvents();
   }, [fetchEvents]);
 
-  const handleEventAction = async (eventId: string, leadId: string, action: 'complete' | 'cancel') => {
-    setIsActionLoading(eventId);
+  const handleEventAction = async (event: EventInteraction, action: 'complete' | 'cancel') => {
+    setIsActionLoading(event.id);
     try {
-      const eventRef = doc(db, "interactions", eventId);
-      await updateDoc(eventRef, { "eventDetails.status": action === 'complete' ? 'Completed' : 'Cancelled' });
-      
-      const logMessage = `Event marked as ${action === 'complete' ? 'Completed' : 'Cancelled'}.`;
-      await addDoc(collection(db, "interactions"), {
-          leadId,
-          createdAt: new Date().toISOString(),
-          notes: logMessage
+      const leadRef = doc(db, "leads", event.leadId);
+      const leadDoc = await getDoc(leadRef);
+      if (!leadDoc.exists()) throw new Error("Lead not found");
+
+      const leadData = leadDoc.data() as Lead;
+      const updatedInteractions = produce(leadData.interactions || [], draft => {
+        const interactionIndex = draft.findIndex(i => i.id === event.id);
+        if (interactionIndex !== -1 && draft[interactionIndex].eventDetails) {
+          draft[interactionIndex].eventDetails!.status = action === 'complete' ? 'Completed' : 'Cancelled';
+        }
       });
+      
+      const newLog: Interaction = {
+        id: `log-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        notes: `Event ${event.eventDetails?.type} marked as ${action === 'complete' ? 'Completed' : 'Cancelled'}.`
+      }
+      
+      await updateDoc(leadRef, { 
+        interactions: arrayUnion(newLog)
+      });
+      await updateDoc(leadRef, { interactions: updatedInteractions });
 
       toast({ title: `Event ${action === 'complete' ? 'Completed' : 'Cancelled'}` });
       await fetchEvents();
     } catch (error) {
       toast({ variant: 'destructive', title: `Failed to ${action} event.` });
+      console.error(error);
     } finally {
       setIsActionLoading(null);
     }
@@ -120,25 +130,36 @@ export default function EventsPage() {
     if (!rescheduleEvent || !newDateTime) return;
     setIsActionLoading(rescheduleEvent.id);
     try {
-      const originalDateTime = rescheduleEvent.eventDetails?.dateTime;
-      
-      // Update original event to be cancelled
-      const eventRef = doc(db, "interactions", rescheduleEvent.id);
-      await updateDoc(eventRef, { "eventDetails.status": 'Cancelled' });
+      const leadRef = doc(db, 'leads', rescheduleEvent.leadId);
+      const leadDoc = await getDoc(leadRef);
+      if (!leadDoc.exists()) throw new Error("Lead not found");
 
-      // Create a new event
-      await addDoc(collection(db, "interactions"), {
-        leadId: rescheduleEvent.leadId,
+      const leadData = leadDoc.data() as Lead;
+
+      // 1. Mark original event as cancelled
+      const interactionsWithCancelled = produce(leadData.interactions || [], draft => {
+        const interactionIndex = draft.findIndex(i => i.id === rescheduleEvent.id);
+        if (interactionIndex !== -1 && draft[interactionIndex].eventDetails) {
+          draft[interactionIndex].eventDetails!.status = 'Cancelled';
+        }
+      });
+      await updateDoc(leadRef, { interactions: interactionsWithCancelled });
+      
+      // 2. Add new event
+      const newEventLog: Interaction = {
+        id: `evt-${Date.now()}`,
         createdAt: new Date().toISOString(),
         outcome: "Event Scheduled",
         eventDetails: {
-          ...rescheduleEvent.eventDetails,
+          ...rescheduleEvent.eventDetails!,
           dateTime: newDateTime.toISOString(),
           status: 'Scheduled',
-          rescheduledFrom: originalDateTime,
+          rescheduledFrom: rescheduleEvent.eventDetails!.dateTime,
         },
-        notes: `Event rescheduled from ${format(toDate(originalDateTime)!, 'PPp')}`
-      });
+        notes: `Event rescheduled from ${format(toDate(rescheduleEvent.eventDetails!.dateTime)!, 'PPp')}`
+      }
+      await updateDoc(leadRef, { interactions: arrayUnion(newEventLog) });
+      
 
       toast({ title: "Event Rescheduled" });
       setRescheduleEvent(null);
@@ -146,6 +167,7 @@ export default function EventsPage() {
       await fetchEvents();
     } catch (error) {
       toast({ variant: 'destructive', title: 'Failed to reschedule event.' });
+      console.error(error);
     } finally {
       setIsActionLoading(null);
     }
@@ -175,8 +197,15 @@ export default function EventsPage() {
         later.push(event);
       }
     });
+    
+    const sortAsc = (a: EventInteraction, b: EventInteraction) => toDate(a.eventDetails!.dateTime)!.getTime() - toDate(b.eventDetails!.dateTime)!.getTime();
 
-    return { recent, today: todayEvents, tomorrow: tomorrowEvents, later };
+    return { 
+      recent: recent.sort(sortAsc), 
+      today: todayEvents.sort(sortAsc), 
+      tomorrow: tomorrowEvents.sort(sortAsc), 
+      later: later.sort(sortAsc) 
+    };
   }, [events]);
 
   if (isLoading) {
@@ -255,7 +284,7 @@ export default function EventsPage() {
   );
 }
 
-function EventCategory({ title, events, onAction, onReschedule, isLoading }: { title: string, events: EventInteraction[], onAction: (id: string, leadId: string, action: 'complete' | 'cancel') => void, onReschedule: (event: EventInteraction) => void, isLoading: string | null }) {
+function EventCategory({ title, events, onAction, onReschedule, isLoading }: { title: string, events: EventInteraction[], onAction: (event: EventInteraction, action: 'complete' | 'cancel') => void, onReschedule: (event: EventInteraction) => void, isLoading: string | null }) {
   return (
     <section>
       <h2 className="text-lg font-semibold mb-3">{title}</h2>
@@ -282,13 +311,13 @@ function EventCategory({ title, events, onAction, onReschedule, isLoading }: { t
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => onAction(event.id, event.leadId, 'complete')}>
+                    <DropdownMenuItem onClick={() => onAction(event, 'complete')}>
                       <Check className="mr-2 h-4 w-4"/> Mark Complete
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onReschedule(event)}>
                       <Edit className="mr-2 h-4 w-4"/> Reschedule
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onAction(event.id, event.leadId, 'cancel')} className="text-destructive">
+                    <DropdownMenuItem onClick={() => onAction(event, 'cancel')} className="text-destructive">
                       <X className="mr-2 h-4 w-4"/> Cancel
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -301,3 +330,5 @@ function EventCategory({ title, events, onAction, onReschedule, isLoading }: { t
     </section>
   )
 }
+
+    
