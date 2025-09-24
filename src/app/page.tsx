@@ -13,7 +13,7 @@ import {
   orderBy,
   addDoc,
 } from "firebase/firestore";
-import { AlertTriangle, Check, ListTodo, Menu, CalendarIcon, Plus } from "lucide-react";
+import { AlertTriangle, Check, ListTodo, Menu, CalendarIcon, Plus, User, ChevronsUpDown, CheckIcon } from "lucide-react";
 import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
 
 import {
@@ -23,12 +23,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Logo } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import type { Task } from "@/lib/types";
+import type { Task, Lead } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
@@ -62,6 +63,7 @@ const toDate = (dateValue: any): Date | null => {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTask, setActiveTask] = useState<string | null>(null);
@@ -70,23 +72,33 @@ export default function TasksPage() {
   const [isManualTaskOpen, setIsManualTaskOpen] = useState(false);
   const [manualTaskDescription, setManualTaskDescription] = useState("");
   const [manualTaskDueDate, setManualTaskDueDate] = useState<Date | undefined>(new Date());
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isSavingManualTask, setIsSavingManualTask] = useState(false);
+  const [isContactListOpen, setIsContactListOpen] = useState(false);
 
-  const fetchTasks = async () => {
+  const fetchInitialData = async () => {
       setIsLoading(true);
       try {
-        const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
-        const tasksData = querySnapshot.docs.map(
+        const tasksQuery = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+        const tasksSnapshot = await getDocs(tasksQuery);
+        const tasksData = tasksSnapshot.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as Task)
         );
         setTasks(tasksData);
+
+        const leadsQuery = query(collection(db, "leads"), orderBy("name"));
+        const leadsSnapshot = await getDocs(leadsQuery);
+        const leadsData = leadsSnapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as Lead)
+        );
+        setLeads(leadsData);
+
       } catch (error) {
-        console.error("Error fetching tasks:", error);
+        console.error("Error fetching data:", error);
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch tasks from the database.",
+          description: "Failed to fetch data from the database.",
         });
       } finally {
         setIsLoading(false);
@@ -95,7 +107,7 @@ export default function TasksPage() {
 
 
   useEffect(() => {
-    fetchTasks();
+    fetchInitialData();
   }, []);
 
   const handleMarkComplete = async (taskId: string, completed: boolean) => {
@@ -134,15 +146,18 @@ export default function TasksPage() {
         completed: false,
         createdAt: new Date(),
         nature: "Procedural",
-        leadId: null, // No linked lead
-        leadName: "Personal Task",
+        leadId: selectedLead?.id || null,
+        leadName: selectedLead?.name || "Personal Task",
       };
       const docRef = await addDoc(collection(db, "tasks"), newTask);
       setTasks(prev => [{...newTask, id: docRef.id} as Task, ...prev]);
       toast({ title: "Manual task added!" });
+      
+      // Reset form state
       setIsManualTaskOpen(false);
       setManualTaskDescription("");
       setManualTaskDueDate(new Date());
+      setSelectedLead(null);
     } catch (error) {
        console.error("Error adding manual task:", error);
        toast({ variant: "destructive", title: "Failed to add task." });
@@ -375,6 +390,51 @@ export default function TasksPage() {
                 onChange={(e) => setManualTaskDescription(e.target.value)}
                 className="min-h-[100px]"
              />
+              <Popover open={isContactListOpen} onOpenChange={setIsContactListOpen}>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={isContactListOpen}
+                        className="w-full justify-between font-normal"
+                    >
+                       <div className="flex items-center gap-2">
+                         <User className="h-4 w-4 text-muted-foreground"/>
+                         {selectedLead ? selectedLead.name : "Select contact (optional)"}
+                       </div>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command>
+                        <CommandInput placeholder="Search contact..." />
+                        <CommandEmpty>No contact found.</CommandEmpty>
+                        <CommandList>
+                            <CommandGroup>
+                                {leads.map((lead) => (
+                                    <CommandItem
+                                        key={lead.id}
+                                        value={lead.name}
+                                        onSelect={() => {
+                                            setSelectedLead(lead.id === selectedLead?.id ? null : lead);
+                                            setIsContactListOpen(false);
+                                        }}
+                                    >
+                                        <CheckIcon
+                                            className={cn(
+                                                "mr-2 h-4 w-4",
+                                                selectedLead?.id === lead.id ? "opacity-100" : "opacity-0"
+                                            )}
+                                        />
+                                        {lead.name}
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+
              <Popover>
                 <PopoverTrigger asChild>
                     <Button
@@ -406,3 +466,4 @@ export default function TasksPage() {
     </div>
   );
 }
+
