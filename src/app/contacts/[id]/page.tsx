@@ -87,11 +87,11 @@ export default function ContactDetailPage() {
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   const [pastTasks, setPastTasks] = useState<Task[]>([]);
   const [isTasksLoading, setIsTasksLoading] = useState(false);
-  const [tasksLoaded, setTasksLoaded] = useState(false);
   const [lastActiveTask, setLastActiveTask] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [lastPastTask, setLastPastTask] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreActiveTasks, setHasMoreActiveTasks] = useState(true);
   const [hasMorePastTasks, setHasMorePastTasks] = useState(true);
+  const [tasksTabLoaded, setTasksTabLoaded] = useState(false);
   
   const [newInsight, setNewInsight] = useState("");
   const [feedback, setFeedback] = useState<InteractionFeedback>({});
@@ -163,23 +163,23 @@ export default function ContactDetailPage() {
     if (!id) return;
     setIsInteractionsLoading(true);
     
+    let q;
+    const commonConstraints = [
+      where('leadId', '==', id),
+      orderBy('createdAt', 'desc'),
+    ];
+
+    if (loadMore && lastInteraction) {
+      q = query(collection(db, 'interactions'), ...commonConstraints, startAfter(lastInteraction), limit(10));
+    } else {
+      q = query(collection(db, 'interactions'), ...commonConstraints, limit(INTERACTION_PAGE_SIZE));
+    }
+    
     try {
-      let qConstraints: any[] = [
-        where('leadId', '==', id),
-        orderBy('createdAt', 'desc'),
-      ];
-
-      if (loadMore && lastInteraction) {
-          qConstraints.push(startAfter(lastInteraction));
-      } 
-      qConstraints.push(limit(loadMore ? 10 : INTERACTION_PAGE_SIZE));
-
-      const q = query(collection(db, 'interactions'), ...qConstraints);
       const snapshot = await getDocs(q);
       const newInteractions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
 
-      const pageSize = loadMore ? 10 : INTERACTION_PAGE_SIZE;
-      setHasMoreInteractions(newInteractions.length === pageSize);
+      setHasMoreInteractions(newInteractions.length === (loadMore ? 10 : INTERACTION_PAGE_SIZE));
       setLastInteraction(snapshot.docs[snapshot.docs.length - 1] || null);
 
       setInteractions(prev => loadMore ? [...prev, ...newInteractions] : newInteractions);
@@ -190,6 +190,7 @@ export default function ContactDetailPage() {
       setIsInteractionsLoading(false);
     }
   }, [id, toast, lastInteraction]);
+
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
     if (!id) return;
@@ -233,7 +234,7 @@ export default function ContactDetailPage() {
       setIsTasksLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, toast, tasksLoaded]);
+  }, [id, toast]);
 
 
   useEffect(() => {
@@ -246,19 +247,17 @@ export default function ContactDetailPage() {
       fetchInteractions();
     }
   }, [id, fetchEvents, fetchInteractions]);
-
+  
   useEffect(() => {
-    if (tasksLoaded) {
-        setActiveTasks([]);
-        setPastTasks([]);
-        setLastActiveTask(null);
-        setLastPastTask(null);
-        setHasMoreActiveTasks(true);
-        setHasMorePastTasks(true);
-        fetchTasks('active');
-        fetchTasks('past');
+    if (tasksTabLoaded) {
+      setHasMoreActiveTasks(true);
+      setHasMorePastTasks(true);
+      setLastActiveTask(null);
+      setLastPastTask(null);
+      fetchTasks('active');
+      fetchTasks('past');
     }
-  }, [tasksLoaded, fetchTasks]);
+  }, [tasksTabLoaded, fetchTasks]);
 
   const handleUpdate = async (field: keyof Lead | string, value: any) => {
     if (!lead) return;
@@ -341,8 +340,8 @@ export default function ContactDetailPage() {
   };
 
   const handleTabChange = (value: string) => {
-    if (value === 'tasks' && !tasksLoaded) {
-      setTasksLoaded(true);
+    if (value === 'tasks' && !tasksTabLoaded) {
+      setTasksTabLoaded(true);
     }
   };
   
@@ -417,9 +416,9 @@ export default function ContactDetailPage() {
         toast({title: "Interaction logged successfully."});
         // After log, refresh related data
         fetchEvents();
-        if (tasksLoaded) {
-            setTasksLoaded(false); // This will trigger re-fetch in useEffect
-            setTimeout(() => setTasksLoaded(true), 0);
+        if (tasksTabLoaded) {
+            setTasksTabLoaded(false); // This will trigger re-fetch in useEffect
+            setTimeout(() => setTasksTabLoaded(true), 0);
         }
         // Also refresh lead data for status change
         fetchInitialData();
@@ -536,9 +535,9 @@ export default function ContactDetailPage() {
       toast({ title: 'Outcome logged successfully.' });
 
       if (prevSelectedOutcome === "Event Scheduled") { fetchEvents(); }
-      if (tasksLoaded) {
-        setTasksLoaded(false);
-        setTimeout(() => setTasksLoaded(true), 0);
+      if (tasksTabLoaded) {
+        setTasksTabLoaded(false);
+        setTimeout(() => setTasksTabLoaded(true), 0);
       }
     } catch (error) {
       setInteractions(prev => prev.filter(i => i.id !== optimisticInteraction.id));
@@ -641,6 +640,16 @@ export default function ContactDetailPage() {
     if (value === '' || !lead) return; // Do not proceed if a toggle is deselected
     const newSchedule = produce(lead.courseSchedule || { sessionGroups: [] }, draft => {
         if (!draft.sessionGroups) draft.sessionGroups = [];
+        if (draft.sessionGroups.length === 0) { // If no groups, create one
+          draft.sessionGroups.push({
+            groupId: `group_${Date.now()}`,
+            trainer: '',
+            sections: [],
+            schedule: [],
+            mode: 'Online',
+            format: '1-1',
+          });
+        }
         draft.sessionGroups.forEach(g => { 
             if (type === 'mode') g.mode = value as 'Online' | 'In-person';
             if (type === 'format') g.format = value as '1-1' | 'Batch';
@@ -824,11 +833,11 @@ export default function ContactDetailPage() {
                                 <ToggleGroup 
                                     type="single" 
                                     variant="outline"
-                                    value={lead.courseSchedule?.sessionGroups?.[0]?.mode || 'Online'}
+                                    value={lead.courseSchedule?.sessionGroups?.[0]?.mode || ''}
                                     onValueChange={(value) => handleScheduleChange(value, 'mode')}
                                     >
-                                  <ToggleGroupItem value="Online">Online</ToggleGroupItem>
-                                  <ToggleGroupItem value="In-person">In-person</ToggleGroupItem>
+                                  <ToggleGroupItem value="Online" variant={lead.courseSchedule?.sessionGroups?.[0]?.mode === 'Online' ? 'default' : 'ghost'}>Online</ToggleGroupItem>
+                                  <ToggleGroupItem value="In-person" variant={lead.courseSchedule?.sessionGroups?.[0]?.mode === 'In-person' ? 'default' : 'ghost'}>In-person</ToggleGroupItem>
                                 </ToggleGroup>
                           </div>
                           <Separator orientation="vertical" className="h-6"/>
@@ -837,11 +846,11 @@ export default function ContactDetailPage() {
                                 <ToggleGroup 
                                     type="single" 
                                     variant="outline"
-                                    value={lead.courseSchedule?.sessionGroups?.[0]?.format || '1-1'}
+                                    value={lead.courseSchedule?.sessionGroups?.[0]?.format || ''}
                                     onValueChange={(value) => handleScheduleChange(value, 'format')}
                                     >
-                                  <ToggleGroupItem value="1-1">1-on-1</ToggleGroupItem>
-                                  <ToggleGroupItem value="Batch">Batch</ToggleGroupItem>
+                                  <ToggleGroupItem value="1-1" variant={lead.courseSchedule?.sessionGroups?.[0]?.format === '1-1' ? 'default' : 'ghost'}>1-on-1</ToggleGroupItem>
+                                  <ToggleGroupItem value="Batch" variant={lead.courseSchedule?.sessionGroups?.[0]?.format === 'Batch' ? 'default' : 'ghost'}>Batch</ToggleGroupItem>
                                 </ToggleGroup>
                           </div>
                       </div>
@@ -853,7 +862,9 @@ export default function ContactDetailPage() {
                               <div className="flex items-center justify-between">
                               <div className="grid gap-0.5">
                                   <CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground"/> {group.trainer}</CardTitle>
-                                  <CardDescription className="flex items-center gap-2"><Briefcase className="h-4 w-4 text-muted-foreground"/>{group.sections.join(', ')}</CardDescription>
+                                  {group.sections && group.sections.length > 0 && (
+                                    <CardDescription className="flex items-center gap-2"><Briefcase className="h-4 w-4 text-muted-foreground"/>{group.sections.join(', ')}</CardDescription>
+                                  )}
                               </div>
                               <div className="flex items-center gap-2">
                                   <Button variant="ghost" size="sm" onClick={() => { setEditingGroup(group); setIsScheduleModalOpen(true); }}>Edit</Button>
@@ -1311,8 +1322,8 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
 
   const handleSave = () => {
     const finalGroup = sessionGroup as SessionGroup;
-    if (!finalGroup.trainer || !finalGroup.sections?.length || !finalGroup.schedule?.length) {
-      toast({ variant: "destructive", title: "Please fill all fields." });
+    if (!finalGroup.trainer || !finalGroup.schedule?.length) {
+      toast({ variant: "destructive", title: "Trainer and schedule are required." });
       return;
     }
 
@@ -1377,7 +1388,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
             </Select>
           </div>
           <div>
-            <Label>Sections/Subjects</Label>
+            <Label>Sections/Subjects (Optional)</Label>
             <Input 
               placeholder="e.g. Power BI, Excel"
               value={sessionGroup.sections?.join(', ')}
@@ -1413,6 +1424,8 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
+
+    
 
     
 
