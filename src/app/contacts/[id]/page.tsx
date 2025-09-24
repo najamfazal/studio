@@ -200,16 +200,20 @@ export default function ContactDetailPage() {
     fetchInitialData();
   }, [fetchInitialData]);
   
-  useEffect(() => {
-    if (tasksTabLoaded) {
-      setHasMoreActiveTasks(true);
-      setHasMorePastTasks(true);
+  const refreshTasks = useCallback(() => {
       setLastActiveTask(null);
       setLastPastTask(null);
       fetchTasks('active');
       fetchTasks('past');
+  }, [fetchTasks]);
+
+  useEffect(() => {
+    if (tasksTabLoaded) {
+      setHasMoreActiveTasks(true);
+      setHasMorePastTasks(true);
+      refreshTasks();
     }
-  }, [tasksTabLoaded, fetchTasks]);
+  }, [tasksTabLoaded, refreshTasks]);
 
   const handleUpdate = async (field: keyof Lead | string, value: any) => {
     if (!lead) return;
@@ -347,11 +351,21 @@ export default function ContactDetailPage() {
       ...interactionData,
       createdAt: new Date().toISOString(),
     } as Interaction;
-    
+
+    const originalLead = lead; // Keep a copy for potential rollback
+
     // Optimistic UI Update
     const optimisticLead = produce(lead, draft => {
       if (!draft.interactions) draft.interactions = [];
       draft.interactions.push(newInteraction);
+      
+      // Also apply optimistic status changes based on log type
+      if (newInteraction.quickLogType === 'Enrolled') {
+          draft.status = 'Enrolled';
+          draft.relationship = 'Learner';
+      } else if (newInteraction.quickLogType === 'Withdrawn') {
+          draft.status = 'Withdrawn';
+      }
     });
     setLead(optimisticLead);
     setInteractions([...optimisticLead.interactions].sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
@@ -361,13 +375,16 @@ export default function ContactDetailPage() {
         interactions: arrayUnion(newInteraction)
       });
       toast({ title: 'Interaction Logged' });
-      // Re-fetch lead to get latest server state (including what cloud functions might do)
-      fetchInitialData(); 
+      
+      // Instead of full-refetch, just refresh tasks which might have been created/updated
+      refreshTasks();
+
     } catch (error) {
       console.error("Error logging interaction:", error);
       toast({ variant: "destructive", title: "Failed to log interaction." });
-      setLead(lead); // Revert on failure
-      setInteractions(lead.interactions || []);
+      // Rollback optimistic update on failure
+      setLead(originalLead); 
+      setInteractions(originalLead.interactions || []);
     }
   }
   
@@ -508,9 +525,11 @@ export default function ContactDetailPage() {
                 },
                 notes: `Rescheduled from ${format(toDate(eventToManage.eventDetails!.dateTime)!, 'PPp')}`
             };
+            
+            // Log the new event first
             await handleLogInteraction(newInteraction);
             
-            // Mark original as cancelled
+            // Then update the old event's status
             const updatedLead = produce(lead, draft => {
                 const interaction = draft.interactions?.find(i => i.id === interactionToUpdateId);
                 if (interaction && interaction.eventDetails) {
@@ -538,13 +557,20 @@ export default function ContactDetailPage() {
             toast({title: `Event ${action}`});
         }
         
-        fetchInitialData(); // Refresh all data
+        setLead(prev => prev ? produce(prev, draft => {
+          if (!draft.interactions) return;
+          // Mark old event
+          const oldEvent = draft.interactions.find(i => i.id === eventToManage.id);
+          if (oldEvent && oldEvent.eventDetails) {
+            oldEvent.eventDetails.status = action === 'Rescheduled' ? 'Cancelled' : action;
+          }
+        }) : null);
+
         setEventToManage(null);
         setRescheduleDate(undefined);
     } catch (error) {
         console.error(`Error handling event ${action}:`, error);
         toast({variant: 'destructive', title: `Failed to update event.`});
-        fetchInitialData(); // Revert on error
     } finally {
         setIsEventActionLoading(false);
     }
@@ -1382,3 +1408,5 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
+
+    
