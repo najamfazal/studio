@@ -5,7 +5,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays, Users } from 'lucide-react'
+import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays, Users, BarChart } from 'lucide-react'
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -23,6 +23,7 @@ const sidebarItems = [
     { href: '/', icon: ListChecks, label: 'Tasks' },
     { href: '/contacts', icon: Users, label: 'Contacts' },
     { href: '/events', icon: CalendarDays, label: 'Events' },
+    { href: '/reports', icon: BarChart, label: 'Reports' },
     { href: '/follow-list', icon: UserCheck, label: 'Follow List' },
     { href: '/recall-trainer', icon: Brain, label: 'Recall Trainer' },
     { href: '/settings', icon: Settings, label: 'Settings' },

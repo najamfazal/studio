@@ -145,3 +145,15 @@ export type AppSettings = {
     price: string[];
   }
 }
+
+export type CourseRevenueData = {
+    courseName: string;
+    enrolledRevenue: number;
+    opportunityRevenue: number;
+}
+
+export type CourseRevenueReport = {
+    id: string; // e.g., CR-2024-09
+    generatedAt: any; // Firestore Timestamp
+    courses: CourseRevenueData[];
+}

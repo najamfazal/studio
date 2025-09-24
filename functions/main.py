@@ -690,6 +690,70 @@ def mergeLeads(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"An internal error occurred during merge: {e}",
         )
-    
 
-```
+
+@https_fn.on_call(region="us-central1")
+def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
+    """
+    Analyzes leads to calculate enrolled and opportunity revenue per course
+    and saves the result to a monthly report document in Firestore.
+    """
+    print("Starting Course Revenue report generation...")
+    try:
+        leads_ref = db.collection("leads")
+        all_leads = leads_ref.stream()
+
+        course_data = {}
+
+        for lead in all_leads:
+            lead_data = lead.to_dict()
+            course_name = lead_data.get("commitmentSnapshot", {}).get("course")
+            status = lead_data.get("status")
+            price_str = lead_data.get("commitmentSnapshot", {}).get("price")
+
+            if not course_name or not status or not price_str:
+                continue
+
+            try:
+                price = float(price_str)
+            except (ValueError, TypeError):
+                continue
+            
+            # Initialize course entry if it doesn't exist
+            if course_name not in course_data:
+                course_data[course_name] = {
+                    "courseName": course_name,
+                    "enrolledRevenue": 0,
+                    "opportunityRevenue": 0
+                }
+            
+            if status == "Enrolled":
+                course_data[course_name]["enrolledRevenue"] += price
+            elif status == "Active":
+                course_data[course_name]["opportunityRevenue"] += price
+
+        # Convert dictionary to a list for Firestore
+        report_courses = list(course_data.values())
+
+        # Create the report object
+        report_id = f"CR-{datetime.now().strftime('%Y-%m')}"
+        report_data = {
+            "id": report_id,
+            "generatedAt": firestore.SERVER_TIMESTAMP,
+            "courses": report_courses
+        }
+
+        # Save the report to the 'reports' collection
+        db.collection("reports").document(report_id).set(report_data, merge=True)
+        
+        print(f"Successfully generated and saved report {report_id}.")
+        return {"message": f"Report {report_id} generated successfully."}
+
+    except Exception as e:
+        print(f"Error during course revenue report generation: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during report generation: {e}",
+        )
+
+    

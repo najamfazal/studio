@@ -111,4 +111,18 @@ export async function mergeLeadsAction(data: { primaryLeadId: string; secondaryL
         return { success: false, error: errorMessage };
     }
 }
+
+export async function generateCourseRevenueReportAction() {
+  try {
+    const functions = getFunctions();
+    const generateReport = httpsCallable(functions, 'generateCourseRevenueReport');
+    await generateReport();
+    return { success: true };
+  } catch (error) {
+    console.error('Error triggering course revenue report generation:', error);
+    const httpsError = error as any;
+    const errorMessage = httpsError.message || 'An unknown error occurred.';
+    return { success: false, error: errorMessage };
+  }
+}
     
