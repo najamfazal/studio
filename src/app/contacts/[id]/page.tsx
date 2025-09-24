@@ -354,7 +354,7 @@ export default function ContactDetailPage() {
       draft.interactions.push(newInteraction);
     });
     setLead(optimisticLead);
-    setInteractions(optimisticLead.interactions.sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
+    setInteractions([...optimisticLead.interactions].sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
     
     try {
       await updateDoc(leadRef, {
