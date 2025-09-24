@@ -192,7 +192,7 @@ export default function EventsPage() {
       <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <SidebarTrigger />
-          <CalendarDays className="h-8 w-8 text-primary" />
+          <CalendarDays className="h-8 w-8 text-primary hidden sm:block" />
           <h1 className="text-xl font-bold tracking-tight">Events</h1>
         </div>
       </header>

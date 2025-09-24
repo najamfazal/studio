@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CARD_COUNT = 5;
 
@@ -85,7 +86,8 @@ export default function RecallTrainerPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <Brain className="h-8 w-8 text-primary" />
+          <SidebarTrigger />
+          <Brain className="h-8 w-8 text-primary hidden sm:block" />
           <h1 className="text-xl font-bold tracking-tight">Recall Trainer</h1>
         </div>
         <Button onClick={fetchRandomLeads} variant="outline" size="sm">

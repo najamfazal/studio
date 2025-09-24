@@ -32,6 +32,7 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogHeader, 
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -170,8 +171,10 @@ export default function ContactDetailPage() {
       orderBy('createdAt', 'desc'),
     ];
 
-    if (loadMore && lastInteraction) {
-      q = query(collection(db, 'interactions'), ...commonConstraints, startAfter(lastInteraction), limit(10));
+    const currentLastInteraction = lastInteraction;
+
+    if (loadMore && currentLastInteraction) {
+      q = query(collection(db, 'interactions'), ...commonConstraints, startAfter(currentLastInteraction), limit(10));
     } else {
       q = query(collection(db, 'interactions'), ...commonConstraints, limit(INTERACTION_PAGE_SIZE));
     }
@@ -190,7 +193,8 @@ export default function ContactDetailPage() {
     } finally {
       setIsInteractionsLoading(false);
     }
-  }, [id, toast, lastInteraction]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, toast]);
 
 
   const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
@@ -638,7 +642,18 @@ export default function ContactDetailPage() {
   const upcomingEvent = scheduledEvents.length > 0 ? scheduledEvents[0] : null;
 
   const handleScheduleChange = (value: string, type: 'mode' | 'format') => {
-    if (!value || !lead) return; // Do not proceed if a toggle is deselected or lead is not loaded.
+    if (value === undefined || !lead) return;
+
+    if(value === '' && lead.courseSchedule?.sessionGroups?.[0]?.[type]){
+        // It's a deselect, do nothing if there is a value already
+        return;
+    }
+    
+    if(!value && !lead.courseSchedule?.sessionGroups?.[0]?.[type]){
+        // It's a deselect but there's no value, so do nothing.
+        return;
+    }
+
     const newSchedule = produce(lead.courseSchedule || { sessionGroups: [] }, draft => {
         if (!draft.sessionGroups) draft.sessionGroups = [];
         if (draft.sessionGroups.length === 0) { // If no groups, create one
@@ -698,7 +713,8 @@ export default function ContactDetailPage() {
       <header className="bg-card border-b p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" asChild>
+                <SidebarTrigger />
+                <Button variant="ghost" size="icon" asChild className="hidden sm:inline-flex">
                     <Link href="/contacts"><ArrowLeft/></Link>
                 </Button>
                 <div>
@@ -1434,10 +1450,3 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
-
-    
-
-    
-
-    
-
