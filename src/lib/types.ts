@@ -157,3 +157,20 @@ export type CourseRevenueReport = {
     generatedAt: any; // Firestore Timestamp
     courses: CourseRevenueData[];
 }
+
+// ---- Log Analysis Types ----
+export type AnalyzedLead = {
+  leadId: string;
+  leadName: string;
+  course: string;
+  price: number;
+  aiActions: string; // The 2-3 line recommendation
+};
+
+export type LogAnalysisReport = {
+  id: 'high-potential-leads' | 'low-potential-leads';
+  generatedAt: any; // Firestore Timestamp
+  leads: AnalyzedLead[];
+};
+
+    

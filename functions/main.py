@@ -6,10 +6,13 @@ import json
 import io
 import csv
 import re
+import genkit
+import genkit.firebase
 
-# Initialize Firebase Admin SDK
+# Initialize Firebase Admin SDK & Genkit
 initialize_app()
 db = firestore.client()
+genkit.firebase.init(firestore_client=db)
 
 # --- AFC (Automated Follow-up Cycle) Configuration ---
 AFC_SCHEDULE = {
@@ -751,6 +754,84 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
 
     except Exception as e:
         print(f"Error during course revenue report generation: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during report generation: {e}",
+        )
+
+@https_fn.on_call(region="us-central1")
+def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
+    """
+    Analyzes active leads using an AI flow and categorizes them into
+    high and low potential buckets.
+    """
+    print("Starting Log Analysis report generation...")
+    try:
+        # 1. Fetch active leads in early AFC stages
+        leads_ref = db.collection("leads")
+        query = leads_ref.where("status", "==", "Active").where("afc_step", "in", [1, 2, 3])
+        active_leads = query.stream()
+
+        analyze_lead_flow = genkit.get_flow("logAnalysisFlow")
+
+        high_potential_leads = []
+        low_potential_leads = []
+
+        # 2. Analyze each lead with the Genkit flow
+        for lead in active_leads:
+            lead_data = lead.to_dict()
+            lead_id = lead.id
+
+            # Prepare input for the AI flow
+            flow_input = {
+                "insights": lead_data.get("insights", []),
+                "traits": lead_data.get("traits", []),
+                "notes": lead_data.get("commitmentSnapshot", {}).get("keyNotes", ""),
+                "interactions": lead_data.get("interactions", [])
+            }
+
+            # Run the flow
+            flow_result = analyze_lead_flow.run(flow_input)
+
+            # Prepare the result object
+            analyzed_lead = {
+                "leadId": lead_id,
+                "leadName": lead_data.get("name"),
+                "course": lead_data.get("commitmentSnapshot", {}).get("course"),
+                "price": float(lead_data.get("commitmentSnapshot", {}).get("price", 0)),
+                "aiActions": flow_result.get("actions")
+            }
+
+            # 3. Categorize the lead
+            if flow_result.get("potential") == "High":
+                high_potential_leads.append(analyzed_lead)
+            else:
+                low_potential_leads.append(analyzed_lead)
+        
+        # 4. Save the reports to Firestore, limiting to 50 each
+        batch = db.batch()
+        
+        high_potential_doc_ref = db.collection("reports").document("high-potential-leads")
+        batch.set(high_potential_doc_ref, {
+            "id": "high-potential-leads",
+            "generatedAt": firestore.SERVER_TIMESTAMP,
+            "leads": high_potential_leads[:50]
+        }, merge=True)
+
+        low_potential_doc_ref = db.collection("reports").document("low-potential-leads")
+        batch.set(low_potential_doc_ref, {
+            "id": "low-potential-leads",
+            "generatedAt": firestore.SERVER_TIMESTAMP,
+            "leads": low_potential_leads[:50]
+        }, merge=True)
+
+        batch.commit()
+        
+        print("Successfully generated and saved Log Analysis reports.")
+        return {"message": "Log Analysis report generated successfully."}
+
+    except Exception as e:
+        print(f"Error during log analysis report generation: {e}")
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"An internal error occurred during report generation: {e}",
