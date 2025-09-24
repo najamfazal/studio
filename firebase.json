@@ -11,9 +11,6 @@
         "firebase-debug.log",
         "firebase-debug.*.log",
         "__pycache__"
-      ],
-      "predeploy": [
-        "pip3 install -r requirements.txt"
       ]
     }
   ]
