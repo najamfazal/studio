@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useTransition, useMemo } from "react";
@@ -16,7 +15,7 @@ import {
   DocumentData,
   where,
 } from "firebase/firestore";
-import { Plus, Users, Loader2, Filter, Upload, Search, Zap } from "lucide-react";
+import { Plus, Users, Loader2, Filter, Upload, Search } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
@@ -46,7 +45,7 @@ import {
 import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
-import { importContactsAction, mergeLeadsAction, migrateInteractionsAction } from "@/app/actions";
+import { importContactsAction, mergeLeadsAction } from "@/app/actions";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -94,7 +93,6 @@ export default function ContactsPage() {
   const [mergeSourceLead, setMergeSourceLead] = useState<Lead | null>(null);
   const [isMerging, setIsMerging] = useState(false);
   
-  const [isMigrating, startMigrationTransition] = useTransition();
 
   const { toast } = useToast();
 
@@ -360,30 +358,6 @@ export default function ContactsPage() {
       setIsMerging(false);
     }
   };
-  
-  const handleMigration = () => {
-    setProgress({ active: true, value: 0, total: 100, message: "Starting data migration..." });
-    startMigrationTransition(async () => {
-      const result = await migrateInteractionsAction();
-      if (result.success) {
-        setProgress({ active: true, value: 100, total: 100, message: "Migration complete!" });
-        toast({
-            title: "Migration Successful",
-            description: result.message,
-        });
-      } else {
-         setProgress({ active: false, value: 0, total: 0, message: "" });
-         toast({
-            variant: "destructive",
-            title: "Migration Failed",
-            description: result.error || "An unknown error occurred during migration.",
-        });
-      }
-      setTimeout(() => {
-        setProgress(prev => ({...prev, active: false}));
-      }, 4000);
-    })
-  }
 
 
   if (isLoading && leads.length === 0) {
@@ -426,15 +400,11 @@ export default function ContactsPage() {
                         ))}
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)} disabled={isImporting || isMigrating}>
+                <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)} disabled={isImporting}>
                     {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                     <span className="sr-only">Import Contacts</span>
                 </Button>
-                 <Button variant="outline" size="icon" className="w-10" onClick={handleMigration} disabled={isImporting || isMigrating}>
-                    {isMigrating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                    <span className="sr-only">Migrate Data</span>
-                </Button>
-                <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }} disabled={isImporting || isMigrating}>
+                <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }} disabled={isImporting}>
                     <Plus className="h-4 w-4" />
                     <span className="sr-only">Add Contact</span>
                 </Button>
@@ -543,5 +513,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-    
