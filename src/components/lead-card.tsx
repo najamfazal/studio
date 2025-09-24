@@ -4,7 +4,6 @@
 import { useState } from "react";
 import Link from 'next/link';
 import {
-  BrainCircuit,
   FilePenLine,
   Loader2,
   Mail,
@@ -30,29 +29,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Lead } from "@/lib/types";
-import { enrichLeadAction } from "@/app/actions";
 
 interface LeadCardProps {
   lead: Lead;
   onEdit: (lead: Lead) => void;
   onDelete: (id: string) => void;
-  onEnrich: (lead: Lead) => Promise<void>;
 }
 
 export function LeadCard({
   lead,
   onEdit,
   onDelete,
-  onEnrich,
 }: LeadCardProps) {
-  const [isEnriching, setIsEnriching] = useState(false);
-
-  const handleEnrich = async () => {
-    setIsEnriching(true);
-    await onEnrich(lead);
-    setIsEnriching(false);
-  };
-
   return (
     <Card className="flex flex-col">
        <CardHeader className="flex flex-row items-start justify-between">
@@ -104,16 +92,6 @@ export function LeadCard({
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-4">
-        <Button onClick={handleEnrich} disabled={isEnriching} variant="outline">
-          {isEnriching ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <BrainCircuit className="mr-2 h-4 w-4 text-accent" />
-          )}
-          {isEnriching ? "Enriching..." : "Enrich with AI"}
-        </Button>
-      </CardFooter>
     </Card>
   );
 }
