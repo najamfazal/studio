@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -637,7 +638,7 @@ export default function ContactDetailPage() {
   const upcomingEvent = scheduledEvents.length > 0 ? scheduledEvents[0] : null;
 
   const handleScheduleChange = (value: string, type: 'mode' | 'format') => {
-    if (value === '' || !lead) return; // Do not proceed if a toggle is deselected
+    if (!value || !lead) return; // Do not proceed if a toggle is deselected or lead is not loaded.
     const newSchedule = produce(lead.courseSchedule || { sessionGroups: [] }, draft => {
         if (!draft.sessionGroups) draft.sessionGroups = [];
         if (draft.sessionGroups.length === 0) { // If no groups, create one
@@ -819,41 +820,42 @@ export default function ContactDetailPage() {
               <TabsContent value="schedule" className="mt-4">
                 <Card>
                   <CardHeader>
-                      <div className="flex items-center justify-between">
-                      <div>
-                          <CardTitle>Training Schedule</CardTitle>
-                          <CardDescription>Manage this learner&apos;s weekly sessions.</CardDescription>
-                      </div>
-                      <Button onClick={() => setIsScheduleModalOpen(true)}>
-                          <Plus className="mr-2 h-4 w-4"/> Add Session Group
-                      </Button>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <CardTitle className="text-lg lg:text-xl">Training Schedule</CardTitle>
+                        <Button onClick={() => setIsScheduleModalOpen(true)} size="sm">
+                            <Plus className="mr-2 h-4 w-4"/> 
+                            <span className="sm:hidden md:inline">Add Session Group</span>
+                            <span className="hidden sm:inline md:hidden">Add Group</span>
+                        </Button>
                       </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                      <div className="flex items-center space-x-4 rounded-md border p-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-md border p-4">
                           <div className="flex items-center space-x-2">
-                              <Label>Mode:</Label>
+                              <Label className="flex-shrink-0">Mode:</Label>
                                 <ToggleGroup 
                                     type="single" 
                                     variant="outline"
+                                    size="sm"
                                     value={lead.courseSchedule?.sessionGroups?.[0]?.mode || ''}
                                     onValueChange={(value) => handleScheduleChange(value, 'mode')}
                                     >
-                                  <ToggleGroupItem value="Online" variant={lead.courseSchedule?.sessionGroups?.[0]?.mode === 'Online' ? 'default' : 'ghost'}>Online</ToggleGroupItem>
-                                  <ToggleGroupItem value="In-person" variant={lead.courseSchedule?.sessionGroups?.[0]?.mode === 'In-person' ? 'default' : 'ghost'}>In-person</ToggleGroupItem>
+                                  <ToggleGroupItem value="Online">Online</ToggleGroupItem>
+                                  <ToggleGroupItem value="In-person">In-person</ToggleGroupItem>
                                 </ToggleGroup>
                           </div>
-                          <Separator orientation="vertical" className="h-6"/>
+                          <Separator orientation="vertical" className="h-6 hidden sm:block"/>
                           <div className="flex items-center space-x-2">
-                              <Label>Format:</Label>
+                              <Label className="flex-shrink-0">Format:</Label>
                                 <ToggleGroup 
                                     type="single" 
                                     variant="outline"
+                                    size="sm"
                                     value={lead.courseSchedule?.sessionGroups?.[0]?.format || ''}
                                     onValueChange={(value) => handleScheduleChange(value, 'format')}
                                     >
-                                  <ToggleGroupItem value="1-1" variant={lead.courseSchedule?.sessionGroups?.[0]?.format === '1-1' ? 'default' : 'ghost'}>1-on-1</ToggleGroupItem>
-                                  <ToggleGroupItem value="Batch" variant={lead.courseSchedule?.sessionGroups?.[0]?.format === 'Batch' ? 'default' : 'ghost'}>Batch</ToggleGroupItem>
+                                  <ToggleGroupItem value="1-1">1-on-1</ToggleGroupItem>
+                                  <ToggleGroupItem value="Batch">Batch</ToggleGroupItem>
                                 </ToggleGroup>
                           </div>
                       </div>
@@ -1329,6 +1331,11 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
       toast({ variant: "destructive", title: "Trainer and at least one schedule entry are required." });
       return;
     }
+    
+    // Ensure sections is an array, even if empty
+    if (!finalGroup.sections) {
+      finalGroup.sections = [];
+    }
 
     const newSchedule = produce(learnerSchedule || { sessionGroups: [] }, draft => {
         if (!draft.sessionGroups) draft.sessionGroups = [];
@@ -1433,3 +1440,4 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     
 
     
+
