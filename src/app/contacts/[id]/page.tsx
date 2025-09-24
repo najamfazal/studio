@@ -198,7 +198,7 @@ export default function ContactDetailPage() {
     
     try {
       const isCompleted = type === 'past';
-      let qConstraints: any[] = [
+      const qConstraints: any[] = [
         where('leadId', '==', id),
         where('completed', '==', isCompleted),
         orderBy('createdAt', 'desc'),
@@ -761,8 +761,11 @@ export default function ContactDetailPage() {
                       <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
                       </div>
                   </div>
-                  <div>
-                      <EditableField label="Schedule" value={lead.commitmentSnapshot?.schedule || ""} onSave={(val) => handleUpdate('commitmentSnapshot.schedule', val)} placeholder="Enter schedule"/>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Schedule</Label>
+                    <p className="text-sm min-h-[2.25rem] flex items-center">
+                        {lead.commitmentSnapshot?.schedule || "Not set. Manage in Schedule tab."}
+                    </p>
                   </div>
                   <div>
                       <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
@@ -1323,7 +1326,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
   const handleSave = () => {
     const finalGroup = sessionGroup as SessionGroup;
     if (!finalGroup.trainer || !finalGroup.schedule?.length) {
-      toast({ variant: "destructive", title: "Trainer and schedule are required." });
+      toast({ variant: "destructive", title: "Trainer and at least one schedule entry are required." });
       return;
     }
 
