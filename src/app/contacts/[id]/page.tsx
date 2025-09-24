@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion, startAfter, limit } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
 import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings } from 'lucide-react';
@@ -399,6 +399,50 @@ export default function ContactDetailPage() {
         setWithdrawalReasons([]);
     }, 1000);
   }
+
+  const handlePerceptionChange = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
+    setFeedback(prev => produce(prev, draft => {
+        if (!draft[category]) {
+            draft[category] = { perception };
+        } else {
+            // If clicking the same perception again, clear it. Otherwise, set new one.
+            draft[category]!.perception = draft[category]!.perception === perception ? undefined : perception;
+        }
+
+        // If perception is removed, clear the category
+        if(draft[category]!.perception === undefined) {
+             delete draft[category];
+             setActiveChipCategory(null);
+             return;
+        }
+        
+        // if perception is positive, clear objections
+        if (perception === 'positive') {
+            draft[category]!.objections = [];
+        }
+
+        // if switching from positive to negative, don't clear objections
+        if(perception === 'negative') {
+            setActiveChipCategory(category);
+        } else {
+            setActiveChipCategory(null);
+        }
+    }));
+  };
+
+  const handleObjectionToggle = (category: FeedbackCategory, objection: string) => {
+    setFeedback(prev => produce(prev, draft => {
+        if (!draft[category] || draft[category]!.perception !== 'negative') return;
+        if (!draft[category]!.objections) draft[category]!.objections = [];
+        
+        const existingIndex = draft[category]!.objections!.indexOf(objection);
+        if (existingIndex > -1) {
+            draft[category]!.objections!.splice(existingIndex, 1);
+        } else {
+            draft[category]!.objections!.push(objection);
+        }
+    }));
+  };
 
   const handleLogFeedback = async () => {
     if (Object.keys(feedback).length === 0 || !lead) {
@@ -1338,5 +1382,3 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
-
-    
