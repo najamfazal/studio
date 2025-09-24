@@ -4,7 +4,3 @@ firebase-functions
 firebase-admin>=6.0.0
 google-generativeai
 google-cloud-secret-manager
-
-# Genkit Core and Firebase Plugin for Python
-google-ai-genkit
-firebase-genkit

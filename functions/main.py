@@ -6,8 +6,7 @@ import json
 import io
 import csv
 import re
-import genkit
-import genkit.firebase
+import google.generativeai as genai
 import os
 from google.cloud import secretmanager
 
@@ -16,7 +15,7 @@ from google.cloud import secretmanager
 # For deployment, the project ID is automatically available.
 project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
 
-# Initialize Firebase Admin SDK & Genkit
+# Initialize Firebase Admin SDK
 initialize_app()
 db = firestore.client()
 
@@ -41,9 +40,10 @@ def access_secret_version(secret_id, version_id="latest"):
         # Fallback for cases where the secret might not be set up yet.
         return os.environ.get("GEMINI_API_KEY")
 
-# Fetch the API key and initialize Genkit with it
+# Fetch the API key and initialize GenAI
 GEMINI_API_KEY = access_secret_version("GEMINI_API_KEY")
-genkit.firebase.init(firestore_client=db, api_key=GEMINI_API_KEY)
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 
 # --- AFC (Automated Follow-up Cycle) Configuration ---
@@ -799,12 +799,14 @@ def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
     """
     print("Starting Log Analysis report generation...")
     try:
+        if not GEMINI_API_KEY:
+            raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                                      message="Gemini API key is not configured.")
+                                      
         # 1. Fetch active leads in early AFC stages
         leads_ref = db.collection("leads")
         query = leads_ref.where("status", "==", "Active").where("afc_step", "in", [1, 2, 3])
         active_leads = query.stream()
-
-        analyze_lead_flow = genkit.get_flow("logAnalysisFlow")
 
         high_potential_leads = []
         low_potential_leads = []
@@ -812,25 +814,52 @@ def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
         # 2. Fetch the custom prompt from settings
         settings_doc = db.collection("settings").document("appConfig").get()
         settings_data = settings_doc.to_dict() if settings_doc.exists else {}
-        custom_prompt = settings_data.get("logAnalysisPrompt")
+        custom_prompt_template = settings_data.get("logAnalysisPrompt")
+        
+        # Define the default prompt
+        default_prompt_template = """You are an expert sales assistant tasked with analyzing a lead to determine their potential.
+Your goal is to classify the lead as either 'High' or 'Low' potential and provide concrete, actionable next steps for the salesperson.
+Analyze the following lead data:
+- Traits: {traits}
+- Insights: {insights}
+- Key Notes: {notes}
+- Interaction History: {interactions}
 
+A HIGH potential lead is someone who shows clear buying signals: they are responsive, have few major objections (especially regarding price), and seem genuinely interested in the course content.
+A LOW potential lead is someone who is unresponsive, raises significant objections that haven't been resolved, or seems indecisive or uninterested.
 
-        # 3. Analyze each lead with the Genkit flow
+Based on your analysis, provide a JSON response with two keys: "potential" (string, either "High" or "Low") and "actions" (a concise 2-3 line string of recommended next actions).
+"""
+        
+        prompt_to_use = custom_prompt_template or default_prompt_template
+        
+        # Initialize the generative model
+        model = genai.GenerativeModel(
+            'gemini-1.5-flash-latest',
+            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        )
+
+        # 3. Analyze each lead with the GenAI model
         for lead in active_leads:
             lead_data = lead.to_dict()
             lead_id = lead.id
 
-            # Prepare input for the AI flow
-            flow_input = {
-                "insights": lead_data.get("insights", []),
-                "traits": lead_data.get("traits", []),
-                "notes": lead_data.get("commitmentSnapshot", {}).get("keyNotes", ""),
-                "interactions": lead_data.get("interactions", []),
-                "customPrompt": custom_prompt
-            }
+            # Prepare prompt by formatting the lead data
+            prompt = prompt_to_use.format(
+                traits=lead_data.get("traits", []),
+                insights=lead_data.get("insights", []),
+                notes=lead_data.get("commitmentSnapshot", {}).get("keyNotes", ""),
+                interactions=json.dumps(lead_data.get("interactions", []), default=str)
+            )
 
-            # Run the flow
-            flow_result = analyze_lead_flow.run(flow_input)
+            # Run the generation
+            response = model.generate_content(prompt)
+            
+            try:
+                result_json = json.loads(response.text)
+            except (json.JSONDecodeError, AttributeError):
+                print(f"Skipping lead {lead_id} due to invalid AI response: {response.text}")
+                continue
 
             # Prepare the result object
             analyzed_lead = {
@@ -838,11 +867,11 @@ def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
                 "leadName": lead_data.get("name"),
                 "course": lead_data.get("commitmentSnapshot", {}).get("course"),
                 "price": float(lead_data.get("commitmentSnapshot", {}).get("price", 0)),
-                "aiActions": flow_result.get("actions")
+                "aiActions": result_json.get("actions", "No actions suggested.")
             }
 
             # 4. Categorize the lead
-            if flow_result.get("potential") == "High":
+            if result_json.get("potential") == "High":
                 high_potential_leads.append(analyzed_lead)
             else:
                 low_potential_leads.append(analyzed_lead)
@@ -875,5 +904,5 @@ def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"An internal error occurred during report generation: {e}",
         )
-
     
+
