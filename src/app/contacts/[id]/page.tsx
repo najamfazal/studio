@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, addDoc, writeBatch } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, ToggleLeft, ToggleRight, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -232,7 +232,8 @@ export default function ContactDetailPage() {
     } finally {
       setIsTasksLoading(false);
     }
-  }, [id, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, toast, tasksLoaded]);
 
 
   useEffect(() => {
@@ -636,8 +637,8 @@ export default function ContactDetailPage() {
 
   const upcomingEvent = scheduledEvents.length > 0 ? scheduledEvents[0] : null;
 
-  const handleScheduleChange = (value: any, type: 'mode' | 'format') => {
-    if (!value || !lead) return;
+  const handleScheduleChange = (value: string, type: 'mode' | 'format') => {
+    if (value === '' || !lead) return; // Do not proceed if a toggle is deselected
     const newSchedule = produce(lead.courseSchedule || { sessionGroups: [] }, draft => {
         if (!draft.sessionGroups) draft.sessionGroups = [];
         draft.sessionGroups.forEach(g => { 
@@ -822,6 +823,7 @@ export default function ContactDetailPage() {
                               <Label>Mode:</Label>
                                 <ToggleGroup 
                                     type="single" 
+                                    variant="outline"
                                     value={lead.courseSchedule?.sessionGroups?.[0]?.mode || 'Online'}
                                     onValueChange={(value) => handleScheduleChange(value, 'mode')}
                                     >
@@ -834,6 +836,7 @@ export default function ContactDetailPage() {
                               <Label>Format:</Label>
                                 <ToggleGroup 
                                     type="single" 
+                                    variant="outline"
                                     value={lead.courseSchedule?.sessionGroups?.[0]?.format || '1-1'}
                                     onValueChange={(value) => handleScheduleChange(value, 'format')}
                                     >
@@ -1410,5 +1413,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     </Dialog>
   );
 }
+
+    
 
     
