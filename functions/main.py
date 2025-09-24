@@ -227,13 +227,26 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 @firestore_fn.on_document_updated(document="leads/{leadId}", region="us-central1")
 def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
-    The 'brain' of the application. Processes new interactions added to a lead,
+    The 'brain' of the application. Processes new interactions and payment plans,
     completes old tasks, and schedules the next appropriate follow-up.
-    Triggers when the `interactions` array is updated.
+    Triggers when the `interactions` or `paymentPlan` field is updated.
     """
     data_after = event.data.after.to_dict()
     data_before = event.data.before.to_dict()
+    lead_id = event.params.get("leadId")
+    lead_name = data_after.get("name")
+    lead_ref = event.data.after.reference
 
+    # --- Payment Plan Task Processing ---
+    plan_after = data_after.get("paymentPlan")
+    plan_before = data_before.get("paymentPlan")
+
+    if plan_after != plan_before:
+        print(f"Payment plan updated for lead {lead_id}. Syncing tasks.")
+        sync_payment_plan_tasks(lead_id, lead_name, plan_before, plan_after)
+
+
+    # --- Interaction Processing ---
     interactions_after = data_after.get("interactions", [])
     interactions_before = data_before.get("interactions", [])
 
@@ -243,16 +256,11 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     
     # The new interaction is the last one in the array.
     interaction_data = interactions_after[-1]
-    lead_id = event.params.get("leadId")
     
-    if not lead_id:
-        print("Interaction is missing a leadId. Aborting.")
+    if not lead_id or not lead_name:
+        print("Interaction is missing a leadId or leadName. Aborting.")
         return
 
-    lead_ref = event.data.after.reference
-    lead_data = data_after # Use the already-fetched data
-    lead_name = lead_data.get("name")
-    
     # --- Shared Logic: Update last interaction date for ALL logs ---
     lead_ref.update({"last_interaction_date": firestore.SERVER_TIMESTAMP})
 
@@ -264,7 +272,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     # --- 1. Feedback Log Processing (AFC Reset) ---
     if feedback_log:
         print(f"Processing feedback log for lead {lead_id}.")
-        if not lead_data.get("hasEngaged"):
+        if not data_after.get("hasEngaged"):
             lead_ref.update({"hasEngaged": True})
         # This interaction implies engagement, so reset AFC
         reset_afc_for_engagement(lead_id, lead_name, lead_ref)
@@ -273,7 +281,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     # --- 2. Outcome Log Processing ---
     if outcome:
         print(f"Processing outcome log for lead {lead_id}: {outcome}")
-        if not lead_data.get("hasEngaged"):
+        if not data_after.get("hasEngaged"):
             lead_ref.update({"hasEngaged": True})
             
         if outcome == "Info":
@@ -335,7 +343,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     complete_open_interactive_tasks(lead_id)
 
     # Set hasEngaged to true
-    if not lead_data.get("hasEngaged"):
+    if not data_after.get("hasEngaged"):
         lead_ref.update({"hasEngaged": True})
         print(f"Lead {lead_id} hasEngaged set to true.")
 
@@ -359,14 +367,14 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             
         elif quick_log_type == "Unresponsive":
             # This is triggered by afcDailyAdvancer, advance the step
-            current_step = lead_data.get("afc_step", 0)
+            current_step = data_after.get("afc_step", 0)
             next_step = current_step + 1
             if next_step in AFC_SCHEDULE:
                 lead_ref.update({"afc_step": next_step})
                 due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[next_step])
                 create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[next_step]} Follow-up", "Interactive", due_date)
             else: # After 5th attempt
-                has_engaged = lead_data.get("hasEngaged", False)
+                has_engaged = data_after.get("hasEngaged", False)
                 new_status = "Cooling" if has_engaged else "Dormant"
                 lead_ref.update({"status": new_status, "afc_step": 0})
                 print(f"AFC cycle complete for {lead_id}. Status set to {new_status}.")
@@ -506,6 +514,72 @@ def reset_afc_for_engagement(lead_id: str, lead_name: str, lead_ref):
     due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[1])
     create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[1]} Follow-up", "Interactive", due_date)
     print(f"AFC reset for lead {lead_id}. New Day 1 follow-up task created.")
+
+
+def sync_payment_plan_tasks(lead_id: str, lead_name: str, plan_before, plan_after):
+    """
+    Creates, updates, or deletes tasks based on changes to a lead's payment plan.
+    """
+    installments_before = {inst['id']: inst for inst in plan_before.get('installments', [])} if plan_before else {}
+    installments_after = {inst['id']: inst for inst in plan_after.get('installments', [])} if plan_after else {}
+    
+    batch = db.batch()
+    tasks_ref = db.collection("tasks")
+
+    # --- Create or Update tasks ---
+    for inst_id, inst_after in installments_after.items():
+        inst_before = installments_before.get(inst_id)
+        
+        # Only create reminder for unpaid installments
+        if inst_after.get('status') == 'Unpaid':
+            due_date_str = inst_after.get('dueDate')
+            if not due_date_str:
+                continue
+
+            reminder_due_date = datetime.fromisoformat(due_date_str.replace("Z", "+00:00")) - timedelta(days=1)
+            amount = inst_after.get('amount', 0)
+            desc = f"Payment reminder: installment of {amount} due tomorrow."
+            
+            # Find existing task for this installment
+            task_query = tasks_ref.where("leadId", "==", lead_id).where("description", "==", desc).limit(1).stream()
+            existing_task = next(task_query, None)
+            
+            if existing_task:
+                # Update due date if it changed
+                task_data = existing_task.to_dict()
+                if task_data.get('dueDate').date() != reminder_due_date.date():
+                    batch.update(existing_task.reference, {"dueDate": reminder_due_date})
+                    print(f"Updating task for installment {inst_id}")
+            else:
+                 # Create new task
+                new_task_ref = tasks_ref.document()
+                batch.set(new_task_ref, {
+                    "leadId": lead_id,
+                    "leadName": lead_name,
+                    "description": desc,
+                    "completed": False,
+                    "createdAt": firestore.SERVER_TIMESTAMP,
+                    "nature": "Procedural",
+                    "dueDate": reminder_due_date
+                })
+                print(f"Creating task for installment {inst_id}")
+    
+    # --- Delete tasks for removed or paid installments ---
+    for inst_id, inst_before in installments_before.items():
+        inst_after = installments_after.get(inst_id)
+        
+        is_removed = not inst_after
+        is_paid = inst_after and inst_after.get('status') == 'Paid'
+        
+        if is_removed or is_paid:
+            amount = inst_before.get('amount', 0)
+            desc = f"Payment reminder: installment of {amount} due tomorrow."
+            task_query = tasks_ref.where("leadId", "==", lead_id).where("description", "==", desc).stream()
+            for task in task_query:
+                batch.delete(task.reference)
+                print(f"Deleting task for installment {inst_id} (Reason: {'Paid' if is_paid else 'Removed'})")
+    
+    batch.commit()
 
 
 # --- New Function for Cascading Deletes ---

@@ -5,13 +5,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion, startAfter, limit } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType } from '@/lib/types';
+import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, PaymentPlan, PaymentInstallment } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo, WhatsAppIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,9 @@ import { cn } from '@/lib/utils';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { DateTimePicker } from '@/components/date-time-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Switch } from '@/components/ui/switch';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -73,6 +76,9 @@ export default function ContactDetailPage() {
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<SessionGroup | null>(null);
   const [currentSchedule, setCurrentSchedule] = useState<CourseSchedule | null>(null);
+
+  // PayPlan state
+  const [currentPayPlan, setCurrentPayPlan] = useState<PaymentPlan>({ totalPrice: 0, installments: [] });
 
   // Interactions state
   const [interactions, setInteractions] = useState<Interaction[]>([]);
@@ -121,6 +127,7 @@ export default function ContactDetailPage() {
         const leadData = { id: leadDoc.id, ...leadDoc.data() } as Lead;
         setLead(leadData);
         setCurrentSchedule(leadData.courseSchedule || { sessionGroups: [] });
+        setCurrentPayPlan(leadData.paymentPlan || { totalPrice: parseFloat(leadData.commitmentSnapshot.price || '0'), installments: [] });
         setInteractions((leadData.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
       } else {
         toast({ variant: 'destructive', title: 'Contact not found.' });
@@ -292,6 +299,43 @@ export default function ContactDetailPage() {
     }
   };
 
+  const generatePayPlanSummary = (plan: PaymentPlan | null | undefined): string => {
+    if (!plan || !plan.installments || plan.installments.length === 0) {
+      return '';
+    }
+    if (plan.installments.length === 1) {
+      return `Full payment of ${plan.totalPrice}.`;
+    }
+    return `${plan.installments.length} installments totaling ${plan.totalPrice}.`;
+  };
+
+  const handlePayPlanSave = async () => {
+    if (!lead) return;
+    
+    const summary = generatePayPlanSummary(currentPayPlan);
+
+    const updatePayload = {
+      paymentPlan: currentPayPlan,
+      'commitmentSnapshot.paymentPlan': summary,
+      'commitmentSnapshot.price': currentPayPlan.totalPrice.toString(),
+    };
+
+    const originalLead = lead;
+    setLead(prev => prev ? produce(prev, draft => {
+        draft.paymentPlan = currentPayPlan;
+        draft.commitmentSnapshot.paymentPlan = summary;
+        draft.commitmentSnapshot.price = currentPayPlan.totalPrice.toString();
+    }) : null);
+
+    try {
+        await updateDoc(doc(db, 'leads', id), updatePayload);
+        toast({title: 'Payment plan saved.'});
+    } catch(e) {
+        setLead(originalLead);
+        toast({variant: 'destructive', title: 'Failed to save payment plan.'});
+    }
+  };
+
   const handleTabChange = (value: string) => {
     if (value === 'tasks' && !tasksTabLoaded) {
       setTasksTabLoaded(true);
@@ -349,11 +393,11 @@ export default function ContactDetailPage() {
       createdAt: new Date().toISOString(),
     } as Interaction;
   
-    const originalLead = lead;
+    const originalLead = { ...lead };
   
     // Optimistic UI Update
-    const optimisticLead = produce(lead, draft => {
-      draft.interactions?.unshift(newInteraction);
+    const optimisticLead = produce(originalLead, draft => {
+      draft.interactions = [newInteraction, ...(draft.interactions || [])];
   
       if (newInteraction.quickLogType) {
         if (newInteraction.quickLogType === 'Enrolled') {
@@ -364,6 +408,7 @@ export default function ContactDetailPage() {
         }
       }
     });
+
     setLead(optimisticLead);
     setInteractions([...(optimisticLead.interactions || [])].sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
     
@@ -699,9 +744,10 @@ export default function ContactDetailPage() {
       
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         <Tabs defaultValue="overview" onValueChange={handleTabChange} className="w-full">
-            <TabsList className={cn("grid w-full grid-cols-3", isLearner && "grid-cols-4")}>
+            <TabsList className={cn("grid w-full grid-cols-3", isLearner && "grid-cols-5")}>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               {isLearner && <TabsTrigger value="schedule">Schedule</TabsTrigger>}
+              {isLearner && <TabsTrigger value="payplan">PayPlan</TabsTrigger>}
               <TabsTrigger value="logs">Logs</TabsTrigger>
               <TabsTrigger value="tasks">Tasks</TabsTrigger>
             </TabsList>
@@ -759,6 +805,14 @@ export default function ContactDetailPage() {
                         {lead.commitmentSnapshot?.schedule || "Not set. Manage in Schedule tab."}
                     </p>
                   </div>
+                  {lead.commitmentSnapshot?.paymentPlan && (
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Payment Plan</Label>
+                    <p className="text-sm min-h-[20px] flex items-center">
+                        {lead.commitmentSnapshot.paymentPlan}
+                    </p>
+                  </div>
+                  )}
                   <div>
                       <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
                   </div>
@@ -812,7 +866,7 @@ export default function ContactDetailPage() {
                 <Card>
                    <CardHeader>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <CardTitle className="text-lg lg:text-xl">Training Schedule</CardTitle>
+                        <CardTitle className="text-lg">Training Schedule</CardTitle>
                         <Button onClick={() => setIsScheduleModalOpen(true)} size="sm">
                             <Plus className="mr-2 h-4 w-4"/> 
                             <span className="sm:hidden md:inline">Add Session Group</span>
@@ -886,6 +940,16 @@ export default function ContactDetailPage() {
                       )}
                   </CardContent>
                 </Card>
+              </TabsContent>
+            )}
+
+            {isLearner && (
+              <TabsContent value="payplan" className="mt-4">
+                <PayPlanEditor 
+                    plan={currentPayPlan} 
+                    onPlanChange={setCurrentPayPlan} 
+                    onSave={handlePayPlanSave} 
+                />
               </TabsContent>
             )}
 
@@ -1370,4 +1434,124 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
   );
 }
 
+
+function PayPlanEditor({ plan, onPlanChange, onSave }: { plan: PaymentPlan, onPlanChange: (plan: PaymentPlan) => void, onSave: () => void }) {
+    
+    const remainingBalance = useMemo(() => {
+        const totalPaid = plan.installments.reduce((sum, inst) => sum + (inst.amount || 0), 0);
+        return plan.totalPrice - totalPaid;
+    }, [plan]);
+
+    const handleAddInstallment = () => {
+        const newInstallment: PaymentInstallment = {
+            id: `inst_${Date.now()}`,
+            amount: 0,
+            dueDate: new Date().toISOString(),
+            status: 'Unpaid'
+        };
+        onPlanChange(produce(plan, draft => {
+            draft.installments.push(newInstallment);
+        }));
+    };
+
+    const handleRemoveInstallment = (id: string) => {
+        onPlanChange(produce(plan, draft => {
+            draft.installments = draft.installments.filter(inst => inst.id !== id);
+        }));
+    };
+
+    const handleInstallmentChange = (id: string, field: keyof PaymentInstallment, value: any) => {
+        onPlanChange(produce(plan, draft => {
+            const index = draft.installments.findIndex(inst => inst.id === id);
+            if (index !== -1) {
+                (draft.installments[index] as any)[field] = value;
+            }
+        }));
+    };
+
+    return (
+        <Card>
+            <CardHeader className="flex-row items-center justify-between">
+                 <CardTitle className="text-lg">Payment Plan</CardTitle>
+                 <Button onClick={onSave}>Save Plan</Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <Label>Total Course Price</Label>
+                        <Input 
+                            type="number" 
+                            value={plan.totalPrice} 
+                            onChange={(e) => onPlanChange({...plan, totalPrice: parseFloat(e.target.value) || 0})}
+                            placeholder="Enter total price"
+                        />
+                    </div>
+                     <div className="space-y-1">
+                        <Label>Remaining Balance</Label>
+                        <Input value={remainingBalance} readOnly className="font-semibold" />
+                    </div>
+                </div>
+                
+                <div className="space-y-4">
+                     {plan.installments.map((inst, index) => (
+                        <div key={inst.id} className="p-3 border rounded-lg space-y-3">
+                            <div className="flex justify-between items-center">
+                                <p className="font-semibold">Installment {index + 1}</p>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveInstallment(inst.id)}>
+                                    <Trash2 className="h-4 w-4"/>
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                                <div>
+                                    <Label>Due Date</Label>
+                                     <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" className="w-full justify-start text-left font-normal">
+                                                <CalendarIcon className="mr-2 h-4 w-4"/>
+                                                {inst.dueDate ? format(toDate(inst.dueDate)!, 'PPP') : 'Select date'}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            <Calendar 
+                                                mode="single"
+                                                selected={toDate(inst.dueDate)!}
+                                                onSelect={(date) => handleInstallmentChange(inst.id, 'dueDate', date?.toISOString())}
+                                            />
+                                        </PopoverContent>
+                                     </Popover>
+                                </div>
+                                <div>
+                                    <Label>Amount</Label>
+                                    <Input 
+                                        type="number"
+                                        value={inst.amount}
+                                        onChange={e => handleInstallmentChange(inst.id, 'amount', parseFloat(e.target.value) || 0)}
+                                    />
+                                </div>
+                                 <div className="flex items-center gap-2">
+                                     <Switch 
+                                        id={`status-${inst.id}`}
+                                        checked={inst.status === 'Paid'}
+                                        onCheckedChange={(checked) => handleInstallmentChange(inst.id, 'status', checked ? 'Paid' : 'Unpaid')}
+                                     />
+                                     <Label htmlFor={`status-${inst.id}`}>{inst.status}</Label>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="flex justify-center">
+                    <Button variant="outline" onClick={handleAddInstallment}>
+                        <Plus className="mr-2 h-4 w-4"/> Add Installment
+                    </Button>
+                </div>
+
+                {plan.installments.length === 0 && (
+                    <div className="text-center text-muted-foreground py-10">No installments created yet.</div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
 

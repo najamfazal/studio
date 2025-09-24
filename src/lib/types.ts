@@ -16,6 +16,7 @@ export type CommitmentSnapshot = {
   schedule?: string;
   course?: string;
   keyNotes?: string;
+  paymentPlan?: string;
 };
 
 export type PhoneNumber = {
@@ -144,4 +145,3 @@ export type AppSettings = {
     price: string[];
   }
 }
-
