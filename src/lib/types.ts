@@ -61,7 +61,7 @@ export type InteractionFeedback = {
 }
 
 export type InteractionEventDetails = { 
-  type: string;
+  type?: string;
   dateTime: string; // ISO date string
   status?: 'Scheduled' | 'Completed' | 'Cancelled';
   rescheduledFrom?: string; // ISO string of original date
@@ -75,11 +75,9 @@ export type Interaction = {
   id: string;
   createdAt: string; // ISO date string
   
-  // For quick logs
   quickLogType?: QuickLogType;
   withdrawalReasons?: string[];
 
-  // For detailed logs from the lead page
   feedback?: InteractionFeedback;
   outcome?: OutcomeType;
   followUpDate?: string; // For 'Later' outcome
@@ -108,6 +106,9 @@ export type Lead = {
   insights: string[];
   commitmentSnapshot: CommitmentSnapshot;
   interactions?: Interaction[];
+  
+  // Temporary state for event logging
+  eventDetails?: InteractionEventDetails;
 
   // --- Fields for "Learner" ---
   enrolledDate?: string;
@@ -144,4 +145,3 @@ export type AppSettings = {
   }
 }
 
-    

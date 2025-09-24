@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { isAfter, isBefore, isSameDay, parseISO, startOfDay, endOfDay, addDays } from 'date-fns';
 import { CalendarDays, Check, Edit, X, Loader2, CalendarClock } from 'lucide-react';
 import Link from 'next/link';
@@ -21,19 +21,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { produce } from 'immer';
+import { DateTimePicker } from '@/components/date-time-picker';
 
 type EventInteraction = Interaction & { leadId: string; leadName?: string };
 
@@ -50,6 +39,7 @@ export default function EventsPage() {
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [rescheduleEvent, setRescheduleEvent] = useState<EventInteraction | null>(null);
   const [newDateTime, setNewDateTime] = useState<Date | undefined>(undefined);
+  const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchEvents = useCallback(async () => {
@@ -62,18 +52,16 @@ export default function EventsPage() {
       const leadsSnapshot = await getDocs(leadsQuery);
       
       const allEvents: EventInteraction[] = [];
-      const leadsData: Record<string, Lead> = {};
-
+      
       leadsSnapshot.forEach(doc => {
         const lead = { id: doc.id, ...doc.data() } as Lead;
-        leadsData[doc.id] = lead;
         const leadEvents = (lead.interactions || [])
           .filter(i => i.outcome === "Event Scheduled" && i.eventDetails?.status === 'Scheduled')
           .map(i => ({...i, leadId: lead.id, leadName: lead.name } as EventInteraction));
         allEvents.push(...leadEvents);
       });
       
-      allEvents.sort((a, b) => toDate(b.eventDetails!.dateTime)!.getTime() - toDate(a.eventDetails!.dateTime)!.getTime());
+      allEvents.sort((a, b) => toDate(a.eventDetails!.dateTime)!.getTime() - toDate(b.eventDetails!.dateTime)!.getTime());
 
       setEvents(allEvents);
 
@@ -110,10 +98,11 @@ export default function EventsPage() {
         notes: `Event ${event.eventDetails?.type} marked as ${action === 'complete' ? 'Completed' : 'Cancelled'}.`
       }
       
-      await updateDoc(leadRef, { 
-        interactions: arrayUnion(newLog)
-      });
+      // We need two updates because one adds an element and the other modifies one.
+      // Firestore doesn't support this in a single operation without reading the doc first, which we've done.
       await updateDoc(leadRef, { interactions: updatedInteractions });
+      await updateDoc(leadRef, { interactions: arrayUnion(newLog) });
+      
 
       toast({ title: `Event ${action === 'complete' ? 'Completed' : 'Cancelled'}` });
       await fetchEvents();
@@ -142,7 +131,6 @@ export default function EventsPage() {
           draft[interactionIndex].eventDetails!.status = 'Cancelled';
         }
       });
-      await updateDoc(leadRef, { interactions: interactionsWithCancelled });
       
       // 2. Add new event
       const newEventLog: Interaction = {
@@ -157,6 +145,8 @@ export default function EventsPage() {
         },
         notes: `Event rescheduled from ${format(toDate(rescheduleEvent.eventDetails!.dateTime)!, 'PPp')}`
       }
+      
+      await updateDoc(leadRef, { interactions: interactionsWithCancelled });
       await updateDoc(leadRef, { interactions: arrayUnion(newEventLog) });
       
 
@@ -171,6 +161,12 @@ export default function EventsPage() {
       setIsActionLoading(null);
     }
   };
+
+  const openRescheduleDialog = (event: EventInteraction) => {
+    setRescheduleEvent(event);
+    setNewDateTime(toDate(event.eventDetails?.dateTime) || new Date());
+    setIsDateTimePickerOpen(true);
+  }
 
   const categorizedEvents = useMemo(() => {
     const now = new Date();
@@ -198,9 +194,12 @@ export default function EventsPage() {
     });
     
     const sortAsc = (a: EventInteraction, b: EventInteraction) => toDate(a.eventDetails!.dateTime)!.getTime() - toDate(b.eventDetails!.dateTime)!.getTime();
+    
+    // Sort recent/overdue to show most recent first (which is largest time diff from now)
+    const sortDesc = (a: EventInteraction, b: EventInteraction) => toDate(b.eventDetails!.dateTime)!.getTime() - toDate(a.eventDetails!.dateTime)!.getTime();
 
     return { 
-      recent: recent.sort(sortAsc), 
+      recent: recent.sort(sortDesc), 
       today: todayEvents.sort(sortAsc), 
       tomorrow: tomorrowEvents.sort(sortAsc), 
       later: later.sort(sortAsc) 
@@ -237,48 +236,26 @@ export default function EventsPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            {categorizedEvents.recent.length > 0 && <EventCategory title="Recent & Overdue" events={categorizedEvents.recent} onAction={handleEventAction} onReschedule={setRescheduleEvent} isLoading={isActionLoading} />}
-            {categorizedEvents.today.length > 0 && <EventCategory title="Today" events={categorizedEvents.today} onAction={handleEventAction} onReschedule={setRescheduleEvent} isLoading={isActionLoading} />}
-            {categorizedEvents.tomorrow.length > 0 && <EventCategory title="Tomorrow" events={categorizedEvents.tomorrow} onAction={handleEventAction} onReschedule={setRescheduleEvent} isLoading={isActionLoading} />}
-            {categorizedEvents.later.length > 0 && <EventCategory title="Later" events={categorizedEvents.later} onAction={handleEventAction} onReschedule={setRescheduleEvent} isLoading={isActionLoading} />}
+            {categorizedEvents.recent.length > 0 && <EventCategory title="Recent & Overdue" events={categorizedEvents.recent} onAction={handleEventAction} onReschedule={openRescheduleDialog} isLoading={isActionLoading} />}
+            {categorizedEvents.today.length > 0 && <EventCategory title="Today" events={categorizedEvents.today} onAction={handleEventAction} onReschedule={openRescheduleDialog} isLoading={isActionLoading} />}
+            {categorizedEvents.tomorrow.length > 0 && <EventCategory title="Tomorrow" events={categorizedEvents.tomorrow} onAction={handleEventAction} onReschedule={openRescheduleDialog} isLoading={isActionLoading} />}
+            {categorizedEvents.later.length > 0 && <EventCategory title="Later" events={categorizedEvents.later} onAction={handleEventAction} onReschedule={openRescheduleDialog} isLoading={isActionLoading} />}
           </div>
         )}
       </main>
 
-       <AlertDialog open={!!rescheduleEvent} onOpenChange={(open) => !open && setRescheduleEvent(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Reschedule Event</AlertDialogTitle>
-              <AlertDialogDescription>
-                Select a new date and time for the event with {rescheduleEvent?.leadName}.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex justify-center py-4">
-               <Popover>
-                <PopoverTrigger asChild>
-                    <Button variant="outline">
-                        <CalendarClock className="mr-2 h-4 w-4"/>
-                        {newDateTime ? format(newDateTime, 'PPP p') : 'Select new date & time'}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                    <Calendar
-                        mode="single"
-                        selected={newDateTime}
-                        onSelect={setNewDateTime}
-                    />
-                </PopoverContent>
-               </Popover>
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleReschedule} disabled={!newDateTime || !!isActionLoading}>
-                {isActionLoading && <Loader2 className="animate-spin mr-2" />}
-                Reschedule
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-       </AlertDialog>
+       <DateTimePicker 
+          isOpen={isDateTimePickerOpen}
+          onClose={() => {
+            setIsDateTimePickerOpen(false);
+            setRescheduleEvent(null);
+          }}
+          onSelect={(date) => {
+            setNewDateTime(date);
+            handleReschedule();
+          }}
+          initialDate={newDateTime}
+       />
     </div>
   );
 }

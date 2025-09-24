@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -27,12 +26,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { EditableField } from '@/components/editable-field';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '@/components/ui/alert-dialog';
-import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { DateTimePicker } from '@/components/date-time-picker';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -60,7 +58,6 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: QuickLog
 ];
 
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
-const popularTimes = ["12:00", "15:00", "17:00", "19:00"];
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -105,12 +102,12 @@ export default function ContactDetailPage() {
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeType | null>(null);
   const [isLoggingOutcome, setIsLoggingOutcome] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState("");
-  const [followUpDate, setFollowUpDate] = useState<Date | undefined>(undefined);
-  const [eventDetails, setEventDetails] = useState<{ type: string, dateTime: Date | undefined }>({ type: "", dateTime: undefined });
+  const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
+  const [dateTimePickerValue, setDateTimePickerValue] = useState<Date | undefined>(undefined);
+  const [dateTimePickerCallback, setDateTimePickerCallback] = useState<(date: Date) => void>(() => {});
   
   // Event Management State
   const [eventToManage, setEventToManage] = useState<Interaction | null>(null);
-  const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>(undefined);
   const [isEventActionLoading, setIsEventActionLoading] = useState(false);
 
   const fetchInitialData = useCallback(async () => {
@@ -352,23 +349,23 @@ export default function ContactDetailPage() {
       createdAt: new Date().toISOString(),
     } as Interaction;
 
-    const originalLead = lead; // Keep a copy for potential rollback
+    const originalLead = lead; 
 
     // Optimistic UI Update
     const optimisticLead = produce(lead, draft => {
-      if (!draft.interactions) draft.interactions = [];
-      draft.interactions.push(newInteraction);
-      
-      // Also apply optimistic status changes based on log type
-      if (newInteraction.quickLogType === 'Enrolled') {
-          draft.status = 'Enrolled';
-          draft.relationship = 'Learner';
-      } else if (newInteraction.quickLogType === 'Withdrawn') {
-          draft.status = 'Withdrawn';
-      }
+        draft.interactions?.unshift(newInteraction);
+        
+        if (newInteraction.quickLogType) {
+            if (newInteraction.quickLogType === 'Enrolled') {
+                draft.status = 'Enrolled';
+                draft.relationship = 'Learner';
+            } else if (newInteraction.quickLogType === 'Withdrawn') {
+                draft.status = 'Withdrawn';
+            }
+        }
     });
     setLead(optimisticLead);
-    setInteractions([...optimisticLead.interactions].sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
+    setInteractions([...(optimisticLead.interactions || [])]);
     
     try {
       await updateDoc(leadRef, {
@@ -376,7 +373,6 @@ export default function ContactDetailPage() {
       });
       toast({ title: 'Interaction Logged' });
       
-      // Instead of full-refetch, just refresh tasks which might have been created/updated
       refreshTasks();
 
     } catch (error) {
@@ -422,23 +418,19 @@ export default function ContactDetailPage() {
         if (!draft[category]) {
             draft[category] = { perception };
         } else {
-            // If clicking the same perception again, clear it. Otherwise, set new one.
             draft[category]!.perception = draft[category]!.perception === perception ? undefined : perception;
         }
 
-        // If perception is removed, clear the category
         if(draft[category]!.perception === undefined) {
              delete draft[category];
              setActiveChipCategory(null);
              return;
         }
         
-        // if perception is positive, clear objections
         if (perception === 'positive') {
             draft[category]!.objections = [];
         }
 
-        // if switching from positive to negative, don't clear objections
         if(perception === 'negative') {
             setActiveChipCategory(category);
         } else {
@@ -483,24 +475,29 @@ export default function ContactDetailPage() {
     let interactionPayload: Partial<Interaction> = {
       outcome: selectedOutcome,
     };
+    
+    const getFollowUpDate = () => (dateTimePickerValue ? dateTimePickerValue.toISOString() : undefined);
+    const getEventDateTime = () => (dateTimePickerValue ? dateTimePickerValue.toISOString() : undefined);
 
     if (selectedOutcome === 'Info') {
       if (!outcomeNotes) { toast({ variant: 'destructive', title: 'Info notes cannot be empty.' }); setIsLoggingOutcome(false); return; }
       interactionPayload.notes = outcomeNotes;
     } else if (selectedOutcome === 'Later') {
+      const followUpDate = getFollowUpDate();
       if (!followUpDate) { toast({ variant: 'destructive', title: 'Please select a follow-up date.' }); setIsLoggingOutcome(false); return; }
-      interactionPayload.followUpDate = followUpDate.toISOString();
+      interactionPayload.followUpDate = followUpDate;
     } else if (selectedOutcome === 'Event Scheduled') {
-      if (!eventDetails.type || !eventDetails.dateTime) { toast({ variant: 'destructive', title: 'Please select event type and date/time.' }); setIsLoggingOutcome(false); return; }
-      interactionPayload.eventDetails = { type: eventDetails.type, dateTime: eventDetails.dateTime.toISOString(), status: 'Scheduled' };
+      const eventDateTime = getEventDateTime();
+      if (!lead.eventDetails?.type || !eventDateTime) { toast({ variant: 'destructive', title: 'Please select event type and date/time.' }); setIsLoggingOutcome(false); return; }
+      interactionPayload.eventDetails = { ...lead.eventDetails, dateTime: eventDateTime, status: 'Scheduled' };
     }
 
     await handleLogInteraction(interactionPayload);
 
     setSelectedOutcome(null);
     setOutcomeNotes('');
-    setFollowUpDate(undefined);
-    setEventDetails({ type: '', dateTime: undefined });
+    setDateTimePickerValue(undefined);
+    setLead(prev => prev && produce(prev, draft => { if(draft.eventDetails) draft.eventDetails.type = '' }));
     setIsLoggingOutcome(false);
   };
   
@@ -509,13 +506,13 @@ export default function ContactDetailPage() {
     setIsEventActionLoading(true);
 
     try {
-        let newInteraction: Partial<Interaction>;
         let interactionToUpdateId: string = eventToManage.id;
 
         if (action === 'Rescheduled') {
+            const rescheduleDate = dateTimePickerValue;
             if (!rescheduleDate) { toast({variant: 'destructive', title: 'Please select a new date.'}); setIsEventActionLoading(false); return; }
             
-            newInteraction = {
+            const newInteraction: Partial<Interaction> = {
                 outcome: 'Event Scheduled',
                 eventDetails: {
                     type: eventToManage.eventDetails?.type,
@@ -526,10 +523,8 @@ export default function ContactDetailPage() {
                 notes: `Rescheduled from ${format(toDate(eventToManage.eventDetails!.dateTime)!, 'PPp')}`
             };
             
-            // Log the new event first
             await handleLogInteraction(newInteraction);
             
-            // Then update the old event's status
             const updatedLead = produce(lead, draft => {
                 const interaction = draft.interactions?.find(i => i.id === interactionToUpdateId);
                 if (interaction && interaction.eventDetails) {
@@ -549,7 +544,7 @@ export default function ContactDetailPage() {
             });
             await updateDoc(doc(db, 'leads', id), { interactions: updatedLead.interactions });
             
-            newInteraction = {
+            const newInteraction: Partial<Interaction> = {
                 notes: `Event ${eventToManage.eventDetails?.type} marked as ${action}.`
             };
             await handleLogInteraction(newInteraction);
@@ -559,7 +554,6 @@ export default function ContactDetailPage() {
         
         setLead(prev => prev ? produce(prev, draft => {
           if (!draft.interactions) return;
-          // Mark old event
           const oldEvent = draft.interactions.find(i => i.id === eventToManage.id);
           if (oldEvent && oldEvent.eventDetails) {
             oldEvent.eventDetails.status = action === 'Rescheduled' ? 'Cancelled' : action;
@@ -567,7 +561,7 @@ export default function ContactDetailPage() {
         }) : null);
 
         setEventToManage(null);
-        setRescheduleDate(undefined);
+        setDateTimePickerValue(undefined);
     } catch (error) {
         console.error(`Error handling event ${action}:`, error);
         toast({variant: 'destructive', title: `Failed to update event.`});
@@ -603,12 +597,11 @@ export default function ContactDetailPage() {
     return false;
   }
   
-  const setEventTime = (time: string) => {
-    const [hours, minutes] = time.split(':').map(Number);
-    const newDateTime = eventDetails.dateTime ? new Date(eventDetails.dateTime) : new Date();
-    newDateTime.setHours(hours, minutes, 0, 0);
-    setEventDetails(prev => ({...prev, dateTime: newDateTime}));
-  }
+  const openDateTimePicker = (currentValue: Date | undefined, onSelect: (date: Date) => void) => {
+      setDateTimePickerValue(currentValue);
+      setDateTimePickerCallback(() => onSelect);
+      setIsDateTimePickerOpen(true);
+  };
 
   const upcomingEvent = scheduledEvents.length > 0 ? scheduledEvents[0] : null;
 
@@ -616,18 +609,16 @@ export default function ContactDetailPage() {
     if (value === undefined || !lead) return;
 
     if(value === '' && lead.courseSchedule?.sessionGroups?.[0]?.[type]){
-        // It's a deselect, do nothing if there is a value already
         return;
     }
     
     if(!value && !lead.courseSchedule?.sessionGroups?.[0]?.[type]){
-        // It's a deselect but there's no value, so do nothing.
         return;
     }
 
     const newSchedule = produce(lead.courseSchedule || { sessionGroups: [] }, draft => {
         if (!draft.sessionGroups) draft.sessionGroups = [];
-        if (draft.sessionGroups.length === 0) { // If no groups, create one
+        if (draft.sessionGroups.length === 0) { 
           draft.sessionGroups.push({
             groupId: `group_${Date.now()}`,
             trainer: '',
@@ -1033,32 +1024,17 @@ export default function ContactDetailPage() {
                     )}
 
                     {selectedOutcome === 'Later' && (
-                        <div className="space-y-2">
-                            <p className="text-sm font-medium text-center">When to follow up?</p>
-                            <div className="flex justify-center">
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline">
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {followUpDate ? format(followUpDate, 'PPP') : 'Select a date'}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0">
-                                        <Calendar mode="single" selected={followUpDate} onSelect={setFollowUpDate} initialFocus />
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                            <div className="flex justify-center gap-2">
-                                <Button size="sm" variant="ghost" onClick={() => setFollowUpDate(addDays(new Date(), 1))}>Tomorrow</Button>
-                                <Button size="sm" variant="ghost" onClick={() => setFollowUpDate(addDays(new Date(), 2))}>Day-after</Button>
-                                <Button size="sm" variant="ghost" onClick={() => setFollowUpDate(addDays(new Date(), 7))}>Next Week</Button>
-                            </div>
-                        </div>
+                       <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select follow-up date & time'}
+                       </Button>
                     )}
 
                     {selectedOutcome === 'Event Scheduled' && (
                         <div className="space-y-4">
-                            <Select value={eventDetails.type} onValueChange={val => setEventDetails(prev => ({...prev, type: val}))}>
+                            <Select 
+                                value={lead.eventDetails?.type || ''} 
+                                onValueChange={val => setLead(prev => prev && produce(prev, draft => { if(!draft.eventDetails) draft.eventDetails = {type:'', dateTime:''}; draft.eventDetails.type = val; }))}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select event type..." />
                                 </SelectTrigger>
@@ -1066,32 +1042,10 @@ export default function ContactDetailPage() {
                                     {eventTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-                            <div className="flex items-center justify-center gap-2">
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline" className="w-full justify-start font-normal">
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {eventDetails.dateTime ? format(eventDetails.dateTime, 'PPP') : 'Select date'}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0">
-                                        <Calendar mode="single" selected={eventDetails.dateTime} onSelect={d => setEventDetails(prev => ({...prev, dateTime: d}))} initialFocus />
-                                    </PopoverContent>
-                                </Popover>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline" className="w-full justify-start font-normal">
-                                            <CalendarClock className="mr-2 h-4 w-4" />
-                                            {eventDetails.dateTime ? format(eventDetails.dateTime, 'p') : 'Select time'}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-2">
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {popularTimes.map(time => <Button key={time} variant="ghost" size="sm" onClick={() => setEventTime(time)}>{time}</Button>)}
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
+                            <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}>
+                                <CalendarClock className="mr-2 h-4 w-4" />
+                                {dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select date & time'}
+                            </Button>
                         </div>
                     )}
                 </CardContent>
@@ -1241,24 +1195,11 @@ export default function ContactDetailPage() {
                   <Button variant="outline" className="w-full" onClick={() => handleEventManagement('Cancelled')}>Cancel Event</Button>
                   <div className="space-y-2">
                       <p className="text-sm font-medium text-center">Or reschedule:</p>
-                      <Popover>
-                          <PopoverTrigger asChild>
-                              <Button variant="outline" className="w-full">
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {rescheduleDate ? format(rescheduleDate, 'PPP p') : 'Select new date & time'}
-                              </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                              <Calendar mode="single" selected={rescheduleDate} onSelect={setRescheduleDate} />
-                              <div className="p-2 border-t grid grid-cols-2 gap-2">
-                                  {popularTimes.map(time => {
-                                      const [h,m] = time.split(':').map(Number);
-                                      return <Button key={time} variant="ghost" size="sm" onClick={() => setRescheduleDate(d => { const newD = d || new Date(); newD.setHours(h,m,0,0); return new Date(newD); })}>{time}</Button>
-                                  })}
-                              </div>
-                          </PopoverContent>
-                      </Popover>
-                      <Button className="w-full" onClick={() => handleEventManagement('Rescheduled')} disabled={!rescheduleDate || isEventActionLoading}>
+                      <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select new date & time'}
+                       </Button>
+                      <Button className="w-full" onClick={() => handleEventManagement('Rescheduled')} disabled={!dateTimePickerValue || isEventActionLoading}>
                           {isEventActionLoading && <Loader2 className="animate-spin mr-2"/>} Reschedule
                       </Button>
                   </div>
@@ -1268,6 +1209,14 @@ export default function ContactDetailPage() {
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
+
+      <DateTimePicker 
+        isOpen={isDateTimePickerOpen}
+        onClose={() => setIsDateTimePickerOpen(false)}
+        onSelect={dateTimePickerCallback}
+        initialDate={dateTimePickerValue}
+      />
+
     </div>
   );
 }
@@ -1306,7 +1255,6 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
       return;
     }
     
-    // Ensure sections is an array, even if empty
     if (!finalGroup.sections) {
       finalGroup.sections = [];
     }
@@ -1409,4 +1357,3 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
   );
 }
 
-    
