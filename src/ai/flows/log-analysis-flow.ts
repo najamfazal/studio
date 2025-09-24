@@ -16,6 +16,7 @@ export const LogAnalysisInputSchema = z.object({
   traits: z.array(z.string()).describe("A list of personality or behavioral traits observed in the lead."),
   notes: z.string().describe("General notes about the lead, usually from the commitment snapshot."),
   interactions: z.array(z.any()).describe("A chronological list of all interactions with the lead."),
+  customPrompt: z.string().optional().describe("An optional user-provided prompt to override the default behavior."),
 });
 export type LogAnalysisInput = z.infer<typeof LogAnalysisInputSchema>;
 
@@ -29,11 +30,7 @@ export async function analyzeLead(input: LogAnalysisInput): Promise<LogAnalysisO
   return logAnalysisFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'logAnalysisPrompt',
-  input: {schema: LogAnalysisInputSchema},
-  output: {schema: LogAnalysisOutputSchema},
-  prompt: `You are an expert sales assistant tasked with analyzing a lead to determine their potential.
+const defaultPrompt = `You are an expert sales assistant tasked with analyzing a lead to determine their potential.
   
 Your goal is to classify the lead as either 'High' or 'Low' potential and provide concrete, actionable next steps for the salesperson.
 
@@ -49,8 +46,7 @@ A LOW potential lead is someone who is unresponsive, raises significant objectio
 Based on your analysis, set the 'potential' field.
 
 Then, provide a short, actionable 2-3 line recommendation in the 'actions' field. The recommendation should be a concrete next step for the salesperson. For example: "The lead seems concerned about the schedule. Send them two alternative timings for the demo call." or "They are very interested in the content. Send them the advanced course module breakdown and suggest a call to discuss it."
-`,
-});
+`;
 
 export const logAnalysisFlow = ai.defineFlow(
   {
@@ -58,8 +54,17 @@ export const logAnalysisFlow = ai.defineFlow(
     inputSchema: LogAnalysisInputSchema,
     outputSchema: LogAnalysisOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (input) => {
+    const promptTemplate = input.customPrompt || defaultPrompt;
+
+    const prompt = ai.definePrompt({
+      name: 'logAnalysisDynamicPrompt',
+      input: { schema: LogAnalysisInputSchema },
+      output: { schema: LogAnalysisOutputSchema },
+      prompt: promptTemplate,
+    });
+    
+    const { output } = await prompt(input);
     return output!;
   }
 );

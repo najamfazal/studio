@@ -143,7 +143,8 @@ export type AppSettings = {
     content: string[];
     schedule: string[];
     price: string[];
-  }
+  };
+  logAnalysisPrompt?: string;
 }
 
 export type CourseRevenueData = {

@@ -2,13 +2,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { BarChart, Loader2, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { doc, onSnapshot, getDoc, updateDoc } from 'firebase/firestore';
+import { BarChart, Loader2, Zap, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { format, addMonths, subMonths } from 'date-fns';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
-import type { CourseRevenueReport, LogAnalysisReport, AnalyzedLead } from '@/lib/types';
+import type { CourseRevenueReport, LogAnalysisReport, AnalyzedLead, AppSettings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,6 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { generateCourseRevenueReportAction, generateLogAnalysisReportAction } from '@/app/actions';
 import { Logo } from '@/components/icons';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function ReportsPage() {
     const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -29,6 +31,8 @@ export default function ReportsPage() {
 
     const [isGeneratingCr, startGeneratingCrTransition] = useTransition();
     const [isGeneratingLa, startGeneratingLaTransition] = useTransition();
+
+    const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
 
     const { toast } = useToast();
 
@@ -194,7 +198,12 @@ export default function ReportsPage() {
                         <Card>
                              <CardHeader className="flex flex-row items-center justify-between p-4">
                                 <div className="space-y-0.5">
-                                    <CardTitle className="text-lg">Log Analysis</CardTitle>
+                                    <CardTitle className="text-lg flex items-center gap-2">
+                                        Log Analysis
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsPromptModalOpen(true)}>
+                                            <Pencil className="h-4 w-4"/>
+                                        </Button>
+                                    </CardTitle>
                                     <CardDescription>AI-powered lead potential analysis.</CardDescription>
                                 </div>
                                 <Button variant="outline" size="icon" onClick={handleGenerateLaReport} disabled={isGeneratingLa}>
@@ -218,6 +227,7 @@ export default function ReportsPage() {
                     </TabsContent>
                 </Tabs>
             </main>
+            {isPromptModalOpen && <PromptEditorDialog isOpen={isPromptModalOpen} onClose={() => setIsPromptModalOpen(false)} />}
         </div>
     );
 }
@@ -253,4 +263,93 @@ function AnalyzedLeadCard({ lead }: { lead: AnalyzedLead }) {
     )
 }
 
+function PromptEditorDialog({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+    const [prompt, setPrompt] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const { toast } = useToast();
+
+    const defaultPrompt = `You are an expert sales assistant tasked with analyzing a lead to determine their potential.
+  
+Your goal is to classify the lead as either 'High' or 'Low' potential and provide concrete, actionable next steps for the salesperson.
+
+Analyze the following lead data:
+- Traits: {{traits}}
+- Insights: {{insights}}
+- Key Notes: {{notes}}
+- Interaction History: {{jsonStringify interactions}}
+
+A HIGH potential lead is someone who shows clear buying signals: they are responsive, have few major objections (especially regarding price), and seem genuinely interested in the course content.
+A LOW potential lead is someone who is unresponsive, raises significant objections that haven't been resolved, or seems indecisive or uninterested.
+
+Based on your analysis, set the 'potential' field.
+
+Then, provide a short, actionable 2-3 line recommendation in the 'actions' field. The recommendation should be a concrete next step for the salesperson. For example: "The lead seems concerned about the schedule. Send them two alternative timings for the demo call." or "They are very interested in the content. Send them the advanced course module breakdown and suggest a call to discuss it."
+`;
+
+    useEffect(() => {
+        if (isOpen) {
+            setIsLoading(true);
+            const settingsDocRef = doc(db, 'settings', 'appConfig');
+            getDoc(settingsDocRef).then(docSnap => {
+                if (docSnap.exists()) {
+                    const settings = docSnap.data() as AppSettings;
+                    setPrompt(settings.logAnalysisPrompt || defaultPrompt);
+                } else {
+                    setPrompt(defaultPrompt);
+                }
+                setIsLoading(false);
+            });
+        }
+    }, [isOpen, defaultPrompt]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            const settingsDocRef = doc(db, 'settings', 'appConfig');
+            await updateDoc(settingsDocRef, { logAnalysisPrompt: prompt });
+            toast({ title: 'Prompt saved successfully!' });
+            onClose();
+        } catch (error) {
+            console.error("Error saving prompt:", error);
+            toast({ variant: 'destructive', title: 'Failed to save prompt.' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Edit Log Analysis Prompt</DialogTitle>
+                    <DialogDescription>
+                        Modify the prompt used by the AI to analyze leads. Use Handlebars syntax `{{field}}` to include lead data.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    {isLoading ? (
+                        <div className="flex justify-center items-center h-40">
+                            <Loader2 className="animate-spin" />
+                        </div>
+                    ) : (
+                        <Textarea
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            className="h-96 font-mono text-xs"
+                            placeholder="Enter your AI prompt here..."
+                        />
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button onClick={handleSave} disabled={isLoading || isSaving}>
+                        {isSaving ? <Loader2 className="animate-spin mr-2" /> : null}
+                        Save Prompt
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
     

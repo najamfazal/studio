@@ -8,11 +8,43 @@ import csv
 import re
 import genkit
 import genkit.firebase
+import os
+from google.cloud import secretmanager
+
+# --- Environment Setup ---
+# For local development, use a .env file to set GOOGLE_CLOUD_PROJECT
+# For deployment, the project ID is automatically available.
+project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
 
 # Initialize Firebase Admin SDK & Genkit
 initialize_app()
 db = firestore.client()
-genkit.firebase.init(firestore_client=db)
+
+def access_secret_version(secret_id, version_id="latest"):
+    """
+    Access the payload for the given secret version and return it.
+    """
+    # This check is for local development where project_id might not be set.
+    # In a deployed Cloud Function environment, project_id will always be available.
+    if not project_id:
+        print("GOOGLE_CLOUD_PROJECT environment variable not set. Skipping secret access.")
+        # Fallback to os.environ for local dev if GOOGLE_API_KEY is in the .env file
+        return os.environ.get("GEMINI_API_KEY")
+
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error accessing secret: {e}. Falling back to environment variable.")
+        # Fallback for cases where the secret might not be set up yet.
+        return os.environ.get("GEMINI_API_KEY")
+
+# Fetch the API key and initialize Genkit with it
+GEMINI_API_KEY = access_secret_version("GEMINI_API_KEY")
+genkit.firebase.init(firestore_client=db, api_key=GEMINI_API_KEY)
+
 
 # --- AFC (Automated Follow-up Cycle) Configuration ---
 AFC_SCHEDULE = {
@@ -776,8 +808,14 @@ def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
 
         high_potential_leads = []
         low_potential_leads = []
+        
+        # 2. Fetch the custom prompt from settings
+        settings_doc = db.collection("settings").document("appConfig").get()
+        settings_data = settings_doc.to_dict() if settings_doc.exists else {}
+        custom_prompt = settings_data.get("logAnalysisPrompt")
 
-        # 2. Analyze each lead with the Genkit flow
+
+        # 3. Analyze each lead with the Genkit flow
         for lead in active_leads:
             lead_data = lead.to_dict()
             lead_id = lead.id
@@ -787,7 +825,8 @@ def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
                 "insights": lead_data.get("insights", []),
                 "traits": lead_data.get("traits", []),
                 "notes": lead_data.get("commitmentSnapshot", {}).get("keyNotes", ""),
-                "interactions": lead_data.get("interactions", [])
+                "interactions": lead_data.get("interactions", []),
+                "customPrompt": custom_prompt
             }
 
             # Run the flow
@@ -802,13 +841,13 @@ def generateLogAnalysisReport(req: https_fn.CallableRequest) -> dict:
                 "aiActions": flow_result.get("actions")
             }
 
-            # 3. Categorize the lead
+            # 4. Categorize the lead
             if flow_result.get("potential") == "High":
                 high_potential_leads.append(analyzed_lead)
             else:
                 low_potential_leads.append(analyzed_lead)
         
-        # 4. Save the reports to Firestore, limiting to 50 each
+        # 5. Save the reports to Firestore, limiting to 50 each
         batch = db.batch()
         
         high_potential_doc_ref = db.collection("reports").document("high-potential-leads")
