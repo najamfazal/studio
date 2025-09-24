@@ -1,7 +1,7 @@
 
 'use server';
 
-import {db} from '@/lib/firebase';
+import {app, db} from '@/lib/firebase';
 import {collection, getDocs, writeBatch, query, where} from 'firebase/firestore';
 import { getFunctions, httpsCallable} from 'firebase/functions';
 
@@ -14,7 +14,7 @@ export async function importContactsAction(formData: { jsonData: string; isNew: 
   }
 
   try {
-    const functions = getFunctions();
+    const functions = getFunctions(app);
     const importContactsJson = httpsCallable(functions, 'importContactsJson');
 
     const result = await importContactsJson({
@@ -40,7 +40,7 @@ export async function mergeLeadsAction(data: { primaryLeadId: string; secondaryL
     }
 
     try {
-        const functions = getFunctions();
+        const functions = getFunctions(app);
         const mergeLeads = httpsCallable(functions, 'mergeLeads');
 
         const result = await mergeLeads(data);
@@ -56,7 +56,7 @@ export async function mergeLeadsAction(data: { primaryLeadId: string; secondaryL
 
 export async function generateCourseRevenueReportAction() {
   try {
-    const functions = getFunctions();
+    const functions = getFunctions(app);
     const generateReport = httpsCallable(functions, 'generateCourseRevenueReport');
     await generateReport();
     return { success: true };
@@ -70,7 +70,7 @@ export async function generateCourseRevenueReportAction() {
 
 export async function generateLogAnalysisReportAction() {
   try {
-    const functions = getFunctions();
+    const functions = getFunctions(app);
     const generateReport = httpsCallable(functions, 'generateLogAnalysisReport');
     await generateReport();
     return { success: true };
