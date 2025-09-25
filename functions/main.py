@@ -122,6 +122,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             name = row.get("name", row.get("Name", "")).strip()
             email = row.get("email", row.get("Email", "")).strip().lower()
             notes = row.get("notes", row.get("Notes", "")).strip()
+            auto_log_initiated = row.get("autoLogInitiated")
 
             if not name:
                 skipped_count += 1
@@ -165,6 +166,17 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
             }
+
+            # Check if auto-log is requested
+            if auto_log_initiated == 1:
+                initiated_log = {
+                    "id": f"import_init_{int(datetime.now().timestamp())}",
+                    "createdAt": firestore.SERVER_TIMESTAMP,
+                    "quickLogType": "Initiated",
+                    "notes": "Automatically logged upon import.",
+                }
+                lead_data["interactions"].append(initiated_log)
+
             
             # --- DB Operation: Find existing doc by email or phone ---
             existing_doc_ref = None
@@ -906,3 +918,6 @@ Based on your analysis, provide a JSON response with two keys: "potential" (stri
         )
     
 
+
+
+      
