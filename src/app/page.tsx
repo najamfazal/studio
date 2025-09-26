@@ -14,7 +14,7 @@ import {
   addDoc,
 } from "firebase/firestore";
 import { AlertTriangle, Check, ListTodo, Menu, CalendarIcon, Plus, User, ChevronsUpDown, CheckIcon } from "lucide-react";
-import { addDays, format, isPast, isSameDay, isToday } from "date-fns";
+import { addDays, format, isPast, isSameDay, isToday, startOfToday } from "date-fns";
 
 import {
   Card,
@@ -35,6 +35,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -75,6 +76,8 @@ export default function TasksPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isSavingManualTask, setIsSavingManualTask] = useState(false);
   const [isContactListOpen, setIsContactListOpen] = useState(false);
+  
+  const [isOverdueDialogOpen, setIsOverdueDialogOpen] = useState(false);
 
   const fetchInitialData = async () => {
       setIsLoading(true);
@@ -108,7 +111,16 @@ export default function TasksPage() {
 
   useEffect(() => {
     fetchInitialData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const overdueTasks = useMemo(() => {
+    const today = startOfToday();
+    return tasks.filter(task => {
+      const dueDate = toDate(task.dueDate);
+      return !task.completed && dueDate && isPast(dueDate) && !isSameDay(dueDate, today);
+    });
+  }, [tasks]);
 
   const handleMarkComplete = async (taskId: string, completed: boolean) => {
     try {
@@ -239,7 +251,15 @@ export default function TasksPage() {
           <div className="flex items-center gap-3">
             <SidebarTrigger />
             <ListTodo className="h-8 w-8 text-primary hidden sm:block" />
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
+            <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
+                {overdueTasks.length > 0 && (
+                    <Button variant="destructive" size="sm" className="h-7 blinking-badge" onClick={() => setIsOverdueDialogOpen(true)}>
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        {overdueTasks.length} Overdue
+                    </Button>
+                )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setIsManualTaskOpen(true)}>
@@ -461,6 +481,37 @@ export default function TasksPage() {
                 {isSavingManualTask ? "Adding..." : "Add Task"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+       </Dialog>
+      
+       <Dialog open={isOverdueDialogOpen} onOpenChange={setIsOverdueDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Overdue Tasks ({overdueTasks.length})</DialogTitle>
+                <DialogDescription>
+                    These tasks are past their due date.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto -mx-6 px-6 py-4 space-y-3">
+                {overdueTasks.sort((a,b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime()).map(task => (
+                     <div key={task.id} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                        <button
+                          onClick={() => handleMarkComplete(task.id, true)}
+                          className={cn( "flex items-center justify-center h-6 w-6 rounded-full border-2 transition-colors shrink-0 border-muted-foreground/50 hover:border-primary")}
+                        />
+                        <div className="flex-1">
+                            <Link href={`/contacts/${task.leadId}`} onClick={() => setIsOverdueDialogOpen(false)} className="hover:underline">
+                                <p className="font-medium">{task.description}</p>
+                                <p className="text-sm text-muted-foreground">{task.leadName}</p>
+                            </Link>
+                        </div>
+                        <p className="text-xs text-destructive font-semibold">{format(toDate(task.dueDate)!, 'MMM d')}</p>
+                    </div>
+                ))}
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsOverdueDialogOpen(false)}>Close</Button>
+            </DialogFooter>
         </DialogContent>
        </Dialog>
     </div>
