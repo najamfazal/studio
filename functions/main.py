@@ -1,7 +1,7 @@
 
 from firebase_functions import firestore_fn, options, scheduler_fn, https_fn
 from firebase_admin import initialize_app, firestore
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import io
 import csv
@@ -169,9 +169,10 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
 
             # Check if auto-log is requested
             if auto_log_initiated == 1:
+                now_iso = datetime.now(timezone.utc).isoformat()
                 initiated_log = {
                     "id": f"import_init_{int(datetime.now().timestamp())}",
-                    "createdAt": firestore.SERVER_TIMESTAMP,
+                    "createdAt": now_iso,
                     "quickLogType": "Initiated",
                     "notes": "Automatically logged upon import.",
                 }
