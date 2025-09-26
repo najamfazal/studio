@@ -68,18 +68,20 @@ export async function generateCourseRevenueReportAction() {
   }
 }
 
-export async function generateLogAnalysisReportAction() {
-  try {
-    const functions = getFunctions(app);
-    const generateReport = httpsCallable(functions, 'generateLogAnalysisReport');
-    await generateReport();
-    return { success: true };
-  } catch (error) {
-    console.error('Error triggering log analysis report generation:', error);
-    const httpsError = error as any;
-    const errorMessage = httpsError.message || 'An unknown error occurred.';
-    return { success: false, error: errorMessage };
-  }
-}
+// export async function generateLogAnalysisReportAction() {
+//   try {
+//     const functions = getFunctions(app);
+//     const generateReport = httpsCallable(functions, 'generateLogAnalysisReport');
+//     await generateReport();
+//     return { success: true };
+//   } catch (error) {
+//     console.error('Error triggering log analysis report generation:', error);
+//     const httpsError = error as any;
+//     const errorMessage = httpsError.message || 'An unknown error occurred.';
+//     return { success: false, error: errorMessage };
+//   }
+// }
+
+    
 
     

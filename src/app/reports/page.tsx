@@ -19,6 +19,7 @@ import { generateCourseRevenueReportAction, generateLogAnalysisReportAction } fr
 import { Logo } from '@/components/icons';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 export default function ReportsPage() {
     const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -58,32 +59,32 @@ export default function ReportsPage() {
         return () => unsubscribe();
     }, [crReportId, toast]);
 
-    useEffect(() => {
-        setIsLaLoading(true);
-        const highPotRef = doc(db, 'reports', 'high-potential-leads');
-        const lowPotRef = doc(db, 'reports', 'low-potential-leads');
+    // useEffect(() => {
+    //     setIsLaLoading(true);
+    //     const highPotRef = doc(db, 'reports', 'high-potential-leads');
+    //     const lowPotRef = doc(db, 'reports', 'low-potential-leads');
 
-        const unsubHigh = onSnapshot(highPotRef, (doc) => {
-            setHighPotentialReport(doc.exists() ? doc.data() as LogAnalysisReport : null);
-        }, (error) => {
-            console.error("Error fetching high potential report:", error);
-            toast({ variant: 'destructive', title: 'Failed to load High Potential report.' });
-        });
+    //     const unsubHigh = onSnapshot(highPotRef, (doc) => {
+    //         setHighPotentialReport(doc.exists() ? doc.data() as LogAnalysisReport : null);
+    //     }, (error) => {
+    //         console.error("Error fetching high potential report:", error);
+    //         toast({ variant: 'destructive', title: 'Failed to load High Potential report.' });
+    //     });
 
-        const unsubLow = onSnapshot(lowPotRef, (doc) => {
-            setLowPotentialReport(doc.exists() ? doc.data() as LogAnalysisReport : null);
-            setIsLaLoading(false); // Set loading to false after the second report is fetched
-        }, (error) => {
-            console.error("Error fetching low potential report:", error);
-            toast({ variant: 'destructive', title: 'Failed to load Low Potential report.' });
-             setIsLaLoading(false);
-        });
+    //     const unsubLow = onSnapshot(lowPotRef, (doc) => {
+    //         setLowPotentialReport(doc.exists() ? doc.data() as LogAnalysisReport : null);
+    //         setIsLaLoading(false); // Set loading to false after the second report is fetched
+    //     }, (error) => {
+    //         console.error("Error fetching low potential report:", error);
+    //         toast({ variant: 'destructive', title: 'Failed to load Low Potential report.' });
+    //          setIsLaLoading(false);
+    //     });
 
-        return () => {
-            unsubHigh();
-            unsubLow();
-        };
-    }, [toast]);
+    //     return () => {
+    //         unsubHigh();
+    //         unsubLow();
+    //     };
+    // }, [toast]);
 
 
     const handleGenerateCrReport = () => {
@@ -100,16 +101,16 @@ export default function ReportsPage() {
         });
     };
 
-    const handleGenerateLaReport = () => {
-        startGeneratingLaTransition(async () => {
-            const result = await generateLogAnalysisReportAction();
-            if (result.success) {
-                toast({ title: 'Log analysis started', description: 'The new report will appear shortly.' });
-            } else {
-                toast({ variant: 'destructive', title: 'Failed to start log analysis', description: result.error });
-            }
-        });
-    };
+    // const handleGenerateLaReport = () => {
+    //     startGeneratingLaTransition(async () => {
+    //         // const result = await generateLogAnalysisReportAction();
+    //         // if (result.success) {
+    //         //     toast({ title: 'Log analysis started', description: 'The new report will appear shortly.' });
+    //         // } else {
+    //         //     toast({ variant: 'destructive', title: 'Failed to start log analysis', description: result.error });
+    //         // }
+    //     });
+    // };
     
     const changeMonth = (offset: number) => {
         setSelectedMonth(current => offset > 0 ? addMonths(current, 1) : subMonths(current, 1));
@@ -133,9 +134,9 @@ export default function ReportsPage() {
             </header>
             <main className="flex-1 p-4 sm:p-6 md:p-8">
                 <Tabs defaultValue="course-revenue">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className={cn("grid w-full grid-cols-1")}>
                         <TabsTrigger value="course-revenue">Course Revenue</TabsTrigger>
-                        <TabsTrigger value="log-analysis">Log Analysis</TabsTrigger>
+                        {/* <TabsTrigger value="log-analysis">Log Analysis</TabsTrigger> */}
                     </TabsList>
 
                     <TabsContent value="course-revenue" className="mt-4">
@@ -194,7 +195,7 @@ export default function ReportsPage() {
                         </Card>
                     </TabsContent>
                     
-                    <TabsContent value="log-analysis" className="mt-4">
+                    {/* <TabsContent value="log-analysis" className="mt-4">
                         <Card>
                              <CardHeader className="flex flex-row items-center justify-between p-4">
                                 <div className="space-y-0.5">
@@ -224,7 +225,7 @@ export default function ReportsPage() {
                                 )}
                              </CardContent>
                         </Card>
-                    </TabsContent>
+                    </TabsContent> */}
                 </Tabs>
             </main>
             {isPromptModalOpen && <PromptEditorDialog isOpen={isPromptModalOpen} onClose={() => setIsPromptModalOpen(false)} />}
@@ -324,7 +325,7 @@ Then, provide a short, actionable 2-3 line recommendation in the 'actions' field
                 <DialogHeader>
                     <DialogTitle>Edit Log Analysis Prompt</DialogTitle>
                     <DialogDescription>
-                        Modify the prompt used by the AI to analyze leads. Use Handlebars syntax `{{field}}` to include lead data.
+                        Modify the prompt used by the AI to analyze leads. Use Handlebars syntax `{{'{{field}}'}}` to include lead data.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
@@ -352,4 +353,6 @@ Then, provide a short, actionable 2-3 line recommendation in the 'actions' field
         </Dialog>
     );
 }
+    
+
     
