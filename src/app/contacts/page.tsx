@@ -15,9 +15,10 @@ import {
   DocumentData,
   where,
 } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { Plus, Users, Loader2, Filter, Upload, Search } from "lucide-react";
 
-import { db } from "@/lib/firebase";
+import { app, db } from "@/lib/firebase";
 import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -66,7 +67,6 @@ type ProgressState = {
 
 export default function ContactsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [allLeads, setAllLeads] = useState<Lead[]>([]); // For client-side search
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] =
@@ -88,6 +88,9 @@ export default function ContactsPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Lead[]>([]);
+  
 
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
   const [mergeSourceLead, setMergeSourceLead] = useState<Lead | null>(null);
@@ -108,6 +111,8 @@ export default function ContactsPage() {
   }, []);
   
   const fetchLeads = useCallback(async (loadMore = false, filters: LeadStatus[] | null = null) => {
+    if (debouncedSearchTerm) return; // Don't fetch paginated leads if searching
+
     if (loadMore) {
       setIsLoadingMore(true);
     } else {
@@ -123,7 +128,6 @@ export default function ContactsPage() {
       const leadsRef = collection(db, "leads");
       const queryConstraints = [];
       
-      // If filters are active, use them. Otherwise, don't filter by status.
       if (currentFilters.length > 0) {
         queryConstraints.push(where("status", "in", currentFilters));
       }
@@ -148,12 +152,7 @@ export default function ContactsPage() {
       setLastVisible(newLastVisible);
       setHasMore(newLeads.length === PAGE_SIZE);
       
-      const combinedLeads = loadMore ? [...leads, ...newLeads] : newLeads;
-      setLeads(combinedLeads);
-      if (currentFilters.length === 0) {
-        // If no filters, we store all for searching
-        setAllLeads(prev => loadMore ? [...prev, ...newLeads] : newLeads);
-      }
+      setLeads(prev => loadMore ? [...prev, ...newLeads] : newLeads);
 
     } catch (error) {
       console.error("Error fetching contacts:", error);
@@ -166,31 +165,44 @@ export default function ContactsPage() {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, lastVisible, statusFilters, leads]);
+  }, [toast, lastVisible, statusFilters, debouncedSearchTerm]);
 
 
   useEffect(() => {
-    fetchSettings();
     fetchLeads(false, statusFilters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilters]); // Re-fetch when filters change
 
-  const filteredLeads = useMemo(() => {
-    if (!debouncedSearchTerm) {
-      return leads;
-    }
-    
-    // When filters are active, Firestore does the filtering. We search within the results.
-    const sourceData = statusFilters.length > 0 ? leads : allLeads;
 
-    return sourceData.filter(lead => {
-        const term = debouncedSearchTerm.toLowerCase();
-        const nameMatch = lead.name.toLowerCase().includes(term);
-        const phoneMatch = lead.phones?.some(p => p.number.replace(/\s+/g, '').includes(term));
-        return nameMatch || phoneMatch;
-    });
+  useEffect(() => {
+    const search = async () => {
+        if (debouncedSearchTerm) {
+            setIsSearching(true);
+            try {
+                const functions = getFunctions(app);
+                const searchLeads = httpsCallable(functions, 'searchLeads');
+                const result = await searchLeads({ term: debouncedSearchTerm });
+                setSearchResults(result.data as Lead[]);
+            } catch (error) {
+                console.error("Search failed:", error);
+                toast({ variant: 'destructive', title: "Search failed" });
+                setSearchResults([]);
+            } finally {
+                setIsSearching(false);
+            }
+        } else {
+            setSearchResults([]);
+            fetchLeads(false, statusFilters); // Refresh main list when search is cleared
+        }
+    };
+    search();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm, statusFilters]);
 
-  }, [debouncedSearchTerm, leads, allLeads, statusFilters.length]);
+  const displayedLeads = useMemo(() => {
+    return debouncedSearchTerm ? searchResults : leads;
+  }, [debouncedSearchTerm, searchResults, leads]);
+
 
   const handleEdit = (lead: Lead) => {
     setLeadToEdit(lead);
@@ -207,7 +219,7 @@ export default function ContactsPage() {
     try {
       await deleteDoc(doc(db, "leads", leadToDelete));
       setLeads((prev) => prev.filter((lead) => lead.id !== leadToDelete));
-      setAllLeads((prev) => prev.filter((lead) => lead.id !== leadToDelete));
+      setSearchResults((prev) => prev.filter((lead) => lead.id !== leadToDelete));
       toast({
         title: "Contact Deleted",
         description: "The contact has been successfully removed.",
@@ -227,54 +239,74 @@ export default function ContactsPage() {
   const handleDialogSave = async (values: any) => {
     setIsSaving(true);
     try {
-      const { course, ...leadData } = values;
-      const dataToSave: Partial<Lead> = {
-        ...leadData,
-        commitmentSnapshot: {
-          ...(leadToEdit?.commitmentSnapshot || {}),
-          ...(course ? { course } : {}),
-        },
-      };
+        const { course, ...leadData } = values;
 
-      if (leadToEdit) {
-        // Update existing lead
-        const leadRef = doc(db, "leads", leadToEdit.id);
-        await updateDoc(leadRef, dataToSave);
-        const updatedLead = { ...leadToEdit, ...dataToSave } as Lead;
-        setLeads((prev) =>
-          prev.map((l) => (l.id === leadToEdit.id ? updatedLead : l))
-        );
-        setAllLeads((prev) =>
-          prev.map((l) => (l.id === leadToEdit.id ? updatedLead : l))
-        );
-        toast({ title: "Contact Updated" });
-      } else {
-        // Add new lead - note that onLeadCreate will not fire if status is set here.
-        const docRef = await addDoc(collection(db, "leads"), {
-          ...dataToSave,
-          createdAt: new Date().toISOString(),
-          traits: [],
-          insights: [],
-          interactions: [],
+        // Generate keywords for searching
+        const keywords = new Set<string>();
+        const name = leadData.name.toLowerCase();
+        for (let i = 0; i < name.length; i++) {
+            for (let j = i + 1; j <= name.length; j++) {
+                keywords.add(name.substring(i, j));
+            }
+        }
+        (leadData.phones || []).forEach((phone: {number: string}) => {
+            if (phone.number) {
+                const normalizedPhone = phone.number.replace(/\D/g, '');
+                for (let i = 0; i < normalizedPhone.length; i++) {
+                    for (let j = i + 1; j <= normalizedPhone.length; j++) {
+                        keywords.add(normalizedPhone.substring(i, j));
+                    }
+                }
+            }
         });
-        const newLead = { ...dataToSave, id: docRef.id, status: 'Active' }; // Assume Active for UI
-        setLeads((prev) => [{ ...newLead } as Lead, ...prev]);
-        setAllLeads((prev) => [{ ...newLead } as Lead, ...prev]);
-        toast({ title: "Contact Added" });
-      }
-      setIsLeadDialogOpen(false);
+        const searchKeywords = Object.fromEntries(Array.from(keywords).map(k => [k, true]));
+
+        const dataToSave: Partial<Lead> = {
+            ...leadData,
+            commitmentSnapshot: {
+                ...(leadToEdit?.commitmentSnapshot || {}),
+                ...(course ? { course } : {}),
+            },
+            search_keywords: searchKeywords,
+        };
+
+        if (leadToEdit) {
+            const leadRef = doc(db, "leads", leadToEdit.id);
+            await updateDoc(leadRef, dataToSave);
+            toast({ title: "Contact Updated" });
+        } else {
+            const docRef = await addDoc(collection(db, "leads"), {
+                ...dataToSave,
+                createdAt: new Date().toISOString(),
+                traits: [],
+                insights: [],
+                interactions: [],
+            });
+            toast({ title: "Contact Added" });
+        }
+        setIsLeadDialogOpen(false);
+        // Refresh the list after save
+        if(debouncedSearchTerm) {
+            const functions = getFunctions(app);
+            const searchLeads = httpsCallable(functions, 'searchLeads');
+            const result = await searchLeads({ term: debouncedSearchTerm });
+            setSearchResults(result.data as Lead[]);
+        } else {
+            fetchLeads(false, statusFilters);
+        }
+
     } catch (error) {
-      console.error("Error saving contact:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to save contact details.",
-      });
+        console.error("Error saving contact:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to save contact details.",
+        });
     } finally {
-      setIsSaving(false);
-      setLeadToEdit(null);
+        setIsSaving(false);
+        setLeadToEdit(null);
     }
-  };
+};
   
   const handleFilterChange = (status: LeadStatus) => {
     setStatusFilters(prevFilters =>
@@ -290,9 +322,8 @@ export default function ContactsPage() {
       const result = await mergeLeadsAction({ primaryLeadId, secondaryLeadId });
       if (result.success) {
         toast({ title: "Merge successful!" });
-        // Refresh leads list
         setLeads(prev => prev.filter(l => l.id !== secondaryLeadId));
-        setAllLeads(prev => prev.filter(l => l.id !== secondaryLeadId));
+        setSearchResults(prev => prev.filter(l => l.id !== secondaryLeadId));
         setIsMergeDialogOpen(false);
       } else {
         throw new Error(result.error);
@@ -309,7 +340,7 @@ export default function ContactsPage() {
   };
 
 
-  if (isLoading && leads.length === 0) {
+  if (isLoading && leads.length === 0 && !debouncedSearchTerm) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Logo className="h-12 w-12 animate-spin text-primary" />
@@ -367,6 +398,7 @@ export default function ContactsPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
         </div>
          {progress.active && (
           <div className="mt-4 space-y-1">
@@ -376,10 +408,11 @@ export default function ContactsPage() {
         )}
       </header>
       <main className="flex-1 p-4 sm:p-6 md:p-8">
-        {isLoading && <div className="flex justify-center"><Loader2 className="animate-spin text-primary"/></div>}
-        {!isLoading && filteredLeads.length > 0 ? (
+        {(isLoading || isSearching) && <div className="flex justify-center"><Loader2 className="animate-spin text-primary"/></div>}
+        
+        {!isSearching && !isLoading && displayedLeads.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredLeads.map((lead) => (
+            {displayedLeads.map((lead) => (
               <ContactCard
                 key={lead.id}
                 lead={lead}
@@ -390,7 +423,7 @@ export default function ContactsPage() {
             ))}
           </div>
         ) : (
-          !isLoading && <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
+          !isSearching && !isLoading && <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <Users className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
               No contacts found
@@ -461,3 +494,5 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+    

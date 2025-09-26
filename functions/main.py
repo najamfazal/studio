@@ -75,6 +75,27 @@ def normalize_phone(phone_number: str) -> str:
         return ""
     return re.sub(r'\D', '', str(phone_number))
 
+def generate_search_keywords(name, phones):
+    """Generates a map of n-grams for a lead's name and phones."""
+    keywords = set()
+    
+    # Add name n-grams
+    if name:
+        name_lower = name.lower()
+        for i in range(len(name_lower)):
+            for j in range(i + 1, len(name_lower) + 1):
+                keywords.add(name_lower[i:j])
+    
+    # Add phone n-grams
+    for phone in phones:
+        if phone.get('number'):
+            # The number is already normalized at this point
+            num_str = phone['number']
+            for i in range(len(num_str)):
+                for j in range(i + 1, len(num_str) + 1):
+                    keywords.add(num_str[i:j])
+    
+    return {kw: True for kw in keywords}
 
 @https_fn.on_call(region="us-central1")
 def importContactsJson(req: https_fn.CallableRequest) -> dict:
@@ -140,6 +161,8 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 if phone_generic:
                     phones.append({"number": phone_generic, "type": "both"})
 
+            search_keywords = generate_search_keywords(name, phones)
+            
             lead_data = {
                 "name": name, "email": email, "phones": phones,
                 "relationship": default_relationship,
@@ -150,6 +173,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "status": "Active", "afc_step": 0, "hasEngaged": False,
                 "onFollowList": False, "traits": [], "insights": [], "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
+                "search_keywords": search_keywords,
             }
 
             if auto_log_initiated == 1:
@@ -199,6 +223,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 # Remove server timestamp for JSON serialization in preview
                 preview_lead_data = lead_data.copy()
                 preview_lead_data.pop("createdAt", None)
+                preview_data.pop("search_keywords", None) # Don't show keywords in preview
                 preview_data.append(preview_lead_data)
 
             if not is_dry_run and batch_count >= BATCH_LIMIT:
@@ -907,10 +932,39 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
 #             code=https_fn.FunctionsErrorCode.INTERNAL,
 #             message=f"An internal error occurred during report generation: {e}",
 #         )
-    
 
+@https_fn.on_call(region="us-central1")
+def searchLeads(req: https_fn.CallableRequest) -> list:
+    """
+    Searches for leads based on a term using the search_keywords map.
+    """
+    term = req.data.get("term", "").lower().strip()
+    if not term:
+        return []
 
+    try:
+        leads_ref = db.collection("leads")
+        # Firestore field paths cannot contain certain characters, but our term should be clean.
+        # This query is highly efficient as it checks for key existence in a map.
+        query = leads_ref.where(f"search_keywords.{term}", "==", True).limit(20)
+        
+        results = []
+        for doc in query.stream():
+            doc_data = doc.to_dict()
+            # Don't need to send the giant keywords map to the client
+            doc_data.pop("search_keywords", None)
+            doc_data["id"] = doc.id
+            results.append(doc_data)
+            
+        return results
+    except Exception as e:
+        print(f"Error during lead search: {e}")
+        # Don't raise HttpsError to client, just return empty list on failure
+        return []
 
       
+
+    
+
 
     

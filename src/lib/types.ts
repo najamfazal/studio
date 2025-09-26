@@ -107,6 +107,7 @@ export type Lead = {
   insights: string[];
   commitmentSnapshot: CommitmentSnapshot;
   interactions?: Interaction[];
+  search_keywords?: { [key: string]: boolean };
   
   // Temporary state for event logging
   eventDetails?: InteractionEventDetails;
