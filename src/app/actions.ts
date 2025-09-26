@@ -69,6 +69,21 @@ export async function generateCourseRevenueReportAction() {
   }
 }
 
+export async function reindexLeadsAction() {
+    try {
+        const functions = getFunctions(app);
+        const reindexLeads = httpsCallable(functions, 'reindexLeads');
+        const result = await reindexLeads();
+        return { success: true, ...(result.data as any) };
+    } catch (error) {
+        console.error('Error re-indexing leads:', error);
+        const httpsError = error as any;
+        const errorMessage = httpsError.message || 'An unknown error occurred during re-indexing.';
+        return { success: false, error: errorMessage };
+    }
+}
+
+
 // export async function generateLogAnalysisReportAction() {
 //   try {
 //     const functions = getFunctions(app);

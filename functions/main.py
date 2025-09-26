@@ -828,7 +828,7 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
 #     print("Starting Log Analysis report generation...")
 #     try:
 #         if not GEMINI_API_KEY:
-#             raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+#             raise https_fn.HttpsError(code=httpsfn.FunctionsErrorCode.FAILED_PRECONDITION,
 #                                       message="Gemini API key is not configured.")
                                       
 #         # 1. Fetch active leads in early AFC stages
@@ -962,6 +962,51 @@ def searchLeads(req: https_fn.CallableRequest) -> list:
         # Don't raise HttpsError to client, just return empty list on failure
         return []
 
+
+@https_fn.on_call(region="us-central1")
+def reindexLeads(req: https_fn.CallableRequest) -> dict:
+    """
+    Goes through all leads and generates the search_keywords map for them.
+    This is a one-time utility function to backfill search data.
+    """
+    print("Starting lead re-indexing for search...")
+    try:
+        leads_ref = db.collection("leads")
+        all_leads_stream = leads_ref.stream()
+        
+        batch = db.batch()
+        processed_count = 0
+        BATCH_LIMIT = 499
+
+        for lead_doc in all_leads_stream:
+            lead_data = lead_doc.to_dict()
+            name = lead_data.get("name", "")
+            phones = lead_data.get("phones", [])
+            
+            # Generate keywords only if they don't exist, to be safe
+            if "search_keywords" not in lead_data:
+                search_keywords = generate_search_keywords(name, phones)
+                batch.update(lead_doc.reference, {"search_keywords": search_keywords})
+                processed_count += 1
+                
+                if processed_count % BATCH_LIMIT == 0:
+                    batch.commit()
+                    batch = db.batch()
+                    print(f"Committed batch of {BATCH_LIMIT} updates.")
+        
+        # Commit any remaining updates
+        if processed_count % BATCH_LIMIT != 0:
+            batch.commit()
+
+        print(f"Re-indexing complete. Processed {processed_count} leads.")
+        return {"message": f"Re-indexing complete. Processed {processed_count} leads.", "processed": processed_count}
+
+    except Exception as e:
+        print(f"Error during lead re-indexing: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during re-indexing: {e}",
+        )
       
 
     

@@ -16,6 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { reindexLeadsAction } from '@/app/actions';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots';
@@ -35,6 +36,8 @@ export default function SettingsPage() {
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
 
     const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
+    const [isReindexing, setIsReindexing] = useState(false);
+
 
     const fetchSettings = useCallback(async () => {
         setIsLoading(true);
@@ -240,6 +243,24 @@ export default function SettingsPage() {
 
         handleSave(updatePayload, newSettings);
     };
+    
+    const handleReindex = async () => {
+        setIsReindexing(true);
+        toast({ title: 'Re-indexing started...', description: 'This may take a few moments.' });
+        try {
+            const result = await reindexLeadsAction();
+            if (result.success) {
+                toast({ title: 'Re-indexing Complete!', description: `${result.processed} contacts are now searchable.` });
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Re-indexing Failed', description: error instanceof Error ? error.message : "An unknown error occurred." });
+        } finally {
+            setIsReindexing(false);
+        }
+    };
+
 
     const renderChipList = (
         field: AppSettingsField | `feedbackChips.${FeedbackCategory}`,
@@ -308,6 +329,23 @@ export default function SettingsPage() {
             </header>
             <main className="flex-1 p-4 sm:p-6 md:p-8">
                 <div className="grid gap-6 max-w-4xl mx-auto">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Data Management</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                           <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div>
+                                    <h3 className="font-semibold">Search Indexing</h3>
+                                    <p className="text-sm text-muted-foreground">Make all existing contacts searchable. Run this after a large manual import.</p>
+                                </div>
+                                <Button onClick={handleReindex} disabled={isReindexing}>
+                                    {isReindexing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Re-index Contacts
+                                </Button>
+                           </div>
+                        </CardContent>
+                    </Card>
                     <Card>
                         <CardHeader>
                             <CardTitle>Relationship Types</CardTitle>
