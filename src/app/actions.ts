@@ -6,8 +6,8 @@ import {collection, getDocs, writeBatch, query, where} from 'firebase/firestore'
 import { getFunctions, httpsCallable} from 'firebase/functions';
 
 
-export async function importContactsAction(formData: { jsonData: string; isNew: boolean }) {
-  const { jsonData, isNew } = formData;
+export async function importContactsAction(formData: { jsonData: string; isNew: boolean; dryRun?: boolean }) {
+  const { jsonData, isNew, dryRun = false } = formData;
   
   if (!jsonData) {
     return { success: false, error: 'No JSON data provided.' };
@@ -20,6 +20,7 @@ export async function importContactsAction(formData: { jsonData: string; isNew: 
     const result = await importContactsJson({
         jsonData,
         isNew,
+        dryRun,
     });
     
     // The `result.data` from a callable function contains the object returned by the Python function.
@@ -85,3 +86,4 @@ export async function generateCourseRevenueReportAction() {
     
 
     
+

@@ -45,7 +45,7 @@ import {
 import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
-import { importContactsAction, mergeLeadsAction } from "@/app/actions";
+import { mergeLeadsAction } from "@/app/actions";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -283,57 +283,6 @@ export default function ContactsPage() {
         : [...prevFilters, status]
     );
   };
-
-  const handleImportSave = (data: { jsonData: string; isNew: boolean }) => {
-    setIsImportDialogOpen(false);
-    
-    if (!data.jsonData.trim()) {
-        toast({ variant: "destructive", title: "Empty JSON", description: "The provided JSON is empty."});
-        return;
-    }
-
-    let contacts;
-    try {
-        contacts = JSON.parse(data.jsonData);
-        if (!Array.isArray(contacts)) throw new Error();
-    } catch(e) {
-        toast({ variant: "destructive", title: "Invalid JSON", description: "The text you pasted is not valid JSON."});
-        return;
-    }
-    
-    const totalContacts = contacts.length;
-    if (totalContacts === 0) {
-        toast({ variant: "destructive", title: "No contacts found", description: "The JSON array is empty."});
-        return;
-    }
-
-    setProgress({ active: true, value: 0, total: totalContacts, message: "Starting import..." });
-    
-    startImportTransition(async () => {
-        const result = await importContactsAction({ jsonData: data.jsonData, isNew: data.isNew });
-
-        if (result.success) {
-            const { created = 0, updated = 0, skipped = 0 } = result;
-            setProgress({ active: true, value: created + updated + skipped, total: totalContacts, message: "Import complete!" });
-            toast({
-                title: "Import Successful",
-                description: `${created} created, ${updated} updated, ${skipped} skipped.`,
-            });
-            fetchLeads(false, statusFilters);
-        } else {
-            setProgress({ active: false, value: 0, total: 0, message: "" });
-            toast({
-                variant: "destructive",
-                title: "Import Failed",
-                description: result.error || "An unknown error occurred during import.",
-            });
-        }
-        
-        setTimeout(() => {
-            setProgress(prev => ({ ...prev, active: false }));
-        }, 4000);
-    });
-  }
   
   const handleMergeSave = async (primaryLeadId: string, secondaryLeadId: string) => {
     setIsMerging(true);
@@ -497,8 +446,7 @@ export default function ContactsPage() {
       <ImportDialog
         isOpen={isImportDialogOpen}
         setIsOpen={setIsImportDialogOpen}
-        onSave={handleImportSave}
-        isImporting={isImporting}
+        onSuccess={() => fetchLeads(false, statusFilters)}
       />
       
       {mergeSourceLead && (

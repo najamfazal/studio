@@ -79,44 +79,38 @@ def normalize_phone(phone_number: str) -> str:
 @https_fn.on_call(region="us-central1")
 def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
-    An onCall function to import contacts from a JSON payload.
-    It now uses phone number normalization for better duplicate detection.
+    Imports contacts from JSON. Supports a dry run mode for previewing changes.
     """
     try:
         if not req.data:
-             raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message="Request payload is missing."
-            )
+            raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message="Request payload is missing.")
 
         json_data_string = req.data.get('jsonData')
         is_new_mode = req.data.get('isNew', True)
+        is_dry_run = req.data.get('dryRun', False)
         default_relationship = "Lead"
 
         if not json_data_string:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message="No JSON data provided in payload."
-            )
+            raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message="No JSON data provided.")
         
         try:
             contacts = json.loads(json_data_string)
             if not isinstance(contacts, list):
                 raise ValueError("JSON data must be an array of contact objects.")
         except (json.JSONDecodeError, ValueError) as e:
-             raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message=f"Invalid JSON format: {e}"
-            )
+            raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message=f"Invalid JSON format: {e}")
             
         leads_ref = db.collection("leads")
         
         created_count = 0
         updated_count = 0
         skipped_count = 0
-        batch = db.batch()
-        batch_count = 0
-        BATCH_LIMIT = 499
+        preview_data = []
+
+        if not is_dry_run:
+            batch = db.batch()
+            batch_count = 0
+            BATCH_LIMIT = 499
 
         for row in contacts:
             name = row.get("name", row.get("Name", "")).strip()
@@ -128,9 +122,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 skipped_count += 1
                 continue
             
-            # --- Prepare Phone Data ---
             phones = []
-            
             phone1_num = normalize_phone(row.get("Phone1", row.get("phone1")))
             if phone1_num:
                 phone1_type_raw = str(row.get("Phone1 Type", row.get("phone1_type", "both"))).strip().lower()
@@ -149,25 +141,17 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     phones.append({"number": phone_generic, "type": "both"})
 
             lead_data = {
-                "name": name,
-                "email": email,
-                "phones": phones,
+                "name": name, "email": email, "phones": phones,
                 "relationship": default_relationship,
                 "commitmentSnapshot": {
                     "course": str(row.get("courseName", row.get("Course", ""))).strip() or "",
                     "keyNotes": notes
                 },
-                "status": "Active",
-                "afc_step": 0,
-                "hasEngaged": False,
-                "onFollowList": False,
-                "traits": [],
-                "insights": [],
-                "interactions": [],
+                "status": "Active", "afc_step": 0, "hasEngaged": False,
+                "onFollowList": False, "traits": [], "insights": [], "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
             }
 
-            # Check if auto-log is requested
             if auto_log_initiated == 1:
                 now_iso = datetime.now(timezone.utc).isoformat()
                 initiated_log = {
@@ -177,68 +161,74 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     "notes": "Automatically logged upon import.",
                 }
                 lead_data["interactions"].append(initiated_log)
+                lead_data["autoLogInitiated"] = True # For preview
 
-            
-            # --- DB Operation: Find existing doc by email or phone ---
             existing_doc_ref = None
             if email:
-                # Primary check: email
                 existing_docs_query = leads_ref.where("email", "==", email).limit(1).stream()
                 for doc in existing_docs_query:
                     existing_doc_ref = doc.reference
             
             if not existing_doc_ref and phones:
-                # Fallback check: phone number
                 first_phone_number = phones[0]['number']
-                # This query checks if the number exists inside the 'phones' array of maps
-                existing_docs_query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": "both"}).limit(1).stream()
-                for doc in existing_docs_query:
-                    existing_doc_ref = doc.reference
-                if not existing_doc_ref:
-                    existing_docs_query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": "calling"}).limit(1).stream()
-                    for doc in existing_docs_query:
+                for phone_type in ["both", "calling", "chat"]:
+                    query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": phone_type}).limit(1)
+                    existing_docs = query.stream()
+                    for doc in existing_docs:
                         existing_doc_ref = doc.reference
-                if not existing_doc_ref:
-                    existing_docs_query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": "chat"}).limit(1).stream()
-                    for doc in existing_docs_query:
-                        existing_doc_ref = doc.reference
+                        break
+                    if existing_doc_ref:
+                        break
 
             if existing_doc_ref:
                 if is_new_mode:
                     skipped_count += 1
                 else:
-                    batch.update(existing_doc_ref, lead_data)
                     updated_count += 1
-                    batch_count += 1
+                    if not is_dry_run:
+                        batch.update(existing_doc_ref, lead_data)
+                        batch_count += 1
             else:
-                new_doc_ref = leads_ref.document()
-                batch.set(new_doc_ref, lead_data)
                 created_count += 1
-                batch_count += 1
+                if not is_dry_run:
+                    new_doc_ref = leads_ref.document()
+                    batch.set(new_doc_ref, lead_data)
+                    batch_count += 1
+            
+            if is_dry_run and len(preview_data) < 3:
+                # Remove server timestamp for JSON serialization in preview
+                preview_lead_data = lead_data.copy()
+                preview_lead_data.pop("createdAt", None)
+                preview_data.append(preview_lead_data)
 
-            if batch_count >= BATCH_LIMIT:
+            if not is_dry_run and batch_count >= BATCH_LIMIT:
                 batch.commit()
                 batch = db.batch()
                 batch_count = 0
         
-        if batch_count > 0:
-            batch.commit()
-        
-        return {
-            "message": "Import completed successfully.",
-            "created": created_count,
-            "updated": updated_count,
-            "skipped": skipped_count
-        }
+        if is_dry_run:
+            return {
+                "message": "Dry run completed successfully.",
+                "created": created_count,
+                "updated": updated_count,
+                "skipped": skipped_count,
+                "previewData": preview_data
+            }
+        else:
+            if batch_count > 0:
+                batch.commit()
+            return {
+                "message": "Import completed successfully.",
+                "created": created_count,
+                "updated": updated_count,
+                "skipped": skipped_count
+            }
 
     except https_fn.HttpsError as e:
         raise e
     except Exception as e:
         print(f"Error during JSON import: {e}")
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"An internal error occurred: {e}"
-        )
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message=f"An internal error occurred: {e}")
 
 
 @firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1")
