@@ -268,9 +268,34 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
             </div>
             
             {/* Task Context */}
-            <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <p className="text-xs font-semibold text-primary/80">Current Task: <span className="font-medium text-primary">{task.description}</span></p>
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
+                <p className="text-xs font-semibold text-primary/80">
+                    Task: <span className="font-medium text-sm text-primary">{task.description}</span>
+                </p>
             </div>
+
+            {/* Commitment Snapshot */}
+            <Card>
+                <CardHeader className="p-2">
+                    <CardTitle className="text-xs font-semibold text-muted-foreground">Commitment Snapshot</CardTitle>
+                </CardHeader>
+                <CardContent className="p-2 pt-0 text-sm space-y-1">
+                    <div className="flex justify-between">
+                        <span className="font-medium">Course:</span>
+                        <span>{currentLead.commitmentSnapshot?.course || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="font-medium">Price:</span>
+                        <span>{currentLead.commitmentSnapshot?.price || 'N/A'}</span>
+                    </div>
+                    {currentLead.commitmentSnapshot?.keyNotes && (
+                         <div className="pt-1">
+                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{currentLead.commitmentSnapshot.keyNotes}</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
 
             {/* Logging Tools */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -280,13 +305,13 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
                         <div key={quickLogStep}>
                             {quickLogStep === 'initial' && (
                                 <>
-                                <CardHeader className="flex-row items-center justify-between p-3">
-                                    <CardTitle className="text-base font-medium">Quick Log</CardTitle>
-                                    <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isQuickLogSubmitDisabled()} className="h-8 w-8">
-                                        {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
+                                <CardHeader className="flex-row items-center justify-between p-2">
+                                    <CardTitle className="text-sm font-medium">Quick Log</CardTitle>
+                                    <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isQuickLogSubmitDisabled()} className="h-7 w-7">
+                                        {submissionState === 'submitting' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
                                     </Button>
                                 </CardHeader>
-                                <CardContent className="flex flex-wrap gap-2 p-3 pt-0">
+                                <CardContent className="flex flex-wrap gap-2 p-2 pt-0">
                                     {quickLogOptions.map(opt => (
                                     <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="sm" onClick={() => handleQuickLogChipClick(opt.value)} disabled={submissionState !== 'idle'}>{opt.label}</Button>
                                     ))}
@@ -295,18 +320,18 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
                             )}
                             {quickLogStep === 'withdrawn' && (
                                 <>
-                                <CardHeader className="p-3">
+                                <CardHeader className="p-2">
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
-                                            <CardTitle className="text-base font-medium">Select Reason</CardTitle>
+                                        <div className="flex items-center gap-1">
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft className="h-4 w-4"/></Button>
+                                            <CardTitle className="text-sm font-medium">Select Reason</CardTitle>
                                         </div>
-                                        <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isQuickLogSubmitDisabled()} className="h-8 w-8">
-                                            {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
+                                        <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isQuickLogSubmitDisabled()} className="h-7 w-7">
+                                            {submissionState === 'submitting' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
                                         </Button>
                                     </div>
                                 </CardHeader>
-                                <CardContent className="p-3 pt-0">
+                                <CardContent className="p-2 pt-0">
                                     <div className="flex flex-wrap gap-2">
                                     {(appSettings.withdrawalReasons || []).map(reason => (
                                         <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
@@ -320,13 +345,13 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
 
                      {/* Log Outcome */}
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between p-3">
-                            <CardTitle className="text-base font-medium">Log Outcome</CardTitle>
-                            <Button onClick={handleLogOutcome} disabled={isLoggingOutcome || !selectedOutcome} size="icon" variant="ghost" className="h-8 w-8">
-                                {isLoggingOutcome ? <Loader2 className="animate-spin" /> : <Send />}
+                        <CardHeader className="flex flex-row items-center justify-between p-2">
+                            <CardTitle className="text-sm font-medium">Log Outcome</CardTitle>
+                            <Button onClick={handleLogOutcome} disabled={isLoggingOutcome || !selectedOutcome} size="icon" variant="ghost" className="h-7 w-7">
+                                {isLoggingOutcome ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
                             </Button>
                         </CardHeader>
-                        <CardContent className="space-y-3 p-3 pt-0">
+                        <CardContent className="space-y-3 p-2 pt-0">
                             <div className="flex items-center justify-center gap-2">
                                 {(['Info', 'Later', 'Event Scheduled'] as OutcomeType[]).map(outcome => (
                                     <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} size="sm" onClick={() => setSelectedOutcome(o => o === outcome ? null : outcome)}>
@@ -355,17 +380,17 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
                  <div className="space-y-4">
                      {/* Log Feedback */}
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between p-3">
-                            <CardTitle className="text-base font-medium">Log Feedback</CardTitle>
-                            <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-8 w-8">
-                            {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
+                        <CardHeader className="flex flex-row items-center justify-between p-2">
+                            <CardTitle className="text-sm font-medium">Log Feedback</CardTitle>
+                            <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-7 w-7">
+                            {isLoggingFeedback ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
                             </Button>
                         </CardHeader>
-                        <CardContent className="space-y-3 p-3 pt-0">
+                        <CardContent className="space-y-3 p-2 pt-0">
                             <div className="grid grid-cols-3 gap-2 text-center">
                             {(['content', 'schedule', 'price'] as (keyof InteractionFeedback)[]).map(category => (
                                 <div key={category}>
-                                <h4 className="font-semibold text-sm capitalize mb-1">{category}</h4>
+                                <h4 className="font-semibold text-xs capitalize mb-1">{category}</h4>
                                 <div className="flex items-center justify-center gap-2">
                                     <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn("h-8 w-8", feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
                                     <ThumbsUp className="h-4 w-4 text-green-600" />
@@ -393,10 +418,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
 
                     {/* Log History */}
                      <Card>
-                        <CardHeader className="p-3">
-                            <CardTitle className="text-base font-medium">Log History</CardTitle>
+                        <CardHeader className="p-2">
+                            <CardTitle className="text-sm font-medium">Log History</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-3 pt-0 space-y-2 max-h-60 overflow-y-auto">
+                        <CardContent className="p-2 pt-0 space-y-2 max-h-60 overflow-y-auto">
                         <TooltipProvider>
                             {sortedInteractions.length > 0 ? (
                                 sortedInteractions.map(interaction => {
@@ -443,3 +468,5 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
         </div>
     );
 }
+
+    
