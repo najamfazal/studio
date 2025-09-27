@@ -10,6 +10,7 @@ import { Sidebar, SidebarProvider } from '@/components/ui/sidebar';
 export const metadata: Metadata = {
   title: 'LeadTrack Solo',
   description: 'A simple, personal CRM for managing contacts and tasks.',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -23,6 +24,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet" />
+        <meta name="theme-color" content="#5B21B6" />
       </head>
       <body className="font-body antialiased h-full">
         <SidebarProvider>
@@ -36,5 +38,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-    

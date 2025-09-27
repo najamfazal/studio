@@ -1,0 +1,21 @@
+{
+  "name": "LeadTrack Solo",
+  "short_name": "LeadTrack",
+  "description": "A simple, personal CRM for managing contacts and tasks.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E9E3F8",
+  "theme_color": "#6D28D9",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
