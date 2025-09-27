@@ -223,7 +223,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 # Remove server timestamp for JSON serialization in preview
                 preview_lead_data = lead_data.copy()
                 preview_lead_data.pop("createdAt", None)
-                preview_data.pop("search_keywords", None) # Don't show keywords in preview
+                preview_lead_data.pop("search_keywords", None) # Don't show keywords in preview
                 preview_data.append(preview_lead_data)
 
             if not is_dry_run and batch_count >= BATCH_LIMIT:
@@ -1013,3 +1013,4 @@ def reindexLeads(req: https_fn.CallableRequest) -> dict:
 
 
     
+
