@@ -94,15 +94,17 @@ export default function FocusPage() {
                     toast({ variant: 'destructive', title: 'Contact not found for this task.' });
                 }
                 setIsLoading(false);
-            } else if (!currentTask?.leadId) {
-                setIsLoading(false);
+            } else {
+                 setIsLoading(false);
             }
         };
 
         if (taskQueue.length > 0) {
             fetchLeadForCurrentTask();
+        } else if (queueIds.length === 0) {
+            setIsLoading(false);
         }
-    }, [currentTask, leadsCache, taskQueue.length, toast]);
+    }, [currentTask, leadsCache, taskQueue.length, toast, queueIds.length]);
 
     const navigateToTask = (index: number) => {
         if (index >= 0 && index < queueIds.length) {
@@ -147,14 +149,14 @@ export default function FocusPage() {
 
     return (
         <div className="flex flex-col h-screen bg-background">
-            <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20">
+            <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 h-14">
                 <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                         <Link href="/"><ArrowLeft/></Link>
                     </Button>
-                    <div>
-                        <h1 className="text-lg font-bold tracking-tight">Focus Mode</h1>
-                        <p className="text-xs text-muted-foreground">Task {currentIndex + 1} of {queueIds.length}</p>
+                    <div className="flex items-baseline gap-2">
+                        <h1 className="text-base font-bold tracking-tight">Focus Mode</h1>
+                        <p className="text-xs text-muted-foreground">{currentIndex + 1} / {queueIds.length}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
