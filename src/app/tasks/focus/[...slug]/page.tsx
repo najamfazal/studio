@@ -3,8 +3,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo } from 'lucide-react';
+import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
@@ -25,19 +25,21 @@ export default function FocusPage() {
     const isMobile = useIsMobile();
     
     const slug = params.slug as string[];
-    const currentTaskId = slug[0];
-    
+    const initialTaskId = slug[0];
+    const queueIds = useMemo(() => searchParams.get('queue')?.split(',') || [], [searchParams]);
+
     const [taskQueue, setTaskQueue] = useState<Task[]>([]);
-    const [currentLead, setCurrentLead] = useState<Lead | null>(null);
+    const [leadsCache, setLeadsCache] = useState<Record<string, Lead>>({});
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isQueueVisible, setIsQueueVisible] = useState(true);
 
-    const queueIds = useMemo(() => searchParams.get('queue')?.split(',') || [], [searchParams]);
+    const [currentIndex, setCurrentIndex] = useState(() => queueIds.findIndex(id => id === initialTaskId));
 
-    const currentIndex = useMemo(() => queueIds.findIndex(id => id === currentTaskId), [queueIds, currentTaskId]);
-    const currentTask = useMemo(() => taskQueue[currentIndex], [taskQueue, currentIndex]);
+    const currentTaskId = useMemo(() => queueIds[currentIndex], [queueIds, currentIndex]);
+    const currentTask = useMemo(() => taskQueue.find(t => t.id === currentTaskId), [taskQueue, currentTaskId]);
+    const currentLead = useMemo(() => currentTask?.leadId ? leadsCache[currentTask.leadId] : null, [leadsCache, currentTask]);
 
     const fetchTaskQueue = useCallback(async () => {
         if (queueIds.length === 0) {
@@ -58,7 +60,6 @@ export default function FocusPage() {
                 }
             }
             
-            // Firestore `in` query doesn't guarantee order, so we re-order based on the original queueIds
             const orderedTasks = queueIds.map(id => tasksData.find(t => t.id === id)).filter(Boolean) as Task[];
             setTaskQueue(orderedTasks);
 
@@ -69,11 +70,13 @@ export default function FocusPage() {
     }, [queueIds, toast]);
 
     useEffect(() => {
+        setIsLoading(true);
         fetchTaskQueue();
         
         const settingsRef = doc(db, 'settings', 'appConfig');
         const unsubSettings = onSnapshot(settingsRef, (doc) => {
             if (doc.exists()) setAppSettings(doc.data() as AppSettings);
+            setIsLoading(false);
         });
 
         return () => unsubSettings();
@@ -81,45 +84,45 @@ export default function FocusPage() {
 
 
     useEffect(() => {
-        if (!currentTask || !currentTask.leadId) {
-            if(taskQueue.length > 0) setIsLoading(false);
-            return;
-        }
-        
-        setIsLoading(true);
-        const leadRef = doc(db, 'leads', currentTask.leadId);
-        
-        const unsubscribe = onSnapshot(leadRef, (doc) => {
-            if (doc.exists()) {
-                setCurrentLead({ id: doc.id, ...doc.data() } as Lead);
-            } else {
-                toast({ variant: 'destructive', title: 'Contact not found for this task.' });
-                setCurrentLead(null);
+        const fetchLeadForCurrentTask = async () => {
+            if (currentTask && currentTask.leadId && !leadsCache[currentTask.leadId]) {
+                setIsLoading(true);
+                const leadDoc = await getDoc(doc(db, 'leads', currentTask.leadId));
+                if (leadDoc.exists()) {
+                    setLeadsCache(prev => ({ ...prev, [currentTask.leadId!]: { id: leadDoc.id, ...leadDoc.data() } as Lead }));
+                } else {
+                    toast({ variant: 'destructive', title: 'Contact not found for this task.' });
+                }
+                setIsLoading(false);
+            } else if (!currentTask?.leadId) {
+                setIsLoading(false);
             }
-            setIsLoading(false);
-        }, (error) => {
-            console.error("Error fetching lead:", error);
-            toast({ variant: 'destructive', title: 'Failed to load contact.' });
-            setIsLoading(false);
-        });
+        };
 
-        return () => unsubscribe();
-    }, [currentTask, toast]);
+        if (taskQueue.length > 0) {
+            fetchLeadForCurrentTask();
+        }
+    }, [currentTask, leadsCache, taskQueue.length, toast]);
 
     const navigateToTask = (index: number) => {
         if (index >= 0 && index < queueIds.length) {
+            setCurrentIndex(index);
             const nextTaskId = queueIds[index];
-            router.push(`/tasks/focus/${nextTaskId}?queue=${queueIds.join(',')}`);
+            // Update URL without a full page reload
+            router.push(`/tasks/focus/${nextTaskId}?queue=${queueIds.join(',')}`, { scroll: false });
         }
     }
 
     const handleInteractionLogged = () => {
         // Find the current task and mark it as completed visually (temporary)
-        const updatedQueue = [...taskQueue];
-        if (updatedQueue[currentIndex]) {
-            updatedQueue[currentIndex].completed = true;
-        }
-        setTaskQueue(updatedQueue);
+        setTaskQueue(prevQueue => {
+            const newQueue = [...prevQueue];
+            const taskToUpdate = newQueue.find(t => t.id === currentTaskId);
+            if (taskToUpdate) {
+                taskToUpdate.completed = true;
+            }
+            return newQueue;
+        });
 
         // Auto-navigate to the next uncompleted task
         setTimeout(() => {
@@ -127,18 +130,18 @@ export default function FocusPage() {
             if (nextUncompletedIndex !== -1) {
                 navigateToTask(nextUncompletedIndex);
             } else {
-                // If no more uncompleted tasks, go to the one after current, or just stay
                 const nextIndex = currentIndex + 1;
                 if (nextIndex < queueIds.length) {
                     navigateToTask(nextIndex);
                 } else {
                     toast({ title: "Queue finished!"});
+                    router.push('/');
                 }
             }
         }, 500); // Small delay for user to see the change
     };
     
-    if (isLoading && !currentLead) {
+    if (taskQueue.length === 0 && isLoading) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
@@ -169,19 +172,19 @@ export default function FocusPage() {
                     <aside className="w-80 border-r bg-card overflow-y-auto">
                         <ScrollArea className="h-full">
                             <div className="p-4 space-y-2">
-                                {taskQueue.map(task => (
-                                     <Link 
+                                {taskQueue.map((task, index) => (
+                                     <button 
                                         key={task.id} 
-                                        href={`/tasks/focus/${task.id}?queue=${queueIds.join(',')}`}
+                                        onClick={() => navigateToTask(index)}
                                         className={cn(
-                                            "block p-3 rounded-lg border",
+                                            "block w-full text-left p-3 rounded-lg border",
                                             task.id === currentTaskId ? "bg-primary/10 border-primary" : "hover:bg-muted/50",
                                             task.completed && "opacity-50 line-through"
                                         )}
                                       >
                                         <p className="font-semibold text-sm truncate">{task.description}</p>
                                         <p className="text-xs text-muted-foreground truncate">{task.leadName}</p>
-                                    </Link>
+                                    </button>
                                 ))}
                             </div>
                         </ScrollArea>
@@ -192,7 +195,7 @@ export default function FocusPage() {
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
                      {(isLoading && !currentLead) ? (
                         <div className="flex h-full items-center justify-center">
-                            <Logo className="h-10 w-10 animate-spin text-primary" />
+                            <Loader2 className="h-10 w-10 animate-spin text-primary" />
                         </div>
                     ) : currentLead && currentTask && appSettings ? (
                         <FocusView 
@@ -201,12 +204,16 @@ export default function FocusPage() {
                             appSettings={appSettings}
                             onInteractionLogged={handleInteractionLogged}
                         />
-                    ) : (
+                    ) : currentTask ? ( // Task exists but maybe no lead
                         <div className="flex flex-col h-full items-center justify-center text-center">
                             <ListTodo className="h-12 w-12 text-muted-foreground mb-4"/>
                             <h2 className="text-xl font-semibold">No Contact Associated</h2>
                             <p className="text-muted-foreground mt-1">This task is not linked to a contact.</p>
                         </div>
+                    ) : (
+                         <div className="flex h-full items-center justify-center">
+                            <p>Loading task...</p>
+                         </div>
                     )}
                 </main>
             </div>
