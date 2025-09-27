@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   collection,
   getDocs,
@@ -69,6 +69,7 @@ export default function TasksPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTask, setActiveTask] = useState<string | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
 
   const [isManualTaskOpen, setIsManualTaskOpen] = useState(false);
   const [manualTaskDescription, setManualTaskDescription] = useState("");
@@ -119,7 +120,7 @@ export default function TasksPage() {
     return tasks.filter(task => {
       const dueDate = toDate(task.dueDate);
       return !task.completed && dueDate && isPast(dueDate) && !isSameDay(dueDate, today);
-    });
+    }).sort((a,b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime());
   }, [tasks]);
 
   const handleMarkComplete = async (taskId: string, completed: boolean) => {
@@ -197,6 +198,11 @@ export default function TasksPage() {
         return dateA.getTime() - dateB.getTime();
       });
   }, [tasks, selectedDate]);
+
+  const navigateToFocusView = (targetTaskId: string, taskQueue: Task[]) => {
+    const taskIds = taskQueue.map(t => t.id).join(',');
+    router.push(`/tasks/focus/${targetTaskId}?queue=${taskIds}`);
+  }
 
   type Urgency = "hot" | "warm" | "cold" | "neutral";
 
@@ -304,12 +310,11 @@ export default function TasksPage() {
               return (
                 <div key={task.id} className="relative">
                   {task.leadId ? (
-                    <Link
-                      href={`/contacts/${task.leadId}`}
-                      onClick={() => setActiveTask(task.id)}
+                    <div
+                      onClick={() => navigateToFocusView(task.id, visibleTasks)}
                       className={cn(
                         "block rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md",
-                        "border-l-4 overflow-hidden",
+                        "border-l-4 overflow-hidden cursor-pointer",
                         urgencyClass,
                         isNavigating && "pointer-events-none"
                       )}
@@ -347,7 +352,7 @@ export default function TasksPage() {
                           )}
                         />
                       )}
-                    </Link>
+                    </div>
                   ) : (
                      <div className={cn(
                         "block rounded-lg border bg-card text-card-foreground shadow-sm",
@@ -493,17 +498,24 @@ export default function TasksPage() {
                 </DialogDescription>
             </DialogHeader>
             <div className="max-h-[60vh] overflow-y-auto -mx-6 px-6 py-4 space-y-3">
-                {overdueTasks.sort((a,b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime()).map(task => (
+                {overdueTasks.map(task => (
                      <div key={task.id} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
                         <button
-                          onClick={() => handleMarkComplete(task.id, true)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleMarkComplete(task.id, true);
+                          }}
                           className={cn( "flex items-center justify-center h-6 w-6 rounded-full border-2 transition-colors shrink-0 border-muted-foreground/50 hover:border-primary")}
                         />
-                        <div className="flex-1">
-                            <Link href={`/contacts/${task.leadId}`} onClick={() => setIsOverdueDialogOpen(false)} className="hover:underline">
-                                <p className="font-medium">{task.description}</p>
+                        <div 
+                          className="flex-1 cursor-pointer"
+                          onClick={() => {
+                            setIsOverdueDialogOpen(false);
+                            navigateToFocusView(task.id, overdueTasks)
+                          }}>
+                                <p className="font-medium hover:underline">{task.description}</p>
                                 <p className="text-sm text-muted-foreground">{task.leadName}</p>
-                            </Link>
                         </div>
                         <p className="text-xs text-destructive font-semibold">{format(toDate(task.dueDate)!, 'MMM d')}</p>
                     </div>
@@ -518,3 +530,4 @@ export default function TasksPage() {
   );
 }
 
+    
