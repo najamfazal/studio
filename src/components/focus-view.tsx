@@ -4,8 +4,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book } from 'lucide-react';
+import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
 import type { AppSettings, Lead, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType } from '@/lib/types';
@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { DateTimePicker } from '@/components/date-time-picker';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
@@ -39,6 +40,32 @@ interface FocusViewProps {
     appSettings: AppSettings;
     onInteractionLogged: () => void;
 }
+
+const toDate = (dateValue: any): Date | null => {
+  if (!dateValue) return null;
+  if (typeof dateValue === "string") return parseISO(dateValue);
+  if (dateValue.toDate) return dateValue.toDate(); // Firestore Timestamp
+  return null;
+};
+
+const formatRelativeTime = (date: Date) => {
+    const distance = formatDistanceToNowStrict(date, { addSuffix: true });
+    return distance.replace(/ seconds?/, 's').replace(/ minutes?/, 'm').replace(/ hours?/, 'h').replace(/ days?/, 'd').replace(/ months?/, 'mo').replace(/ years?/, 'y');
+  };
+
+const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
+    return (Object.keys(feedbackData) as (keyof InteractionFeedback)[])
+        .map(category => {
+            const feedbackItem = feedbackData[category];
+            if (!feedbackItem) return '';
+            let part = `${category}: ${feedbackItem.perception}`;
+            if (feedbackItem.objections && feedbackItem.objections.length > 0) {
+                part += ` (${feedbackItem.objections.join(', ')})`;
+            }
+            return part;
+        }).filter(Boolean).join('; ');
+};
+
 
 export function FocusView({ lead, task, appSettings, onInteractionLogged }: FocusViewProps) {
     const { toast } = useToast();
@@ -62,6 +89,11 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
     const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
     const [dateTimePickerValue, setDateTimePickerValue] = useState<Date | undefined>(undefined);
     const [dateTimePickerCallback, setDateTimePickerCallback] = useState<(date: Date) => void>(() => {});
+
+    const sortedInteractions = useMemo(() => {
+        return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
+    }, [currentLead]);
+
 
     const handleLogInteraction = async (interactionData: Partial<Interaction>) => {
         if (!currentLead) return;
@@ -213,144 +245,204 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
 
 
     return (
-        <div className="max-w-3xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-4">
             {/* Contact Header */}
-            <div className="space-y-1">
-                <h2 className="text-2xl font-bold">{currentLead.name}</h2>
+            <div>
                 <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-2xl font-bold">{currentLead.name}</h2>
                     <Badge variant="secondary">{currentLead.relationship}</Badge>
                     <Badge>{currentLead.status}</Badge>
-                    {currentLead.email && <p className="text-sm text-muted-foreground">{currentLead.email}</p>}
-                    {(currentLead.phones || []).length > 0 && <p className="text-sm text-muted-foreground">{currentLead.phones[0].number}</p>}
+                </div>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                    {currentLead.email && (
+                        <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground">
+                            <Mail className="h-4 w-4" /> {currentLead.email}
+                        </a>
+                    )}
+                    {(currentLead.phones || []).length > 0 && (
+                        <a href={`tel:${currentLead.phones[0].number}`} className="flex items-center gap-1.5 hover:text-foreground">
+                            <Phone className="h-4 w-4" /> {currentLead.phones[0].number}
+                        </a>
+                    )}
                 </div>
             </div>
             
             {/* Task Context */}
-            <Card className="bg-primary/10 border-primary">
-                <CardHeader>
-                    <CardTitle className="text-lg">Current Task</CardTitle>
-                    <CardDescription>{task.description}</CardDescription>
-                </CardHeader>
-            </Card>
+            <div className="p-3 rounded-lg bg-primary/10 border border-primary">
+                <p className="text-sm font-semibold text-primary-foreground/90">Current Task</p>
+                <p className="font-medium">{task.description}</p>
+            </div>
 
-            {/* Logging Tools in a 3-column grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* Column 1: Quick Log */}
-                <Card className="relative overflow-hidden min-h-[148px]">
-                    <div key={quickLogStep}>
-                        {quickLogStep === 'initial' && (
-                            <>
-                            <CardHeader className="flex-row items-center justify-between p-3">
-                                <CardTitle className="text-base font-medium">Quick Log</CardTitle>
-                                <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isQuickLogSubmitDisabled()} className="h-8 w-8">
-                                    {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
-                                </Button>
-                            </CardHeader>
-                            <CardContent className="flex flex-wrap gap-2 p-3 pt-0">
-                                {quickLogOptions.map(opt => (
-                                <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="sm" onClick={() => handleQuickLogChipClick(opt.value)} disabled={submissionState !== 'idle'}>{opt.label}</Button>
-                                ))}
-                            </CardContent>
-                            </>
-                        )}
-                        {quickLogStep === 'withdrawn' && (
-                            <>
-                            <CardHeader className="p-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
-                                        <CardTitle className="text-base font-medium">Select Reason</CardTitle>
-                                    </div>
+            {/* Logging Tools */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                    {/* Quick Log */}
+                    <Card className="relative overflow-hidden min-h-[148px]">
+                        <div key={quickLogStep}>
+                            {quickLogStep === 'initial' && (
+                                <>
+                                <CardHeader className="flex-row items-center justify-between p-3">
+                                    <CardTitle className="text-base font-medium">Quick Log</CardTitle>
                                     <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isQuickLogSubmitDisabled()} className="h-8 w-8">
                                         {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
                                     </Button>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="p-3 pt-0">
-                                <div className="flex flex-wrap gap-2">
-                                {(appSettings.withdrawalReasons || []).map(reason => (
-                                    <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
-                                ))}
-                                </div>
-                            </CardContent>
-                            </>
-                        )}
-                    </div>
-                </Card>
+                                </CardHeader>
+                                <CardContent className="flex flex-wrap gap-2 p-3 pt-0">
+                                    {quickLogOptions.map(opt => (
+                                    <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="sm" onClick={() => handleQuickLogChipClick(opt.value)} disabled={submissionState !== 'idle'}>{opt.label}</Button>
+                                    ))}
+                                </CardContent>
+                                </>
+                            )}
+                            {quickLogStep === 'withdrawn' && (
+                                <>
+                                <CardHeader className="p-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
+                                            <CardTitle className="text-base font-medium">Select Reason</CardTitle>
+                                        </div>
+                                        <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isQuickLogSubmitDisabled()} className="h-8 w-8">
+                                            {submissionState === 'submitting' ? <Loader2 className="animate-spin" /> : <Send />}
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-3 pt-0">
+                                    <div className="flex flex-wrap gap-2">
+                                    {(appSettings.withdrawalReasons || []).map(reason => (
+                                        <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
+                                    ))}
+                                    </div>
+                                </CardContent>
+                                </>
+                            )}
+                        </div>
+                    </Card>
 
-                {/* Column 2: Log Feedback */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between p-3">
-                        <CardTitle className="text-base font-medium">Log Feedback</CardTitle>
-                        <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-8 w-8">
-                        {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
-                        </Button>
-                    </CardHeader>
-                    <CardContent className="space-y-3 p-3 pt-0">
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                        {(['content', 'schedule', 'price'] as (keyof InteractionFeedback)[]).map(category => (
-                            <div key={category}>
-                            <h4 className="font-semibold text-sm capitalize mb-1">{category}</h4>
+                     {/* Log Outcome */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between p-3">
+                            <CardTitle className="text-base font-medium">Log Outcome</CardTitle>
+                            <Button onClick={handleLogOutcome} disabled={isLoggingOutcome || !selectedOutcome} size="icon" variant="ghost" className="h-8 w-8">
+                                {isLoggingOutcome ? <Loader2 className="animate-spin" /> : <Send />}
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="space-y-3 p-3 pt-0">
                             <div className="flex items-center justify-center gap-2">
-                                <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn("h-8 w-8", feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
-                                <ThumbsUp className="h-4 w-4 text-green-600" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'negative')} className={cn("h-8 w-8", feedback[category]?.perception === 'negative' && 'bg-red-100 dark:bg-red-900')}>
-                                <ThumbsDown className="h-4 w-4 text-red-600" />
-                                </Button>
+                                {(['Info', 'Later', 'Event Scheduled'] as OutcomeType[]).map(outcome => (
+                                    <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} size="sm" onClick={() => setSelectedOutcome(o => o === outcome ? null : outcome)}>
+                                        {outcome === 'Info' && <Info className="mr-1 h-4 w-4"/>}
+                                        {outcome === 'Later' && <CalendarClock className="mr-1 h-4 w-4"/>}
+                                        {outcome === 'Event Scheduled' && <CalendarPlus className="mr-1 h-4 w-4"/>}
+                                        {outcome === 'Event Scheduled' ? 'Event' : outcome}
+                                    </Button>
+                                ))}
                             </div>
-                            </div>
-                        ))}
-                        </div>
-                        {activeChipCategory && (
-                        <div>
-                            <Separator className="my-2" />
-                            <div className="flex flex-wrap gap-1 justify-center">
-                            {(appSettings.feedbackChips[activeChipCategory] || []).map(objection => (
-                                <Badge key={objection} variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"} onClick={() => handleObjectionToggle(activeChipCategory, objection)} className="cursor-pointer">{objection}</Badge>
-                            ))}
-                            {(appSettings.feedbackChips[activeChipCategory] || []).length === 0 && <p className="text-xs text-muted-foreground">No objections configured.</p>}
-                            </div>
-                        </div>
-                        )}
-                    </CardContent>
-                </Card>
 
-                {/* Column 3: Log Outcome */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between p-3">
-                        <CardTitle className="text-base font-medium">Log Outcome</CardTitle>
-                        <Button onClick={handleLogOutcome} disabled={isLoggingOutcome || !selectedOutcome} size="icon" variant="ghost" className="h-8 w-8">
-                            {isLoggingOutcome ? <Loader2 className="animate-spin" /> : <Send />}
-                        </Button>
-                    </CardHeader>
-                    <CardContent className="space-y-3 p-3 pt-0">
-                        <div className="flex items-center justify-center gap-2">
-                            {(['Info', 'Later', 'Event Scheduled'] as OutcomeType[]).map(outcome => (
-                                <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} size="sm" onClick={() => setSelectedOutcome(o => o === outcome ? null : outcome)}>
-                                    {outcome === 'Info' && <Info className="mr-1 h-4 w-4"/>}
-                                    {outcome === 'Later' && <CalendarClock className="mr-1 h-4 w-4"/>}
-                                    {outcome === 'Event Scheduled' && <CalendarPlus className="mr-1 h-4 w-4"/>}
-                                    {outcome === 'Event Scheduled' ? 'Event' : outcome}
-                                </Button>
+                            {selectedOutcome === 'Info' && <Textarea placeholder="Enter info/details..." value={outcomeNotes} onChange={e => setOutcomeNotes(e.target.value)} />}
+                            {selectedOutcome === 'Later' && <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}><CalendarIcon className="mr-2 h-4 w-4" />{dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select follow-up date'}</Button>}
+                            {selectedOutcome === 'Event Scheduled' && (
+                                <div className="space-y-2">
+                                    <Select value={currentLead.eventDetails?.type || ''} onValueChange={val => setCurrentLead(prev => prev && produce(prev, draft => { if(!draft.eventDetails) draft.eventDetails = {type:'', dateTime:''}; draft.eventDetails.type = val; }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select event type..." /></SelectTrigger>
+                                        <SelectContent>{eventTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}><CalendarClock className="mr-2 h-4 w-4" />{dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select date & time'}</Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+                 <div className="space-y-4">
+                     {/* Log Feedback */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between p-3">
+                            <CardTitle className="text-base font-medium">Log Feedback</CardTitle>
+                            <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-8 w-8">
+                            {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="space-y-3 p-3 pt-0">
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                            {(['content', 'schedule', 'price'] as (keyof InteractionFeedback)[]).map(category => (
+                                <div key={category}>
+                                <h4 className="font-semibold text-sm capitalize mb-1">{category}</h4>
+                                <div className="flex items-center justify-center gap-2">
+                                    <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'positive')} className={cn("h-8 w-8", feedback[category]?.perception === 'positive' && 'bg-green-100 dark:bg-green-900')}>
+                                    <ThumbsUp className="h-4 w-4 text-green-600" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handlePerceptionChange(category, 'negative')} className={cn("h-8 w-8", feedback[category]?.perception === 'negative' && 'bg-red-100 dark:bg-red-900')}>
+                                    <ThumbsDown className="h-4 w-4 text-red-600" />
+                                    </Button>
+                                </div>
+                                </div>
                             ))}
-                        </div>
-
-                        {selectedOutcome === 'Info' && <Textarea placeholder="Enter info/details..." value={outcomeNotes} onChange={e => setOutcomeNotes(e.target.value)} />}
-                        {selectedOutcome === 'Later' && <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}><CalendarIcon className="mr-2 h-4 w-4" />{dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select follow-up date'}</Button>}
-                        {selectedOutcome === 'Event Scheduled' && (
-                            <div className="space-y-2">
-                                <Select value={currentLead.eventDetails?.type || ''} onValueChange={val => setCurrentLead(prev => prev && produce(prev, draft => { if(!draft.eventDetails) draft.eventDetails = {type:'', dateTime:''}; draft.eventDetails.type = val; }))}>
-                                    <SelectTrigger><SelectValue placeholder="Select event type..." /></SelectTrigger>
-                                    <SelectContent>{eventTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
-                                </Select>
-                                <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}><CalendarClock className="mr-2 h-4 w-4" />{dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select date & time'}</Button>
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
+                            {activeChipCategory && (
+                            <div>
+                                <Separator className="my-2" />
+                                <div className="flex flex-wrap gap-1 justify-center">
+                                {(appSettings.feedbackChips[activeChipCategory] || []).map(objection => (
+                                    <Badge key={objection} variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"} onClick={() => handleObjectionToggle(activeChipCategory, objection)} className="cursor-pointer">{objection}</Badge>
+                                ))}
+                                {(appSettings.feedbackChips[activeChipCategory] || []).length === 0 && <p className="text-xs text-muted-foreground">No objections configured.</p>}
+                                </div>
+                            </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Log History */}
+                     <Card>
+                        <CardHeader className="p-3">
+                            <CardTitle className="text-base font-medium">Log History</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-3 pt-0 space-y-2 max-h-60 overflow-y-auto">
+                        <TooltipProvider>
+                            {sortedInteractions.length > 0 ? (
+                                sortedInteractions.map(interaction => {
+                                    const interactionDate = toDate(interaction.createdAt)!;
+                                    return (
+                                        <div key={interaction.id} className="text-xs p-2 bg-muted/50 rounded-md">
+                                             <div className="flex justify-between items-center mb-1">
+                                                <p className="font-semibold capitalize">
+                                                    {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
+                                                    interaction.feedback ? 'Feedback' :
+                                                    interaction.outcome ? `Outcome: ${interaction.outcome}` : 
+                                                    interaction.notes ? 'Note' :
+                                                    'Interaction'}
+                                                </p>
+                                                <Tooltip delayDuration={300}>
+                                                    <TooltipTrigger>
+                                                        <p className="text-muted-foreground hover:text-foreground cursor-default">
+                                                            {interactionDate ? formatRelativeTime(interactionDate) : ''}
+                                                        </p>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>{interactionDate ? format(interactionDate, 'PP p'): ''}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </div>
+                                            <p className="text-muted-foreground capitalize text-xs">
+                                                {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
+                                                : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
+                                                : interaction.withdrawalReasons ? `Reasons: ${interaction.withdrawalReasons.join(', ')}`
+                                                : interaction.notes}
+                                            </p>
+                                        </div>
+                                    )
+                                })
+                            ) : (
+                                <p className="text-sm text-center text-muted-foreground py-4">No interactions yet.</p>
+                            )}
+                           </TooltipProvider>
+                        </CardContent>
+                     </Card>
+                </div>
             </div>
              <DateTimePicker isOpen={isDateTimePickerOpen} onClose={() => setIsDateTimePickerOpen(false)} onSelect={dateTimePickerCallback} initialDate={dateTimePickerValue} />
         </div>
     );
 }
+
+    
