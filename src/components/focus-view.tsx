@@ -268,16 +268,15 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
             </div>
             
             {/* Task Context */}
-            <div className="p-3 rounded-lg bg-primary/10 border border-primary">
-                <p className="text-sm font-semibold text-primary-foreground/90">Current Task</p>
-                <p className="font-medium">{task.description}</p>
+            <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <p className="text-xs font-semibold text-primary/80">Current Task: <span className="font-medium text-primary">{task.description}</span></p>
             </div>
 
             {/* Logging Tools */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="space-y-4">
                     {/* Quick Log */}
-                    <Card className="relative overflow-hidden min-h-[148px]">
+                    <Card className="relative overflow-hidden">
                         <div key={quickLogStep}>
                             {quickLogStep === 'initial' && (
                                 <>
@@ -444,5 +443,3 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
         </div>
     );
 }
-
-    

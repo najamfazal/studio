@@ -147,14 +147,14 @@ export default function FocusPage() {
 
     return (
         <div className="flex flex-col h-screen bg-background">
-            <header className="bg-card border-b p-4 flex items-center justify-between sticky top-0 z-20">
+            <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20">
                 <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" asChild>
+                    <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                         <Link href="/"><ArrowLeft/></Link>
                     </Button>
                     <div>
-                        <h1 className="text-xl font-bold tracking-tight">Focus Mode</h1>
-                        <p className="text-sm text-muted-foreground">Task {currentIndex + 1} of {queueIds.length}</p>
+                        <h1 className="text-lg font-bold tracking-tight">Focus Mode</h1>
+                        <p className="text-xs text-muted-foreground">Task {currentIndex + 1} of {queueIds.length}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
