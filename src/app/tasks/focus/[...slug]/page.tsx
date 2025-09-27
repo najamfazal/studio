@@ -45,9 +45,18 @@ export default function FocusPage() {
             return;
         }
         try {
-            const q = query(collection(db, "tasks"), where('__name__', 'in', queueIds));
-            const snapshot = await getDocs(q);
-            const tasksData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task));
+            const tasksData: Task[] = [];
+            const BATCH_SIZE = 30; // Firestore 'in' query limit
+
+            for (let i = 0; i < queueIds.length; i += BATCH_SIZE) {
+                const batchIds = queueIds.slice(i, i + BATCH_SIZE);
+                if (batchIds.length > 0) {
+                    const q = query(collection(db, "tasks"), where('__name__', 'in', batchIds));
+                    const snapshot = await getDocs(q);
+                    const batchTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task));
+                    tasksData.push(...batchTasks);
+                }
+            }
             
             // Firestore `in` query doesn't guarantee order, so we re-order based on the original queueIds
             const orderedTasks = queueIds.map(id => tasksData.find(t => t.id === id)).filter(Boolean) as Task[];
@@ -222,5 +231,3 @@ export default function FocusPage() {
         </div>
     );
 }
-
-    
