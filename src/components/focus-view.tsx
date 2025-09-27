@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
 import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon } from 'lucide-react';
@@ -354,5 +354,3 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
         </div>
     );
 }
-
-    
