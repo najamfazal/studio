@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { cn } from '@/lib/utils';
 import { DateTimePicker } from '@/components/date-time-picker';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { EditableField } from './editable-field';
 
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
@@ -39,6 +40,7 @@ interface FocusViewProps {
     task: Task;
     appSettings: AppSettings;
     onInteractionLogged: () => void;
+    onLeadUpdate: (updatedLead: Lead) => void;
 }
 
 const toDate = (dateValue: any): Date | null => {
@@ -67,10 +69,9 @@ const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
 };
 
 
-export function FocusView({ lead, task, appSettings, onInteractionLogged }: FocusViewProps) {
+export function FocusView({ lead, task, appSettings, onInteractionLogged, onLeadUpdate }: FocusViewProps) {
     const { toast } = useToast();
     
-    // Internal state for managing the lead as it's modified by logging
     const [currentLead, setCurrentLead] = useState(lead);
     useEffect(() => setCurrentLead(lead), [lead]);
     
@@ -93,6 +94,36 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
     const sortedInteractions = useMemo(() => {
         return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
     }, [currentLead]);
+    
+    const handleUpdate = async (field: string, value: any) => {
+        if (!currentLead) return;
+        
+        const updatePayload: { [key: string]: any } = { [field]: value };
+        
+        const updatedLead = produce(currentLead, draft => {
+            const keys = field.split('.');
+            let current: any = draft;
+            keys.slice(0, -1).forEach(key => {
+                if (!current[key]) current[key] = {};
+                current = current[key];
+            });
+            current[keys[keys.length - 1]] = value;
+        });
+
+        setCurrentLead(updatedLead);
+        onLeadUpdate(updatedLead);
+        
+        try {
+          const leadRef = doc(db, 'leads', lead.id);
+          await updateDoc(leadRef, updatePayload);
+          toast({ title: 'Contact Updated' });
+        } catch (error) {
+          console.error('Error updating contact:', error);
+          toast({ variant: 'destructive', title: 'Update failed' });
+          setCurrentLead(lead); // Revert on failure
+          onLeadUpdate(lead);
+        }
+    };
 
 
     const handleLogInteraction = async (interactionData: Partial<Interaction>) => {
@@ -105,26 +136,24 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
           createdAt: new Date().toISOString(),
         } as Interaction;
     
-        // Optimistic UI Update
         const optimisticLead = produce(currentLead, draft => {
           draft.interactions = [newInteraction, ...(draft.interactions || [])];
         });
         setCurrentLead(optimisticLead);
+        onLeadUpdate(optimisticLead);
     
         try {
-          // Update lead with new interaction
           await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
-          
-          // Mark the current task as complete
           await updateDoc(doc(db, 'tasks', task.id), { completed: true });
 
           toast({ title: 'Interaction Logged & Task Completed' });
-          onInteractionLogged(); // Notify parent to move to next task
+          onInteractionLogged();
 
         } catch (error) {
           console.error("Error logging interaction:", error);
           toast({ variant: "destructive", title: "Failed to log interaction." });
-          setCurrentLead(lead); // Rollback optimistic update
+          setCurrentLead(lead);
+          onLeadUpdate(lead);
         }
     }
 
@@ -279,17 +308,24 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
                 <CardHeader className="p-2">
                     <CardTitle className="text-xs font-semibold text-muted-foreground">Commitment Snapshot</CardTitle>
                 </CardHeader>
-                <CardContent className="p-2 pt-0 text-sm space-y-1">
-                    <div className="flex justify-between">
-                        <span className="font-medium">Course:</span>
-                        <span>{currentLead.commitmentSnapshot?.course || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="font-medium">Price:</span>
-                        <span>{currentLead.commitmentSnapshot?.price || 'N/A'}</span>
-                    </div>
+                <CardContent className="p-2 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    <EditableField
+                        label="Course"
+                        value={currentLead.commitmentSnapshot?.course || ""}
+                        onSave={(val) => handleUpdate('commitmentSnapshot.course', val)}
+                        type="select"
+                        selectOptions={appSettings.courseNames || []}
+                        placeholder="Select course"
+                    />
+                    <EditableField
+                        label="Price"
+                        value={currentLead.commitmentSnapshot?.price || ""}
+                        onSave={(val) => handleUpdate('commitmentSnapshot.price', val)}
+                        inputType="number"
+                        placeholder="Enter price"
+                    />
                     {currentLead.commitmentSnapshot?.keyNotes && (
-                         <div className="pt-1">
+                        <div className="pt-1 col-span-1 sm:col-span-2">
                             <p className="text-xs text-muted-foreground whitespace-pre-wrap">{currentLead.commitmentSnapshot.keyNotes}</p>
                         </div>
                     )}
@@ -468,5 +504,3 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged }: Focu
         </div>
     );
 }
-
-    

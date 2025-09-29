@@ -32,7 +32,7 @@ export default function FocusPage() {
     const [leadsCache, setLeadsCache] = useState<Record<string, Lead>>({});
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingQueue, setIsLoadingQueue] = useState(true);
     const [isQueueVisible, setIsQueueVisible] = useState(true);
 
     const [currentIndex, setCurrentIndex] = useState(() => queueIds.findIndex(id => id === initialTaskId));
@@ -40,12 +40,15 @@ export default function FocusPage() {
     const currentTaskId = useMemo(() => queueIds[currentIndex], [queueIds, currentIndex]);
     const currentTask = useMemo(() => taskQueue.find(t => t.id === currentTaskId), [taskQueue, currentTaskId]);
     const currentLead = useMemo(() => currentTask?.leadId ? leadsCache[currentTask.leadId] : null, [leadsCache, currentTask]);
+    
+    const [isLoadingLead, setIsLoadingLead] = useState(false);
 
     const fetchTaskQueue = useCallback(async () => {
         if (queueIds.length === 0) {
-            setIsLoading(false);
+            setIsLoadingQueue(false);
             return;
         }
+        setIsLoadingQueue(true);
         try {
             const tasksData: Task[] = [];
             const BATCH_SIZE = 30; // Firestore 'in' query limit
@@ -66,17 +69,17 @@ export default function FocusPage() {
         } catch (error) {
             console.error("Error fetching task queue:", error);
             toast({ variant: 'destructive', title: 'Failed to load task queue.' });
+        } finally {
+            setIsLoadingQueue(false);
         }
     }, [queueIds, toast]);
 
     useEffect(() => {
-        setIsLoading(true);
         fetchTaskQueue();
         
         const settingsRef = doc(db, 'settings', 'appConfig');
         const unsubSettings = onSnapshot(settingsRef, (doc) => {
             if (doc.exists()) setAppSettings(doc.data() as AppSettings);
-            setIsLoading(false);
         });
 
         return () => unsubSettings();
@@ -85,65 +88,63 @@ export default function FocusPage() {
 
     useEffect(() => {
         const fetchLeadForCurrentTask = async () => {
-            if (currentTask && currentTask.leadId && !leadsCache[currentTask.leadId]) {
-                setIsLoading(true);
-                const leadDoc = await getDoc(doc(db, 'leads', currentTask.leadId));
-                if (leadDoc.exists()) {
-                    setLeadsCache(prev => ({ ...prev, [currentTask.leadId!]: { id: leadDoc.id, ...leadDoc.data() } as Lead }));
-                } else {
-                    toast({ variant: 'destructive', title: 'Contact not found for this task.' });
+            if (currentTask?.leadId && !leadsCache[currentTask.leadId]) {
+                setIsLoadingLead(true);
+                try {
+                    const leadDoc = await getDoc(doc(db, 'leads', currentTask.leadId));
+                    if (leadDoc.exists()) {
+                        setLeadsCache(prev => ({ ...prev, [currentTask.leadId!]: { id: leadDoc.id, ...leadDoc.data() } as Lead }));
+                    } else {
+                        toast({ variant: 'destructive', title: 'Contact not found for this task.' });
+                    }
+                } catch (error) {
+                    toast({ variant: 'destructive', title: 'Failed to fetch contact data.' });
+                } finally {
+                    setIsLoadingLead(false);
                 }
-                setIsLoading(false);
-            } else {
-                 setIsLoading(false);
             }
         };
 
-        if (taskQueue.length > 0) {
+        if (currentTask) {
             fetchLeadForCurrentTask();
-        } else if (queueIds.length === 0) {
-            setIsLoading(false);
         }
-    }, [currentTask, leadsCache, taskQueue.length, toast, queueIds.length]);
+    }, [currentTask, leadsCache, toast]);
 
     const navigateToTask = (index: number) => {
         if (index >= 0 && index < queueIds.length) {
             setCurrentIndex(index);
             const nextTaskId = queueIds[index];
-            // Update URL without a full page reload
             router.push(`/tasks/focus/${nextTaskId}?queue=${queueIds.join(',')}`, { scroll: false });
         }
     }
 
     const handleInteractionLogged = () => {
-        // Find the current task and mark it as completed visually (temporary)
-        setTaskQueue(prevQueue => {
-            const newQueue = [...prevQueue];
-            const taskToUpdate = newQueue.find(t => t.id === currentTaskId);
-            if (taskToUpdate) {
-                taskToUpdate.completed = true;
-            }
-            return newQueue;
-        });
+        setTaskQueue(prevQueue =>
+            prevQueue.map(t =>
+                t.id === currentTaskId ? { ...t, completed: true } : t
+            )
+        );
 
-        // Auto-navigate to the next uncompleted task
         setTimeout(() => {
-            const nextUncompletedIndex = taskQueue.findIndex((task, index) => index > currentIndex && !task.completed);
-            if (nextUncompletedIndex !== -1) {
-                navigateToTask(nextUncompletedIndex);
-            } else {
-                const nextIndex = currentIndex + 1;
-                if (nextIndex < queueIds.length) {
-                    navigateToTask(nextIndex);
-                } else {
-                    toast({ title: "Queue finished!"});
-                    router.push('/');
-                }
+            let nextIndex = currentIndex + 1;
+            while(nextIndex < taskQueue.length && taskQueue[nextIndex].completed) {
+                nextIndex++;
             }
-        }, 500); // Small delay for user to see the change
+
+            if (nextIndex < taskQueue.length) {
+                navigateToTask(nextIndex);
+            } else {
+                toast({ title: "Queue finished!"});
+                router.push('/');
+            }
+        }, 300);
     };
+
+    const handleLeadUpdate = (updatedLead: Lead) => {
+        setLeadsCache(prev => ({...prev, [updatedLead.id]: updatedLead}));
+    }
     
-    if (taskQueue.length === 0 && isLoading) {
+    if (isLoadingQueue) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
@@ -195,7 +196,7 @@ export default function FocusPage() {
 
                 {/* Main Content */}
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-                     {(isLoading && !currentLead) ? (
+                     {(isLoadingLead || (currentTask && !currentLead)) ? (
                         <div className="flex h-full items-center justify-center">
                             <Loader2 className="h-10 w-10 animate-spin text-primary" />
                         </div>
@@ -205,6 +206,7 @@ export default function FocusPage() {
                             task={currentTask}
                             appSettings={appSettings}
                             onInteractionLogged={handleInteractionLogged}
+                            onLeadUpdate={handleLeadUpdate}
                         />
                     ) : currentTask ? ( // Task exists but maybe no lead
                         <div className="flex flex-col h-full items-center justify-center text-center">
