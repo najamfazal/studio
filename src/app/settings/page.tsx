@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -19,6 +18,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { reindexLeadsAction } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { Label } from '@/components/ui/label';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots';
@@ -567,3 +567,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
