@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -154,11 +155,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
           await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
           toast({ title: 'Interaction Logged' });
           
-          setTaskQueue(prevQueue =>
-            prevQueue.map(t =>
-                t.id === task.id ? { ...t, completed: true } : t
-            )
-          );
+          // This will be handled by the parent component now
+          onInteractionLogged();
 
         } catch (error) {
           console.error("Error logging interaction:", error);
@@ -292,8 +290,6 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             : [...currentCourses, course];
         handleUpdate('commitmentSnapshot.courses', newCourses);
     };
-
-    const [taskQueue, setTaskQueue] = useState<Task[]>([]);
     
     if (!currentLead) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>
@@ -323,9 +319,9 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             </div>
             
             {/* Task Context */}
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-baseline gap-2 text-sm text-primary">
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-baseline gap-2 text-primary">
                 <p className="text-xs font-semibold uppercase shrink-0">Task:</p>
-                <p className="font-medium">{task.description}</p>
+                <p className="font-medium text-sm">{task.description}</p>
             </div>
 
             {/* Commitment Snapshot */}
