@@ -84,10 +84,10 @@ export function ContactCard({
 
       <CardContent className="p-0 text-sm flex flex-col items-start justify-between mt-auto space-y-2">
          <div className="space-y-1.5 w-full">
-            {lead.commitmentSnapshot?.course && (
+            {(lead.commitmentSnapshot?.courses || []).length > 0 && (
                  <div className="flex items-center gap-2">
                     <Book className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <p className="text-xs truncate">{lead.commitmentSnapshot.course}</p>
+                    <p className="text-xs truncate">{(lead.commitmentSnapshot.courses || []).join(', ')}</p>
                  </div>
             )}
              <div className="flex items-center gap-2">

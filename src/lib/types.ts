@@ -14,7 +14,7 @@ export type LeadStatus =
 export type CommitmentSnapshot = {
   price?: string;
   schedule?: string;
-  course?: string;
+  courses?: string[]; // Changed from course to courses
   keyNotes?: string;
   paymentPlan?: string;
 };
@@ -174,5 +174,3 @@ export type LogAnalysisReport = {
   generatedAt: any; // Firestore Timestamp
   leads: AnalyzedLead[];
 };
-
-    

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -24,10 +24,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { leadSchema, type LeadFormValues } from "@/lib/schemas";
 import type { Lead } from "@/lib/types";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, X, CheckIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
+import { Badge } from "./ui/badge";
 
 
 interface LeadDialogProps {
@@ -49,13 +52,15 @@ export function LeadDialog({
   courseNames,
   relationshipTypes,
 }: LeadDialogProps) {
+  const [isCoursePopoverOpen, setIsCoursePopoverOpen] = useState(false);
+  
   const form = useForm<LeadFormValues>({
     resolver: zodResolver(leadSchema),
     defaultValues: {
       name: "",
       email: "",
       phones: [{ number: "", type: "both" }],
-      course: "",
+      courses: [],
       relationship: "Lead",
     },
   });
@@ -72,7 +77,7 @@ export function LeadDialog({
           name: leadToEdit.name,
           email: leadToEdit.email,
           phones: leadToEdit.phones?.length ? leadToEdit.phones.map(p => ({ number: p.number || '', type: p.type || 'both' })) : [{ number: "", type: "both" }],
-          course: leadToEdit.commitmentSnapshot?.course || "",
+          courses: leadToEdit.commitmentSnapshot?.courses || [],
           relationship: leadToEdit.relationship || 'Lead',
         });
       } else {
@@ -80,7 +85,7 @@ export function LeadDialog({
           name: "",
           email: "",
           phones: [{ number: "", type: "both" }],
-          course: "",
+          courses: [],
           relationship: "Lead",
         });
       }
@@ -93,10 +98,12 @@ export function LeadDialog({
 
   const isSubmitting = form.formState.isSubmitting || isSaving;
   const canSubmit = form.formState.isValid;
+  
+  const selectedCourses = form.watch("courses") || [];
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{leadToEdit ? "Edit Contact" : "Add New Contact"}</DialogTitle>
           <DialogDescription>
@@ -106,7 +113,7 @@ export function LeadDialog({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
             <FormField
               control={form.control}
               name="name"
@@ -222,27 +229,66 @@ export function LeadDialog({
 
             <FormField
               control={form.control}
-              name="course"
+              name="courses"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Course of Interest</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a course" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {courseNames.map(name => (
-                        <SelectItem key={name} value={name}>{name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Courses of Interest</FormLabel>
+                  <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
+                      <PopoverTrigger asChild>
+                          <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={isCoursePopoverOpen}
+                              className="w-full justify-start font-normal h-auto min-h-10"
+                          >
+                            {selectedCourses.length > 0 ? (
+                               <div className="flex gap-1 flex-wrap">
+                                  {selectedCourses.map(course => (
+                                    <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
+                                  ))}
+                               </div>
+                            ) : (
+                              "Select courses..."
+                            )}
+                          </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                          <Command>
+                              <CommandInput placeholder="Search courses..." />
+                              <CommandList>
+                                <CommandEmpty>No course found.</CommandEmpty>
+                                <CommandGroup>
+                                    {courseNames.map(course => (
+                                        <CommandItem
+                                            key={course}
+                                            value={course}
+                                            onSelect={() => {
+                                                const currentCourses = field.value || [];
+                                                const newCourses = currentCourses.includes(course)
+                                                    ? currentCourses.filter(c => c !== course)
+                                                    : [...currentCourses, course];
+                                                field.onChange(newCourses);
+                                            }}
+                                        >
+                                            <CheckIcon
+                                                className={cn(
+                                                    "mr-2 h-4 w-4",
+                                                    (field.value || []).includes(course) ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {course}
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                              </CommandList>
+                          </Command>
+                      </PopoverContent>
+                  </Popover>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <DialogFooter className="pt-4">
+            <DialogFooter className="pt-4 sticky bottom-0 bg-background/95 pb-1">
               <Button
                 type="button"
                 variant="outline"

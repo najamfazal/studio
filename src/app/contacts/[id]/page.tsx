@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion, startAfter, limit } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -34,6 +34,8 @@ import { DateTimePicker } from '@/components/date-time-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Switch } from '@/components/ui/switch';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { CheckIcon } from 'lucide-react';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -116,6 +118,9 @@ export default function ContactDetailPage() {
   const [eventToManage, setEventToManage] = useState<Interaction | null>(null);
   const [isEventActionLoading, setIsEventActionLoading] = useState(false);
 
+  // Course management state
+  const [isCoursePopoverOpen, setIsCoursePopoverOpen] = useState(false);
+
   const fetchInitialData = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
@@ -124,7 +129,7 @@ export default function ContactDetailPage() {
       const leadDoc = await getDoc(leadDocRef);
 
       if (leadDoc.exists()) {
-        const leadData = { id: leadDoc.id, ...leadDoc.data() } as Lead;
+        const leadData = { id: leadDoc.id, ...doc.data() } as Lead;
         setLead(leadData);
         setCurrentSchedule(leadData.courseSchedule || { sessionGroups: [] });
         setCurrentPayPlan(leadData.paymentPlan || { totalPrice: parseFloat(leadData.commitmentSnapshot.price || '0'), installments: [] });
@@ -323,8 +328,10 @@ export default function ContactDetailPage() {
     const originalLead = lead;
     setLead(prev => prev ? produce(prev, draft => {
         draft.paymentPlan = currentPayPlan;
-        draft.commitmentSnapshot.paymentPlan = summary;
-        draft.commitmentSnapshot.price = currentPayPlan.totalPrice.toString();
+        if(draft.commitmentSnapshot) {
+            draft.commitmentSnapshot.paymentPlan = summary;
+            draft.commitmentSnapshot.price = currentPayPlan.totalPrice.toString();
+        }
     }) : null);
 
     try {
@@ -679,7 +686,7 @@ export default function ContactDetailPage() {
             if (type === 'format') g.format = value as '1-1' | 'Batch';
         });
     });
-    handleScheduleSave(newSchedule);
+    if (newSchedule) handleScheduleSave(newSchedule);
   };
 
   const handleSessionGroupDelete = (groupId: string) => {
@@ -711,6 +718,15 @@ export default function ContactDetailPage() {
   };
 
   const isLearner = useMemo(() => lead?.relationship?.toLowerCase() === 'learner', [lead]);
+
+  const handleCourseSelection = (course: string) => {
+        if (!lead) return;
+        const currentCourses = lead.commitmentSnapshot?.courses || [];
+        const newCourses = currentCourses.includes(course)
+            ? currentCourses.filter(c => c !== course)
+            : [...currentCourses, course];
+        handleUpdate('commitmentSnapshot.courses', newCourses);
+    };
 
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -793,7 +809,54 @@ export default function ContactDetailPage() {
                   <CardContent className="p-4 pt-0 space-y-4">
                   <div className="flex items-start gap-4">
                       <div className="flex-grow-[3]">
-                      <EditableField label="Course" value={lead.commitmentSnapshot?.course || ""} onSave={(val) => handleUpdate('commitmentSnapshot.course', val)} type="select" selectOptions={appSettings.courseNames || []} placeholder="Select a course"/>
+                        <div className="space-y-1">
+                            <Label className="text-muted-foreground text-xs">Courses</Label>
+                             <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={isCoursePopoverOpen}
+                                        className="w-full justify-start font-normal h-auto min-h-10"
+                                    >
+                                        {(lead.commitmentSnapshot?.courses || []).length > 0 ? (
+                                            <div className="flex gap-1 flex-wrap">
+                                                {(lead.commitmentSnapshot.courses || []).map(course => (
+                                                    <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                        "Select courses..."
+                                        )}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Search courses..." />
+                                        <CommandList>
+                                            <CommandEmpty>No course found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {appSettings.courseNames.map(course => (
+                                                    <CommandItem
+                                                        key={course}
+                                                        value={course}
+                                                        onSelect={() => handleCourseSelection(course)}
+                                                    >
+                                                        <CheckIcon
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                (lead.commitmentSnapshot.courses || []).includes(course) ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {course}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
                       </div>
                       <div className="flex-grow-[1]">
                       <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
@@ -1554,4 +1617,3 @@ function PayPlanEditor({ plan, onPlanChange, onSave }: { plan: PaymentPlan, onPl
         </Card>
     );
 }
-

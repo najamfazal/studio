@@ -211,7 +211,7 @@ export function ImportDialog({
                               </CardHeader>
                               <CardContent className="p-3 pt-0 text-xs text-muted-foreground space-y-1">
                                   <p><span className="font-semibold text-foreground">Email:</span> {data.email || 'N/A'}</p>
-                                  <p><span className="font-semibold text-foreground">Course:</span> {data.commitmentSnapshot?.course || 'N/A'}</p>
+                                  <p><span className="font-semibold text-foreground">Courses:</span> {(data.commitmentSnapshot?.courses || []).join(', ') || 'N/A'}</p>
                                   <p><span className="font-semibold text-foreground">Phones:</span> {(data.phones || []).map((p: any) => p.number).join(', ')}</p>
                                   {data.autoLogInitiated && <Badge variant="outline" className="mt-1">Will log "Initiated"</Badge>}
                               </CardContent>
@@ -243,5 +243,3 @@ export function ImportDialog({
     </Dialog>
   );
 }
-
-    

@@ -138,6 +138,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             email = row.get("email", row.get("Email", "")).strip().lower()
             notes = row.get("notes", row.get("Notes", "")).strip()
             auto_log_initiated = row.get("autoLogInitiated")
+            course_name = str(row.get("courseName", row.get("Course", ""))).strip()
 
             if not name:
                 skipped_count += 1
@@ -167,7 +168,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "name": name, "email": email, "phones": phones,
                 "relationship": default_relationship,
                 "commitmentSnapshot": {
-                    "course": str(row.get("courseName", row.get("Course", ""))).strip() or "",
+                    "courses": [course_name] if course_name else [],
                     "keyNotes": notes
                 },
                 "status": "Active", "afc_step": 0, "hasEngaged": False,
@@ -224,6 +225,8 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 preview_lead_data = lead_data.copy()
                 preview_lead_data.pop("createdAt", None)
                 preview_lead_data.pop("search_keywords", None) # Don't show keywords in preview
+                if "commitmentSnapshot" in preview_lead_data and "course" in preview_lead_data["commitmentSnapshot"]:
+                  preview_lead_data["commitmentSnapshot"]["courses"] = [preview_lead_data["commitmentSnapshot"].pop("course")]
                 preview_data.append(preview_lead_data)
 
             if not is_dry_run and batch_count >= BATCH_LIMIT:
@@ -498,10 +501,10 @@ def onTaskUpdate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
     task_id = event.params.get("taskId")
     data_after = event.data.after.to_dict()
-    data_before = event.data.before.to_dict()
+    data_before = data_before.get("completed")
 
     # Check if the task was just marked as completed
-    if data_before.get('completed') == False and data_after.get('completed') == True:
+    if data_before == False and data_after.get('completed') == True:
         # Check if it's a procedural task from an 'Info' outcome
         if data_after.get('nature') == 'Procedural':
             lead_id = data_after.get('leadId')
@@ -770,11 +773,11 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
 
         for lead in all_leads:
             lead_data = lead.to_dict()
-            course_name = lead_data.get("commitmentSnapshot", {}).get("course")
+            courses = lead_data.get("commitmentSnapshot", {}).get("courses", [])
             status = lead_data.get("status")
             price_str = lead_data.get("commitmentSnapshot", {}).get("price")
 
-            if not course_name or not status or not price_str:
+            if not courses or not status or not price_str:
                 continue
 
             try:
@@ -782,18 +785,24 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
             except (ValueError, TypeError):
                 continue
             
-            # Initialize course entry if it doesn't exist
-            if course_name not in course_data:
-                course_data[course_name] = {
-                    "courseName": course_name,
-                    "enrolledRevenue": 0,
-                    "opportunityRevenue": 0
-                }
-            
-            if status == "Enrolled":
-                course_data[course_name]["enrolledRevenue"] += price
-            elif status == "Active":
-                course_data[course_name]["opportunityRevenue"] += price
+            # Since a lead can have multiple courses, we can divide the price among them
+            # or assign the full price to each. Let's assign full price to each for now.
+            for course_name in courses:
+                if not course_name:
+                    continue
+
+                # Initialize course entry if it doesn't exist
+                if course_name not in course_data:
+                    course_data[course_name] = {
+                        "courseName": course_name,
+                        "enrolledRevenue": 0,
+                        "opportunityRevenue": 0
+                    }
+                
+                if status == "Enrolled":
+                    course_data[course_name]["enrolledRevenue"] += price
+                elif status == "Active":
+                    course_data[course_name]["opportunityRevenue"] += price
 
         # Convert dictionary to a list for Firestore
         report_courses = list(course_data.values())
@@ -1013,4 +1022,5 @@ def reindexLeads(req: https_fn.CallableRequest) -> dict:
 
 
     
+
 

@@ -128,7 +128,7 @@ export default function RecallTrainerPage() {
                     <CardDescription>Commitment Snapshot</CardDescription>
                   </CardHeader>
                   <CardContent className="flex-1 text-sm space-y-2">
-                    <p><strong>Course:</strong> {lead.commitmentSnapshot?.course || 'N/A'}</p>
+                    <p><strong>Courses:</strong> {(lead.commitmentSnapshot?.courses || []).join(', ') || 'N/A'}</p>
                     <p><strong>Price:</strong> {lead.commitmentSnapshot?.price || 'N/A'}</p>
                     <p><strong>Schedule:</strong> {lead.commitmentSnapshot?.schedule || 'N/A'}</p>
                   </CardContent>

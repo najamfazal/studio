@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -20,6 +20,9 @@ import { cn } from '@/lib/utils';
 import { DateTimePicker } from '@/components/date-time-picker';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { EditableField } from './editable-field';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { CheckIcon } from 'lucide-react';
 
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
@@ -71,6 +74,7 @@ const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
 
 export function FocusView({ lead, task, appSettings, onInteractionLogged, onLeadUpdate }: FocusViewProps) {
     const { toast } = useToast();
+    const [isCoursePopoverOpen, setIsCoursePopoverOpen] = useState(false);
     
     const [currentLead, setCurrentLead] = useState(lead);
     useEffect(() => setCurrentLead(lead), [lead]);
@@ -144,10 +148,15 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     
         try {
           await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
-          await updateDoc(doc(db, 'tasks', task.id), { completed: true });
+          
+          if (task.id) {
+             await updateDoc(doc(db, 'tasks', task.id), { completed: true });
+             toast({ title: 'Interaction Logged & Task Completed' });
+             onInteractionLogged();
+          } else {
+            toast({ title: 'Interaction Logged' });
+          }
 
-          toast({ title: 'Interaction Logged & Task Completed' });
-          onInteractionLogged();
 
         } catch (error) {
           console.error("Error logging interaction:", error);
@@ -273,6 +282,16 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     };
 
 
+    const handleCourseSelection = (course: string) => {
+        if (!currentLead) return;
+        const currentCourses = currentLead.commitmentSnapshot?.courses || [];
+        const newCourses = currentCourses.includes(course)
+            ? currentCourses.filter(c => c !== course)
+            : [...currentCourses, course];
+        handleUpdate('commitmentSnapshot.courses', newCourses);
+    };
+
+
     return (
         <div className="max-w-4xl mx-auto space-y-4">
             {/* Contact Header */}
@@ -297,25 +316,71 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             </div>
             
              {/* Task Context */}
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2">
-                <p className="text-xs font-semibold text-primary/80">Task:</p>
-                <p className="font-medium text-sm text-primary">{task.description}</p>
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2 text-primary">
+                <p className="text-xs font-semibold uppercase">Task:</p>
+                <p className="font-medium text-sm">{task.description}</p>
             </div>
 
             {/* Commitment Snapshot */}
-            <Card>
+             <Card>
                 <CardHeader className="p-2">
                     <CardTitle className="text-xs font-semibold text-muted-foreground">Commitment Snapshot</CardTitle>
                 </CardHeader>
                 <CardContent className="p-2 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                    <EditableField
-                        label="Course"
-                        value={currentLead.commitmentSnapshot?.course || ""}
-                        onSave={(val) => handleUpdate('commitmentSnapshot.course', val)}
-                        type="select"
-                        selectOptions={appSettings.courseNames || []}
-                        placeholder="Select course"
-                    />
+                     <div className="space-y-1 sm:col-span-1">
+                        <div className="font-medium text-muted-foreground text-xs flex items-center justify-between cursor-pointer" onClick={() => setIsCoursePopoverOpen(true)}>
+                            Courses
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                                <XIcon className="h-3 w-3" />
+                            </Button>
+                        </div>
+                        <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={isCoursePopoverOpen}
+                                    className="w-full justify-start font-normal h-auto min-h-9"
+                                >
+                                    {(currentLead.commitmentSnapshot?.courses || []).length > 0 ? (
+                                        <div className="flex gap-1 flex-wrap">
+                                            {(currentLead.commitmentSnapshot?.courses || []).map(course => (
+                                                <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                      <span className="text-muted-foreground">Select courses...</span>
+                                    )}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                <Command>
+                                    <CommandInput placeholder="Search courses..." />
+                                    <CommandList>
+                                        <CommandEmpty>No course found.</CommandEmpty>
+                                        <CommandGroup>
+                                            {(appSettings.courseNames || []).map(course => (
+                                                <CommandItem
+                                                    key={course}
+                                                    value={course}
+                                                    onSelect={() => handleCourseSelection(course)}
+                                                >
+                                                    <CheckIcon
+                                                        className={cn(
+                                                            "mr-2 h-4 w-4",
+                                                            (currentLead.commitmentSnapshot?.courses || []).includes(course) ? "opacity-100" : "opacity-0"
+                                                        )}
+                                                    />
+                                                    {course}
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+
                     <EditableField
                         label="Price"
                         value={currentLead.commitmentSnapshot?.price || ""}

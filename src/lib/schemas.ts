@@ -18,7 +18,7 @@ export const leadSchema = z.object({
       });
     }
   }),
-  course: z.string().optional(),
+  courses: z.array(z.string()).optional(),
   relationship: z.string().min(1, { message: "Relationship type is required." }),
 });
 
