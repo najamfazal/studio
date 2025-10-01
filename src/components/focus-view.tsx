@@ -328,57 +328,27 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </CardHeader>
                 <CardContent className="p-2 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
                      <div className="space-y-1 sm:col-span-1">
-                        <div className="font-medium text-muted-foreground text-xs flex items-center justify-between cursor-pointer" onClick={() => setIsCoursePopoverOpen(true)}>
-                            Courses
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
-                                <XIcon className="h-3 w-3" />
-                            </Button>
-                        </div>
-                        <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={isCoursePopoverOpen}
-                                    className="w-full justify-start font-normal h-auto min-h-9"
-                                >
-                                    {(currentLead.commitmentSnapshot?.courses || []).length > 0 ? (
-                                        <div className="flex gap-1 flex-wrap">
-                                            {(currentLead.commitmentSnapshot?.courses || []).map(course => (
-                                                <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                      <span className="text-muted-foreground">Select courses...</span>
-                                    )}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                <Command>
-                                    <CommandInput placeholder="Search courses..." />
-                                    <CommandList>
-                                        <CommandEmpty>No course found.</CommandEmpty>
-                                        <CommandGroup>
-                                            {(appSettings.courseNames || []).map(course => (
-                                                <CommandItem
-                                                    key={course}
-                                                    value={course}
-                                                    onSelect={() => handleCourseSelection(course)}
-                                                >
-                                                    <CheckIcon
-                                                        className={cn(
-                                                            "mr-2 h-4 w-4",
-                                                            (currentLead.commitmentSnapshot?.courses || []).includes(course) ? "opacity-100" : "opacity-0"
-                                                        )}
-                                                    />
-                                                    {course}
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
+                        <EditableField
+                          label="Courses"
+                          value={(currentLead.commitmentSnapshot?.courses || []).join(", ")}
+                          onSave={async (val) => {
+                            const newCourses = val.split(',').map(s => s.trim()).filter(Boolean);
+                            await handleUpdate('commitmentSnapshot.courses', newCourses);
+                          }}
+                          type="select"
+                          selectOptions={appSettings.courseNames || []}
+                          displayFormatter={(val) => {
+                            const courses = val.split(',').map(s => s.trim()).filter(Boolean);
+                            if (courses.length === 0) return <span className="text-muted-foreground">Select courses...</span>;
+                            return (
+                              <div className="flex gap-1 flex-wrap">
+                                {courses.map(course => (
+                                  <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
+                                ))}
+                              </div>
+                            );
+                          }}
+                        />
                     </div>
 
                     <EditableField
@@ -388,11 +358,15 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         inputType="number"
                         placeholder="Enter price"
                     />
-                    {currentLead.commitmentSnapshot?.keyNotes && (
-                        <div className="pt-1 col-span-1 sm:col-span-2">
-                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{currentLead.commitmentSnapshot.keyNotes}</p>
-                        </div>
-                    )}
+                    <div className="sm:col-span-2">
+                        <EditableField
+                          label="Key Notes"
+                          value={currentLead.commitmentSnapshot?.keyNotes || ""}
+                          onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)}
+                          type="textarea"
+                          placeholder="Add key negotiation points..."
+                        />
+                    </div>
                 </CardContent>
             </Card>
 
@@ -568,3 +542,5 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
+
+    
