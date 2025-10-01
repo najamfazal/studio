@@ -296,11 +296,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </div>
             </div>
             
-            {/* Task Context */}
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-                <p className="text-xs font-semibold text-primary/80">
-                    Task: <span className="font-medium text-sm text-primary">{task.description}</span>
-                </p>
+             {/* Task Context */}
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2">
+                <p className="text-xs font-semibold text-primary/80">Task:</p>
+                <p className="font-medium text-sm text-primary">{task.description}</p>
             </div>
 
             {/* Commitment Snapshot */}

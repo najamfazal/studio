@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { doc, onSnapshot, collection, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { onSnapshot, collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -35,14 +35,21 @@ export default function FocusPage() {
     const [isLoadingQueue, setIsLoadingQueue] = useState(true);
     const [isQueueVisible, setIsQueueVisible] = useState(true);
 
-    const [currentIndex, setCurrentIndex] = useState(() => queueIds.findIndex(id => id === initialTaskId));
+    const [currentIndex, setCurrentIndex] = useState(-1);
+    
+    const [isLoadingLead, setIsLoadingLead] = useState(false);
+    
+    useEffect(() => {
+        const index = queueIds.findIndex(id => id === initialTaskId);
+        setCurrentIndex(index);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialTaskId]);
+
 
     const currentTaskId = useMemo(() => queueIds[currentIndex], [queueIds, currentIndex]);
     const currentTask = useMemo(() => taskQueue.find(t => t.id === currentTaskId), [taskQueue, currentTaskId]);
     const currentLead = useMemo(() => currentTask?.leadId ? leadsCache[currentTask.leadId] : null, [leadsCache, currentTask]);
     
-    const [isLoadingLead, setIsLoadingLead] = useState(false);
-
     const fetchTaskQueue = useCallback(async () => {
         if (queueIds.length === 0) {
             setIsLoadingQueue(false);
@@ -88,7 +95,7 @@ export default function FocusPage() {
 
     useEffect(() => {
         const fetchLeadForCurrentTask = async () => {
-            if (currentTask?.leadId && !leadsCache[currentTask.leadId]) {
+            if (currentTask && currentTask.leadId && !leadsCache[currentTask.leadId]) {
                 setIsLoadingLead(true);
                 try {
                     const leadDoc = await getDoc(doc(db, 'leads', currentTask.leadId));
@@ -104,10 +111,7 @@ export default function FocusPage() {
                 }
             }
         };
-
-        if (currentTask) {
-            fetchLeadForCurrentTask();
-        }
+        fetchLeadForCurrentTask();
     }, [currentTask, leadsCache, toast]);
 
     const navigateToTask = (index: number) => {
@@ -119,32 +123,19 @@ export default function FocusPage() {
     }
 
     const handleInteractionLogged = () => {
+        // Mark the task as completed in the local state, but don't navigate.
         setTaskQueue(prevQueue =>
             prevQueue.map(t =>
                 t.id === currentTaskId ? { ...t, completed: true } : t
             )
         );
-
-        setTimeout(() => {
-            let nextIndex = currentIndex + 1;
-            while(nextIndex < taskQueue.length && taskQueue[nextIndex].completed) {
-                nextIndex++;
-            }
-
-            if (nextIndex < taskQueue.length) {
-                navigateToTask(nextIndex);
-            } else {
-                toast({ title: "Queue finished!"});
-                router.push('/');
-            }
-        }, 300);
     };
 
     const handleLeadUpdate = (updatedLead: Lead) => {
         setLeadsCache(prev => ({...prev, [updatedLead.id]: updatedLead}));
     }
     
-    if (isLoadingQueue) {
+    if (isLoadingQueue || currentIndex === -1) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
