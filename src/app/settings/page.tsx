@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { AppSettings } from '@/lib/types';
+import type { AppSettings, ThemeSettings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,15 +17,26 @@ import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { reindexLeadsAction } from '@/app/actions';
+import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots';
+
+const colorPalettes: { name: string; colors: ThemeSettings }[] = [
+    { name: 'Default', colors: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' } },
+    { name: 'Stone', colors: { primary: '24 9.8% 10%', background: '0 0% 96.1%', accent: '24 5.4% 63.9%' } },
+    { name: 'Rose', colors: { primary: '346.8 77.2% 49.8%', background: '0 0% 97.3%', accent: '346.8 72.2% 50.8%' } },
+    { name: 'Mint', colors: { primary: '142.1 76.2% 36.3%', background: '143 76% 97%', accent: '142.1 70.6% 45.3%' } },
+    { name: 'Cobalt', colors: { primary: '221.2 83.2% 53.3%', background: '224 71% 95%', accent: '221.2 83.2% 53.3%' } },
+];
 
 export default function SettingsPage() {
     const [settings, setSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const { toast } = useToast();
+    const router = useRouter();
 
     const [newCourseName, setNewCourseName] = useState("");
     const [newTrait, setNewTrait] = useState("");
@@ -46,6 +57,7 @@ export default function SettingsPage() {
             const settingsDoc = await getDoc(settingsDocRef);
             if (settingsDoc.exists()) {
                 const data = settingsDoc.data();
+                const defaultTheme = { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' };
                 const completeSettings: AppSettings = {
                     courseNames: data.courseNames || [],
                     commonTraits: data.commonTraits || [],
@@ -54,6 +66,7 @@ export default function SettingsPage() {
                     trainers: data.trainers || [],
                     timeSlots: data.timeSlots || [],
                     feedbackChips: data.feedbackChips || { content: [], schedule: [], price: [] },
+                    theme: data.theme || defaultTheme,
                     id: settingsDoc.id,
                 };
                 setSettings(completeSettings);
@@ -69,7 +82,8 @@ export default function SettingsPage() {
                         content: ["Not relevant", "Too complex"],
                         schedule: ["Wrong time", "Too long"],
                         price: ["Too expensive", "No budget"],
-                    }
+                    },
+                    theme: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' }
                 };
                 await setDoc(settingsDocRef, defaultSettings);
                 setSettings(defaultSettings);
@@ -99,6 +113,14 @@ export default function SettingsPage() {
             const settingsDocRef = doc(db, "settings", "appConfig");
             await updateDoc(settingsDocRef, updatePayload);
             toast({ title: "Settings Saved", description: "Your changes have been saved successfully." });
+            
+            if (updatePayload.theme) {
+              toast({ title: 'Theme changed!', description: 'Reloading to apply new colors...' });
+              setTimeout(() => {
+                  router.refresh();
+              }, 1500);
+            }
+
         } catch (error) {
             // Revert on error
             setSettings(originalSettings);
@@ -145,7 +167,7 @@ export default function SettingsPage() {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' = 'courseNames';
+        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' = 'courseNames';
 
         if (field === 'courseNames') {
             if (!newCourseName) return;
@@ -192,7 +214,7 @@ export default function SettingsPage() {
                 const category = fieldKey.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[fieldKey as keyof Omit<AppSettings, 'id'| 'feedbackChips'>] as string[];
+                list = draft[fieldKey as keyof Omit<AppSettings, 'id'| 'feedbackChips' | 'theme'>] as string[];
             }
             if (!list.includes(valueToAdd)) {
                 list.push(valueToAdd);
@@ -224,7 +246,7 @@ export default function SettingsPage() {
                 const category = field.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[field as keyof Omit<AppSettings, 'id' | 'feedbackChips'>] as string[];
+                list = draft[field as keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'>] as string[];
             }
             const index = list.indexOf(itemToRemove);
             if (index > -1) {
@@ -302,6 +324,14 @@ export default function SettingsPage() {
         );
     };
 
+    const handleThemeUpdate = (newTheme: ThemeSettings) => {
+        if (!settings) return;
+        const newSettings = produce(settings, draft => {
+            draft.theme = newTheme;
+        });
+        handleSave({ theme: newTheme }, newSettings);
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -329,6 +359,48 @@ export default function SettingsPage() {
             </header>
             <main className="flex-1 p-4 sm:p-6 md:p-8">
                 <div className="grid gap-6 max-w-4xl mx-auto">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Theme Customization</CardTitle>
+                            <CardDescription>Customize the look and feel of your app.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div>
+                                <h3 className="font-semibold mb-2 text-sm">Color Palettes</h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                                    {colorPalettes.map(palette => (
+                                        <button key={palette.name} onClick={() => handleThemeUpdate(palette.colors)} className={cn("text-left rounded-lg border-2 p-2 transition-colors", settings.theme?.primary === palette.colors.primary ? "border-primary" : "border-transparent hover:border-muted-foreground/50")}>
+                                            <div className="flex -space-x-2">
+                                                <div className="w-5 h-5 rounded-full border-2 border-card" style={{ backgroundColor: `hsl(${palette.colors.primary})` }}></div>
+                                                <div className="w-5 h-5 rounded-full border-2 border-card" style={{ backgroundColor: `hsl(${palette.colors.accent})` }}></div>
+                                                <div className="w-5 h-5 rounded-full border-2 border-card" style={{ backgroundColor: `hsl(${palette.colors.background})` }}></div>
+                                            </div>
+                                            <p className="text-xs font-medium mt-2">{palette.name}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                             <div>
+                                <h3 className="font-semibold mb-2 text-sm">Custom Colors</h3>
+                                <p className="text-xs text-muted-foreground mb-4">Changes here will be saved as your custom theme. HSL values are required (e.g. 231 48% 48%).</p>
+                                <div className="grid sm:grid-cols-3 gap-4">
+                                     <div className="space-y-1">
+                                        <Label htmlFor="primaryColor" className="text-xs">Primary</Label>
+                                        <Input id="primaryColor" value={settings.theme?.primary} onChange={e => handleThemeUpdate({...settings.theme!, primary: e.target.value})} />
+                                     </div>
+                                     <div className="space-y-1">
+                                        <Label htmlFor="bgColor" className="text-xs">Background</Label>
+                                        <Input id="bgColor" value={settings.theme?.background} onChange={e => handleThemeUpdate({...settings.theme!, background: e.target.value})} />
+                                     </div>
+                                     <div className="space-y-1">
+                                        <Label htmlFor="accentColor" className="text-xs">Accent</Label>
+                                        <Input id="accentColor" value={settings.theme?.accent} onChange={e => handleThemeUpdate({...settings.theme!, accent: e.target.value})} />
+                                     </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Data Management</CardTitle>

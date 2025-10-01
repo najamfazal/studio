@@ -1,5 +1,11 @@
 
 
+export type ThemeSettings = {
+  primary: string;
+  background: string;
+  accent: string;
+}
+
 export type LeadStatus =
   | 'Active'
   | 'Paused'
@@ -145,6 +151,7 @@ export type AppSettings = {
     schedule: string[];
     price: string[];
   };
+  theme?: ThemeSettings;
   logAnalysisPrompt?: string;
 }
 
