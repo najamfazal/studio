@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -155,7 +154,6 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
           await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
           toast({ title: 'Interaction Logged' });
           
-          // This will be handled by the parent component now
           onInteractionLogged();
 
         } catch (error) {
@@ -319,9 +317,9 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             </div>
             
             {/* Task Context */}
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-baseline gap-2 text-primary">
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-baseline gap-2 text-primary text-sm">
                 <p className="text-xs font-semibold uppercase shrink-0">Task:</p>
-                <p className="font-medium text-sm">{task.description}</p>
+                <p className="font-medium">{task.description}</p>
             </div>
 
             {/* Commitment Snapshot */}
@@ -331,13 +329,13 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </CardHeader>
                 <CardContent className="p-2 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
                      <div className="space-y-1">
-                        <div className="font-medium text-muted-foreground text-xs flex items-center justify-between cursor-pointer">
+                        <div className="font-medium text-muted-foreground text-xs flex items-center justify-between">
                             Courses
-                            <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
+                             <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
                                 <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-6 w-6"><Pencil className="h-3 w-3" /></Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                <PopoverContent className="w-64 p-0" align="start">
                                     <Command>
                                         <CommandInput placeholder="Search courses..." />
                                         <CommandList>
@@ -567,3 +565,5 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
+
+    
