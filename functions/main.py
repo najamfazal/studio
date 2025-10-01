@@ -134,16 +134,16 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             BATCH_LIMIT = 499
 
         for row in contacts:
+            # --- CORE FIELDS ---
             name = row.get("name", row.get("Name", "")).strip()
             email = row.get("email", row.get("Email", "")).strip().lower()
-            notes = row.get("notes", row.get("Notes", "")).strip()
-            auto_log_initiated = row.get("autoLogInitiated")
-            course_name = str(row.get("courseName", row.get("Course", ""))).strip()
+            relationship = row.get("relationship", default_relationship).strip()
 
             if not name:
                 skipped_count += 1
                 continue
-            
+
+            # --- PHONE & EMAIL PARSING (MANDATORY) ---
             phones = []
             phone1_num = normalize_phone(row.get("Phone1", row.get("phone1")))
             if phone1_num:
@@ -161,33 +161,63 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 phone_generic = normalize_phone(row.get("phone", row.get("Phone", "")))
                 if phone_generic:
                     phones.append({"number": phone_generic, "type": "both"})
+            
+            # --- DYNAMIC COURSE MAPPING ---
+            courses = []
+            for key, value in row.items():
+                if re.match(r'course\d*', key, re.IGNORECASE) and value:
+                    courses.append(str(value).strip())
+            # Legacy single course field support
+            single_course = str(row.get("courseName", row.get("Course", ""))).strip()
+            if single_course and single_course not in courses:
+                courses.append(single_course)
+            
+            # --- OPTIONAL FIELDS ---
+            notes = row.get("notes", row.get("Notes", "")).strip()
+            price = str(row.get("price", "")).strip()
+            has_engaged = row.get("hasEngaged", False)
+            on_follow_list = row.get("onFollowList", False)
+            traits = row.get("traits", [])
+            insights = row.get("insights", [])
 
             search_keywords = generate_search_keywords(name, phones)
             
             lead_data = {
                 "name": name, "email": email, "phones": phones,
-                "relationship": default_relationship,
+                "relationship": relationship,
                 "commitmentSnapshot": {
-                    "courses": [course_name] if course_name else [],
-                    "keyNotes": notes
+                    "courses": courses,
+                    "keyNotes": notes,
+                    "price": price
                 },
-                "status": "Active", "afc_step": 0, "hasEngaged": False,
-                "onFollowList": False, "traits": [], "insights": [], "interactions": [],
+                "status": "Active", "afc_step": 0, "hasEngaged": has_engaged,
+                "onFollowList": on_follow_list, "traits": traits, "insights": insights, 
+                "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
                 "search_keywords": search_keywords,
             }
+            
+            # --- RELATIONSHIP-BASED LOGIC ---
+            if relationship.lower() == "lead":
+                auto_log_initiated = row.get("autoLogInitiated")
+                if auto_log_initiated == 1:
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    initiated_log = {
+                        "id": f"import_init_{int(datetime.now().timestamp())}",
+                        "createdAt": now_iso,
+                        "quickLogType": "Initiated",
+                        "notes": "Automatically logged upon import.",
+                    }
+                    lead_data["interactions"].append(initiated_log)
+                    lead_data["autoLogInitiated"] = True # For preview
 
-            if auto_log_initiated == 1:
-                now_iso = datetime.now(timezone.utc).isoformat()
-                initiated_log = {
-                    "id": f"import_init_{int(datetime.now().timestamp())}",
-                    "createdAt": now_iso,
-                    "quickLogType": "Initiated",
-                    "notes": "Automatically logged upon import.",
-                }
-                lead_data["interactions"].append(initiated_log)
-                lead_data["autoLogInitiated"] = True # For preview
+            elif relationship.lower() == "learner":
+                lead_data["status"] = "Enrolled"
+                # Task creation will happen post-import if it's a new learner
+                
+            # For 'trainer' and 'other', no special logic is needed, they are just copied.
 
+            # --- DATABASE OPERATIONS ---
             existing_doc_ref = None
             if email:
                 existing_docs_query = leads_ref.where("email", "==", email).limit(1).stream()
@@ -205,34 +235,42 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     if existing_doc_ref:
                         break
 
-            if existing_doc_ref:
-                if is_new_mode:
+            if is_dry_run:
+                if existing_doc_ref and is_new_mode:
                     skipped_count += 1
-                else:
+                elif existing_doc_ref:
                     updated_count += 1
-                    if not is_dry_run:
+                else:
+                    created_count += 1
+
+                if len(preview_data) < 3:
+                    preview_lead_data = lead_data.copy()
+                    preview_lead_data.pop("createdAt", None)
+                    preview_lead_data.pop("search_keywords", None) 
+                    preview_data.append(preview_lead_data)
+            else: # Not a dry run
+                if existing_doc_ref:
+                    if is_new_mode:
+                        skipped_count += 1
+                    else:
+                        updated_count += 1
                         batch.update(existing_doc_ref, lead_data)
                         batch_count += 1
-            else:
-                created_count += 1
-                if not is_dry_run:
+                else: # New contact
+                    created_count += 1
                     new_doc_ref = leads_ref.document()
                     batch.set(new_doc_ref, lead_data)
-                    batch_count += 1
-            
-            if is_dry_run and len(preview_data) < 3:
-                # Remove server timestamp for JSON serialization in preview
-                preview_lead_data = lead_data.copy()
-                preview_lead_data.pop("createdAt", None)
-                preview_lead_data.pop("search_keywords", None) # Don't show keywords in preview
-                if "commitmentSnapshot" in preview_lead_data and "course" in preview_lead_data["commitmentSnapshot"]:
-                  preview_lead_data["commitmentSnapshot"]["courses"] = [preview_lead_data["commitmentSnapshot"].pop("course")]
-                preview_data.append(preview_lead_data)
+                    
+                    # If new learner, create the task
+                    if relationship.lower() == "learner":
+                         create_task(new_doc_ref.id, name, f"set schedule and plan for {name}", "Procedural", datetime.now())
 
-            if not is_dry_run and batch_count >= BATCH_LIMIT:
-                batch.commit()
-                batch = db.batch()
-                batch_count = 0
+                    batch_count += 1
+
+                if batch_count >= BATCH_LIMIT:
+                    batch.commit()
+                    batch = db.batch()
+                    batch_count = 0
         
         if is_dry_run:
             return {
@@ -276,9 +314,12 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
     # If lead has a status, it's from an import.
     if lead_data.get("status"):
-        print(f"Imported lead created: {lead_name} ({lead_id}). Creating initial contact task.")
-        due_date = datetime.now() # Due today
-        create_task(lead_id, lead_name, "Send initial contact", "Interactive", due_date)
+        # Task for new "learner" is now handled during import to link to doc ID.
+        # This now only handles imported "leads".
+        if lead_data.get("relationship", "Lead").lower() == "lead":
+            print(f"Imported lead created: {lead_name} ({lead_id}). Creating initial contact task.")
+            due_date = datetime.now() # Due today
+            create_task(lead_id, lead_name, "Send initial contact", "Interactive", due_date)
         
     # If no status, it's a manually created lead.
     else:
@@ -1022,5 +1063,6 @@ def reindexLeads(req: https_fn.CallableRequest) -> dict:
 
 
     
+
 
 
