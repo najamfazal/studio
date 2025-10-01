@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -77,7 +77,11 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [isCoursePopoverOpen, setIsCoursePopoverOpen] = useState(false);
     
     const [currentLead, setCurrentLead] = useState(lead);
-    useEffect(() => setCurrentLead(lead), [lead]);
+    useEffect(() => {
+        if (lead) {
+            setCurrentLead(lead);
+        }
+    }, [lead]);
     
     const [feedback, setFeedback] = useState<InteractionFeedback>({});
     const [isLoggingFeedback, setIsLoggingFeedback] = useState(false);
@@ -148,15 +152,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     
         try {
           await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
-          
-          if (task.id) {
-             await updateDoc(doc(db, 'tasks', task.id), { completed: true });
-             toast({ title: 'Interaction Logged & Task Completed' });
-             onInteractionLogged();
-          } else {
-            toast({ title: 'Interaction Logged' });
-          }
-
+          toast({ title: 'Interaction Logged' });
+          onInteractionLogged();
 
         } catch (error) {
           console.error("Error logging interaction:", error);
@@ -291,6 +288,9 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         handleUpdate('commitmentSnapshot.courses', newCourses);
     };
 
+    if (!currentLead) {
+        return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>
+    }
 
     return (
         <div className="max-w-4xl mx-auto space-y-4">
@@ -315,10 +315,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </div>
             </div>
             
-             {/* Task Context */}
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2 text-primary">
-                <p className="text-xs font-semibold uppercase">Task:</p>
-                <p className="font-medium text-sm">{task.description}</p>
+            {/* Task Context */}
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-baseline gap-2 text-primary text-sm">
+                <p className="text-xs font-semibold uppercase shrink-0">Task:</p>
+                <p className="font-medium">{task.description}</p>
             </div>
 
             {/* Commitment Snapshot */}
@@ -327,30 +327,52 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     <CardTitle className="text-xs font-semibold text-muted-foreground">Commitment Snapshot</CardTitle>
                 </CardHeader>
                 <CardContent className="p-2 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                     <div className="space-y-1 sm:col-span-1">
-                        <EditableField
-                          label="Courses"
-                          value={(currentLead.commitmentSnapshot?.courses || []).join(", ")}
-                          onSave={async (val) => {
-                            const newCourses = val.split(',').map(s => s.trim()).filter(Boolean);
-                            await handleUpdate('commitmentSnapshot.courses', newCourses);
-                          }}
-                          type="select"
-                          selectOptions={appSettings.courseNames || []}
-                          displayFormatter={(val) => {
-                            const courses = val.split(',').map(s => s.trim()).filter(Boolean);
-                            if (courses.length === 0) return <span className="text-muted-foreground">Select courses...</span>;
-                            return (
-                              <div className="flex gap-1 flex-wrap">
-                                {courses.map(course => (
-                                  <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
-                                ))}
-                              </div>
-                            );
-                          }}
-                        />
+                     <div className="space-y-1">
+                        <div className="font-medium text-muted-foreground text-xs flex items-center justify-between cursor-pointer">
+                            Courses
+                            <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6"><Pencil className="h-3 w-3" /></Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Search courses..." />
+                                        <CommandList>
+                                            <CommandEmpty>No course found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {appSettings.courseNames.map(course => (
+                                                    <CommandItem
+                                                        key={course}
+                                                        value={course}
+                                                        onSelect={() => handleCourseSelection(course)}
+                                                    >
+                                                        <CheckIcon
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                (currentLead.commitmentSnapshot?.courses || []).includes(course) ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {course}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="min-h-[2.25rem] flex items-center">
+                            {(currentLead.commitmentSnapshot?.courses || []).length > 0 ? (
+                                <div className="flex gap-1 flex-wrap">
+                                    {currentLead.commitmentSnapshot.courses!.map(course => (
+                                        <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
+                                    ))}
+                                </div>
+                            ) : (
+                                <span className="text-sm text-muted-foreground/80">No courses selected</span>
+                            )}
+                        </div>
                     </div>
-
                     <EditableField
                         label="Price"
                         value={currentLead.commitmentSnapshot?.price || ""}
@@ -542,5 +564,3 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
-
-    
