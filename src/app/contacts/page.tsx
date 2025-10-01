@@ -5,19 +5,28 @@ import {
   query,
   orderBy,
   limit,
-  getDoc
+  getDoc,
+  where,
+  Timestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Lead, AppSettings, LeadStatus } from "@/lib/types";
 import { ContactsPageClient } from "@/components/contacts-page-client";
 import { unstable_noStore as noStore } from 'next/cache';
+import { startOfDay, endOfDay } from "date-fns";
 
 const PAGE_SIZE = 10;
 
 async function getLeads() {
     noStore();
     const leadsRef = collection(db, "leads");
-    const q = query(leadsRef, orderBy("createdAt", "desc"), limit(PAGE_SIZE));
+
+    const queryConstraints = [
+        orderBy("createdAt", "desc"),
+        limit(PAGE_SIZE)
+    ];
+
+    const q = query(leadsRef, ...queryConstraints);
 
     const querySnapshot = await getDocs(q);
     const leads = querySnapshot.docs.map(

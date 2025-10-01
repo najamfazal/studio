@@ -14,9 +14,11 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
   where,
+  Timestamp,
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { Plus, Users, Loader2, Filter, Upload, Search } from "lucide-react";
+import { Plus, Users, Loader2, Filter, Upload, Search, CalendarIcon, X } from "lucide-react";
+import { startOfDay, endOfDay } from "date-fns";
 
 import { app, db } from "@/lib/firebase";
 import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
@@ -51,6 +53,9 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
 import { MergeDialog } from "@/components/merge-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -90,6 +95,7 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   
   const [statusFilters, setStatusFilters] = useState<LeadStatus[]>([]);
+  const [createdDateFilter, setCreatedDateFilter] = useState<Date | null>(null);
   const [isImporting, startImportTransition] = useTransition();
 
   const [progress, setProgress] = useState<ProgressState>({ active: false, value: 0, total: 0, message: '' });
@@ -107,7 +113,7 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
 
   const { toast } = useToast();
   
-  const fetchLeads = useCallback(async (loadMore = false, filters: LeadStatus[] | null = null) => {
+  const fetchLeads = useCallback(async (loadMore = false, filters: {statuses?: LeadStatus[], date?: Date | null} = {}) => {
     if (debouncedSearchTerm) return; // Don't fetch paginated leads if searching
 
     if (loadMore) {
@@ -119,14 +125,21 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
       setHasMore(true);
     }
 
-    const currentFilters = filters !== null ? filters : statusFilters;
+    const { statuses = statusFilters, date = createdDateFilter } = filters;
 
     try {
       const leadsRef = collection(db, "leads");
       const queryConstraints = [];
       
-      if (currentFilters.length > 0) {
-        queryConstraints.push(where("status", "in", currentFilters));
+      if (statuses.length > 0) {
+        queryConstraints.push(where("status", "in", statuses));
+      }
+
+      if (date) {
+        const start = startOfDay(date);
+        const end = endOfDay(date);
+        queryConstraints.push(where("createdAt", ">=", Timestamp.fromDate(start)));
+        queryConstraints.push(where("createdAt", "<=", Timestamp.fromDate(end)));
       }
       
       queryConstraints.push(orderBy("createdAt", "desc"));
@@ -162,13 +175,13 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, lastVisible, statusFilters, debouncedSearchTerm]);
+  }, [toast, lastVisible, statusFilters, createdDateFilter, debouncedSearchTerm]);
 
 
   useEffect(() => {
-    fetchLeads(false, statusFilters);
+    fetchLeads(false, { statuses: statusFilters, date: createdDateFilter });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilters]); // Re-fetch when filters change
+  }, [statusFilters, createdDateFilter]); // Re-fetch when filters change
 
 
   useEffect(() => {
@@ -190,7 +203,7 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
         } else {
             setSearchResults([]);
             if (leads.length === 0) {
-              fetchLeads(false, statusFilters);
+              fetchLeads(false, {statuses: statusFilters, date: createdDateFilter});
             }
         }
     };
@@ -280,7 +293,7 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
                 afc_step: 0,
                 hasEngaged: false,
                 onFollowList: false,
-                createdAt: new Date().toISOString(),
+                createdAt: new Date(),
                 traits: [],
                 insights: [],
                 interactions: [],
@@ -295,7 +308,7 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
             const result = await searchLeads({ term: debouncedSearchTerm });
             setSearchResults(result.data as Lead[]);
         } else {
-            fetchLeads(false, statusFilters);
+            fetchLeads(false, { statuses: statusFilters, date: createdDateFilter });
         }
 
     } catch (error) {
@@ -361,6 +374,29 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
             </div>
             <div className="flex items-center gap-2">
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon" className={cn("w-10 relative", createdDateFilter && "border-primary text-primary")}>
+                            <CalendarIcon className="h-4 w-4" />
+                            <span className="sr-only">Filter by date</span>
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                         {createdDateFilter && (
+                            <Button variant="ghost" size="sm" className="absolute top-2 right-2 text-muted-foreground z-10 h-7" onClick={() => setCreatedDateFilter(null)}>
+                                <X className="h-4 w-4"/>
+                                Clear
+                            </Button>
+                         )}
+                        <Calendar
+                            mode="single"
+                            selected={createdDateFilter || undefined}
+                            onSelect={(date) => setCreatedDateFilter(date || null)}
+                            initialFocus
+                        />
+                    </PopoverContent>
+                </Popover>
+
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="icon" className="w-10">
@@ -368,7 +404,7 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
                             <span className="sr-only">Filter</span>
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent>
+                    <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         {ALL_STATUSES.map(status => (
@@ -432,14 +468,14 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
               No contacts found
             </h2>
             <p className="mt-2 max-w-xs">
-              {searchTerm ? `No results for "${searchTerm}".` : (statusFilters.length > 0 ? "No contacts match the current filter." : "Click the \"+\" button to add your first contact.")}
+              {searchTerm ? `No results for "${searchTerm}".` : (statusFilters.length > 0 || createdDateFilter ? "No contacts match the current filters." : "Click the \"+\" button to add your first contact.")}
             </p>
           </div>
         )}
 
         {hasMore && !isLoadingMore && !debouncedSearchTerm && (
             <div className="flex justify-center mt-8">
-                <Button variant="link" onClick={() => fetchLeads(true, statusFilters)} disabled={isLoadingMore}>
+                <Button variant="link" onClick={() => fetchLeads(true)} disabled={isLoadingMore}>
                     {isLoadingMore ? "Loading..." : "Load More"}
                 </Button>
             </div>
@@ -482,7 +518,7 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
       <ImportDialog
         isOpen={isImportDialogOpen}
         setIsOpen={setIsImportDialogOpen}
-        onSuccess={() => fetchLeads(false, statusFilters)}
+        onSuccess={() => fetchLeads(false)}
       />
       
       {mergeSourceLead && (
