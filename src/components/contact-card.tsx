@@ -54,14 +54,20 @@ export function ContactCard({
   const email = lead.email || "";
   const truncatedEmail = email.length > 10 ? `${email.substring(0, 10)}...` : email;
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
     if (isSelectionMode) {
+       // Let clicks on checkbox handle themselves
+      if ((e.target as HTMLElement).closest('[role="checkbox"]')) {
+        return;
+      }
       onToggleSelect(lead.id);
-    } else {
-      // Allow link navigation only if not in selection mode
-      // The Link component will handle this
     }
+    // If not in selection mode, the Link component handles navigation
   }
+
+  const stopPropagation = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+  };
 
   const cardContent = (
     <>
@@ -78,17 +84,18 @@ export function ContactCard({
               checked={isSelected}
               onCheckedChange={() => onToggleSelect(lead.id)}
               className="h-5 w-5"
+              onClick={stopPropagation}
             />
         ) : (
             <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
+                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={stopPropagation}>
                 <MoreVertical className="h-4 w-4" />
                 <span className="sr-only">More options</span>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                 <DropdownMenuItem onClick={() => onToggleSelect(lead.id)}>
+            <DropdownMenuContent align="end" onClick={stopPropagation}>
+                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onToggleSelect(lead.id); }}>
                     <CheckSquare className="mr-2 h-4 w-4" />
                     <span>Select</span>
                 </DropdownMenuItem>
