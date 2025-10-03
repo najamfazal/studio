@@ -128,14 +128,14 @@ export function ContactCard({
             )}
              <div className="flex items-center gap-2">
                 <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                 <a href={`mailto:${email}`} className="truncate text-xs" title={email}>
+                 <a href={`mailto:${email}`} className="truncate text-xs" title={email} onClick={stopPropagation}>
                     {truncatedEmail}
                 </a>
              </div>
             {(lead.phones || []).map((phone, index) => (
                 <div key={index} className="flex items-center gap-2">
                     <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <a href={`tel:${phone.number}`} className="truncate text-xs">
+                    <a href={`tel:${phone.number}`} className="truncate text-xs" onClick={stopPropagation}>
                       {phone.number}
                     </a>
                 </div>
