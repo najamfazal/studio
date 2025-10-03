@@ -129,7 +129,7 @@ export default function ContactDetailPage() {
       const leadDoc = await getDoc(leadDocRef);
 
       if (leadDoc.exists()) {
-        const leadData = { id: leadDoc.id, ...doc.data() } as Lead;
+        const leadData = { id: leadDoc.id, ...leadDoc.data() } as Lead;
         setLead(leadData);
         setCurrentSchedule(leadData.courseSchedule || { sessionGroups: [] });
         setCurrentPayPlan(leadData.paymentPlan || { totalPrice: parseFloat(leadData.commitmentSnapshot.price || '0'), installments: [] });
@@ -1617,3 +1617,5 @@ function PayPlanEditor({ plan, onPlanChange, onSave }: { plan: PaymentPlan, onPl
         </Card>
     );
 }
+
+    
