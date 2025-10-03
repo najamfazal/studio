@@ -179,6 +179,14 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             on_follow_list = row.get("onFollowList", False)
             traits = row.get("traits", [])
             insights = row.get("insights", [])
+            
+            # --- STATUS MAPPING ---
+            status = row.get("status", "").strip()
+            if not status:
+                if relationship.lower() == "learner":
+                    status = "Enrolled"
+                else:
+                    status = "Active"
 
             search_keywords = generate_search_keywords(name, phones)
             
@@ -190,7 +198,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     "keyNotes": notes,
                     "price": price
                 },
-                "status": "Active", "afc_step": 0, "hasEngaged": has_engaged,
+                "status": status, "afc_step": 0, "hasEngaged": has_engaged,
                 "onFollowList": on_follow_list, "traits": traits, "insights": insights, 
                 "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
@@ -212,8 +220,8 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     lead_data["autoLogInitiated"] = True # For preview
 
             elif relationship.lower() == "learner":
-                lead_data["status"] = "Enrolled"
                 # Task creation will happen post-import if it's a new learner
+                pass
                 
             # For 'trainer' and 'other', no special logic is needed, they are just copied.
 
@@ -1106,3 +1114,6 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
 
 
+
+
+    
