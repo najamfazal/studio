@@ -10,6 +10,8 @@ import {
   Trash2,
   GitMerge,
   Book,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -26,12 +28,16 @@ import {
 } from "@/components/ui/card";
 import type { Lead } from "@/lib/types";
 import { cn } from '@/lib/utils';
+import { Checkbox } from './ui/checkbox';
 
 interface ContactCardProps {
   lead: Lead;
   onEdit: (lead: Lead) => void;
   onDelete: (id: string) => void;
   onMerge: (lead: Lead) => void;
+  isSelectionMode: boolean;
+  isSelected: boolean;
+  onToggleSelect: (leadId: string) => void;
 }
 
 export function ContactCard({
@@ -39,49 +45,72 @@ export function ContactCard({
   onEdit,
   onDelete,
   onMerge,
+  isSelectionMode,
+  isSelected,
+  onToggleSelect,
 }: ContactCardProps) {
   const contactName = lead.name || "";
   const truncatedName = contactName.length > 12 ? `${contactName.substring(0, 12)}...` : contactName;
   const email = lead.email || "";
   const truncatedEmail = email.length > 10 ? `${email.substring(0, 10)}...` : email;
 
-  return (
-    <Card className="p-4 flex flex-col">
-      <div className="flex items-start justify-between mb-3">
+  const handleCardClick = () => {
+    if (isSelectionMode) {
+      onToggleSelect(lead.id);
+    } else {
+      // Allow link navigation only if not in selection mode
+      // The Link component will handle this
+    }
+  }
+
+  const cardContent = (
+    <>
+     <div className="flex items-start justify-between mb-3">
         <div className="flex-1 space-y-1 pr-2 min-w-0">
-            <Link href={`/contacts/${lead.id}`} className="flex items-center gap-2 flex-wrap" title={contactName}>
-              <h3 className="font-semibold text-base hover:underline leading-tight truncate">{truncatedName}</h3>
+            <div className="flex items-center gap-2 flex-wrap" title={contactName}>
+              <h3 className={cn("font-semibold text-base leading-tight truncate", !isSelectionMode && "hover:underline")}>{truncatedName}</h3>
               <p className="text-xs text-muted-foreground">{lead.relationship || 'Lead'}</p>
-            </Link>
+            </div>
              <Badge variant={lead.status === 'Active' ? "default" : "secondary"} className="text-xs mt-1">{lead.status || 'Active'}</Badge>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
-              <MoreVertical className="h-4 w-4" />
-              <span className="sr-only">More options</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(lead)}>
-              <FilePenLine className="mr-2 h-4 w-4" />
-              <span>Edit</span>
-            </DropdownMenuItem>
-             <DropdownMenuItem onClick={() => onMerge(lead)}>
-              <GitMerge className="mr-2 h-4 w-4" />
-              <span>Merge</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onDelete(lead.id)}
-              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              <span>Delete</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {isSelectionMode ? (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onToggleSelect(lead.id)}
+              className="h-5 w-5"
+            />
+        ) : (
+            <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
+                <MoreVertical className="h-4 w-4" />
+                <span className="sr-only">More options</span>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                 <DropdownMenuItem onClick={() => onToggleSelect(lead.id)}>
+                    <CheckSquare className="mr-2 h-4 w-4" />
+                    <span>Select</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onEdit(lead)}>
+                <FilePenLine className="mr-2 h-4 w-4" />
+                <span>Edit</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onMerge(lead)}>
+                <GitMerge className="mr-2 h-4 w-4" />
+                <span>Merge</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                onClick={() => onDelete(lead.id)}
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                >
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span>Delete</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+            </DropdownMenu>
+        )}
       </div>
-
       <CardContent className="p-0 text-sm flex flex-col items-start justify-between mt-auto space-y-2">
          <div className="space-y-1.5 w-full">
             {(lead.commitmentSnapshot?.courses || []).length > 0 && (
@@ -106,6 +135,25 @@ export function ContactCard({
             ))}
         </div>
       </CardContent>
+    </>
+  );
+
+  return (
+    <Card 
+        className={cn(
+            "p-4 flex flex-col transition-all",
+            isSelectionMode && "cursor-pointer",
+            isSelected && "ring-2 ring-primary bg-primary/5"
+        )}
+        onClick={handleCardClick}
+    >
+      {isSelectionMode ? (
+        <div>{cardContent}</div>
+      ) : (
+        <Link href={`/contacts/${lead.id}`} className="contents">
+          {cardContent}
+        </Link>
+      )}
     </Card>
   );
 }

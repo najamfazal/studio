@@ -17,7 +17,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { Plus, Users, Loader2, Filter, Upload, Search, CalendarIcon, X } from "lucide-react";
+import { Plus, Users, Loader2, Filter, Upload, Search, CalendarIcon, X, Layers, Trash2 } from "lucide-react";
 import { startOfDay, endOfDay } from "date-fns";
 
 import { app, db } from "@/lib/firebase";
@@ -41,6 +41,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -48,7 +49,7 @@ import {
 import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
-import { mergeLeadsAction } from "@/app/actions";
+import { bulkDeleteLeadsAction, mergeLeadsAction } from "@/app/actions";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -110,6 +111,11 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
   const [mergeSourceLead, setMergeSourceLead] = useState<Lead | null>(null);
   const [isMerging, setIsMerging] = useState(false);
   
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { toast } = useToast();
   
@@ -355,6 +361,60 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
     }
   };
 
+  const handleToggleSelect = (leadId: string) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedLeadIds([leadId]);
+    } else {
+      setSelectedLeadIds(prev =>
+        prev.includes(leadId)
+          ? prev.filter(id => id !== leadId)
+          : [...prev, leadId]
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (isSelectionMode && selectedLeadIds.length === 0) {
+      setIsSelectionMode(false);
+    }
+  }, [isSelectionMode, selectedLeadIds]);
+
+  const handleClearSelection = () => {
+    setSelectedLeadIds([]);
+    setIsSelectionMode(false);
+  };
+
+  const handleBulkDelete = async () => {
+    setIsBulkDeleteConfirmOpen(false);
+    setIsDeleting(true);
+    setProgress({ active: true, value: 0, total: selectedLeadIds.length, message: "Starting deletion..." });
+
+    try {
+        const result = await bulkDeleteLeadsAction(selectedLeadIds);
+        if (result.success) {
+            toast({ title: "Bulk Delete Successful", description: `${selectedLeadIds.length} contacts have been deleted.` });
+            
+            // Optimistically remove from state
+            setLeads(prev => prev.filter(l => !selectedLeadIds.includes(l.id)));
+            setSearchResults(prev => prev.filter(l => !selectedLeadIds.includes(l.id)));
+            
+            handleClearSelection();
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        toast({
+            variant: "destructive",
+            title: "Bulk Delete Failed",
+            description: error instanceof Error ? error.message : "An unknown error occurred.",
+        });
+    } finally {
+        setIsDeleting(false);
+        setProgress({ ...progress, active: false });
+    }
+  };
+
 
   if (isLoading && leads.length === 0 && !debouncedSearchTerm) {
     return (
@@ -368,81 +428,112 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
     <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <SidebarTrigger />
-                <Users className="h-8 w-8 text-primary hidden sm:block" />
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
-            </div>
-            <div className="flex items-center gap-2">
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" size="icon" className={cn("w-10 relative", createdDateFilter && "border-primary text-primary")}>
-                            <CalendarIcon className="h-4 w-4" />
-                            <span className="sr-only">Filter by date</span>
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="end">
-                         {createdDateFilter && (
-                            <Button variant="ghost" size="sm" className="absolute top-2 right-2 text-muted-foreground z-10 h-7" onClick={() => setCreatedDateFilter(null)}>
-                                <X className="h-4 w-4"/>
-                                Clear
-                            </Button>
-                         )}
-                        <Calendar
-                            mode="single"
-                            selected={createdDateFilter || undefined}
-                            onSelect={(date) => setCreatedDateFilter(date || null)}
-                            initialFocus
-                        />
-                    </PopoverContent>
-                </Popover>
+          {isSelectionMode ? (
+            <>
+              <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" onClick={handleClearSelection}><X className="h-5 w-5"/></Button>
+                  <span className="font-semibold">{selectedLeadIds.length} selected</span>
+              </div>
+               <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="w-10">
+                        <Layers className="h-4 w-4" />
+                        <span className="sr-only">Bulk Actions</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem 
+                        onClick={() => setIsBulkDeleteConfirmOpen(true)}
+                        disabled={selectedLeadIds.length === 0}
+                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                    >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Selected
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                  <SidebarTrigger />
+                  <Users className="h-8 w-8 text-primary hidden sm:block" />
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                  <Popover>
+                      <PopoverTrigger asChild>
+                          <Button variant="outline" size="icon" className={cn("w-10 relative", createdDateFilter && "border-primary text-primary")}>
+                              <CalendarIcon className="h-4 w-4" />
+                              <span className="sr-only">Filter by date</span>
+                          </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end">
+                          {createdDateFilter && (
+                              <Button variant="ghost" size="sm" className="absolute top-2 right-2 text-muted-foreground z-10 h-7" onClick={() => setCreatedDateFilter(null)}>
+                                  <X className="h-4 w-4"/>
+                                  Clear
+                              </Button>
+                          )}
+                          <Calendar
+                              mode="single"
+                              selected={createdDateFilter || undefined}
+                              onSelect={(date) => setCreatedDateFilter(date || null)}
+                              initialFocus
+                          />
+                      </PopoverContent>
+                  </Popover>
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="icon" className="w-10">
-                            <Filter className="h-4 w-4" />
-                            <span className="sr-only">Filter</span>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        {ALL_STATUSES.map(status => (
-                            <DropdownMenuCheckboxItem
-                                key={status}
-                                checked={statusFilters.includes(status)}
-                                onCheckedChange={() => handleFilterChange(status)}
-                                onSelect={(e) => e.preventDefault()}
-                            >
-                                {status}
-                            </DropdownMenuCheckboxItem>
-                        ))}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-                <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)} disabled={isImporting}>
-                    {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    <span className="sr-only">Import Contacts</span>
-                </Button>
-                <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }} disabled={isImporting}>
-                    <Plus className="h-4 w-4" />
-                    <span className="sr-only">Add Contact</span>
-                </Button>
+                  <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="icon" className="w-10">
+                              <Filter className="h-4 w-4" />
+                              <span className="sr-only">Filter</span>
+                          </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {ALL_STATUSES.map(status => (
+                              <DropdownMenuCheckboxItem
+                                  key={status}
+                                  checked={statusFilters.includes(status)}
+                                  onCheckedChange={() => handleFilterChange(status)}
+                                  onSelect={(e) => e.preventDefault()}
+                              >
+                                  {status}
+                              </DropdownMenuCheckboxItem>
+                          ))}
+                      </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button variant="outline" size="icon" className="w-10" onClick={() => setIsImportDialogOpen(true)} disabled={isImporting}>
+                      {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      <span className="sr-only">Import Contacts</span>
+                  </Button>
+                  <Button size="icon" className="w-10" onClick={() => { setLeadToEdit(null); setIsLeadDialogOpen(true); }} disabled={isImporting}>
+                      <Plus className="h-4 w-4" />
+                      <span className="sr-only">Add Contact</span>
+                  </Button>
+              </div>
+            </>
+          )}
+        </div>
+        {!isSelectionMode && (
+             <div className="relative mt-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                placeholder="Search by name or phone..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
             </div>
-        </div>
-        <div className="relative mt-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or phone..."
-              className="pl-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
-        </div>
-         {progress.active && (
+        )}
+         {(progress.active || isDeleting) && (
           <div className="mt-4 space-y-1">
-             <Progress value={(progress.value / progress.total) * 100} className="w-full h-2" />
-             <p className="text-xs text-muted-foreground">{progress.message} ({progress.value} / {progress.total})</p>
+             <Progress value={isDeleting ? (progress.value / progress.total) * 100 : undefined} className="w-full h-2" />
+             <p className="text-xs text-muted-foreground">{isDeleting ? `Deleting contacts...` : progress.message}</p>
           </div>
         )}
       </header>
@@ -458,6 +549,9 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
                 onEdit={handleEdit}
                 onDelete={(id) => setLeadToDelete(id)}
                 onMerge={handleMerge}
+                isSelectionMode={isSelectionMode}
+                isSelected={selectedLeadIds.includes(lead.id)}
+                onToggleSelect={handleToggleSelect}
               />
             ))}
           </div>
@@ -499,6 +593,24 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+       <AlertDialog open={isBulkDeleteConfirmOpen} onOpenChange={setIsBulkDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedLeadIds.length} Contacts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected contacts and all their associated tasks and data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

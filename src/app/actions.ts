@@ -98,6 +98,23 @@ export async function reindexLeadsAction() {
 //   }
 // }
 
+export async function bulkDeleteLeadsAction(leadIds: string[]) {
+    if (!leadIds || leadIds.length === 0) {
+        return { success: false, error: "No lead IDs provided for deletion." };
+    }
+
+    try {
+        const functions = getFunctions(app);
+        const bulkDelete = httpsCallable(functions, 'bulkDeleteLeads');
+        const result = await bulkDelete({ leadIds });
+        return { success: true, ...(result.data as any) };
+    } catch (error) {
+        console.error('Error during bulk delete action:', error);
+        const httpsError = error as any;
+        const errorMessage = httpsError.message || 'An unknown error occurred during bulk deletion.';
+        return { success: false, error: errorMessage };
+    }
+}
     
 
     

@@ -1059,10 +1059,50 @@ def reindexLeads(req: https_fn.CallableRequest) -> dict:
         )
       
 
+@https_fn.on_call(region="us-central1")
+def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
+    """
+    Deletes a list of leads in batches. This will trigger onLeadDelete
+    for each deleted lead to clean up associated data like tasks.
+    """
+    lead_ids = req.data.get("leadIds")
+    if not lead_ids or not isinstance(lead_ids, list):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="An array of lead IDs ('leadIds') is required.",
+        )
+
+    print(f"Starting bulk delete for {len(lead_ids)} leads.")
+    deleted_count = 0
+    try:
+        batch = db.batch()
+        BATCH_LIMIT = 500  # Firestore batch limit
+        
+        for i, lead_id in enumerate(lead_ids):
+            lead_ref = db.collection("leads").document(lead_id)
+            batch.delete(lead_ref)
+            deleted_count += 1
+            
+            # Commit the batch when it's full or when it's the last item
+            if (i + 1) % BATCH_LIMIT == 0 or (i + 1) == len(lead_ids):
+                batch.commit()
+                print(f"Committed batch of {deleted_count} deletions.")
+                # Start a new batch for the next set
+                batch = db.batch()
+
+        return { "message": f"Successfully deleted {deleted_count} leads." }
+
+    except Exception as e:
+        print(f"Error during bulk lead deletion: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during deletion: {e}",
+        )
     
 
 
     
+
 
 
 
