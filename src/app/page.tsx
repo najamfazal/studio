@@ -13,7 +13,7 @@ import {
 import Link from 'next/link';
 import { unstable_noStore as noStore } from 'next/cache';
 import { addDays, format, isPast, isSameDay, isToday, startOfToday } from "date-fns";
-import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar } from "lucide-react";
+import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { Task, Lead } from "@/lib/types";
@@ -26,6 +26,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ManualTaskDialog } from "@/components/manual-task-dialog";
+import { Badge } from "@/components/ui/badge";
 
 
 const toDate = (dateValue: any): Date | null => {
@@ -44,8 +45,8 @@ const getInteractionSnippet = (lead: Lead): string => {
     }
     const lastInteraction = lead.interactions.slice().sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     const text = lastInteraction.notes || lastInteraction.quickLogType || `Outcome: ${lastInteraction.outcome}` || "Interaction";
-    // Return first 10 characters of the text
-    return text.length > 15 ? `${text.substring(0, 15)}...` : text;
+    
+    return text.length > 10 ? `${text.substring(0, 10)}...` : text;
 }
 
 
@@ -53,43 +54,26 @@ async function getDashboardData() {
   noStore();
   const today = startOfToday();
 
-  let overdueSnapshot: QuerySnapshot<DocumentData, DocumentData>;
   let hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-  let newLeadsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-  let incompleteTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let allIncompleteTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
   
   try {
-     const overdueQuery = query(
-        collection(db, "tasks"),
-        where("completed", "==", false),
-        where("dueDate", "<", today)
-     );
      const hotFollowupsQuery = query(
         collection(db, "leads"),
         where("onFollowList", "==", true)
      );
-     const newLeadsQuery = query(
+     // Fetch all incomplete tasks, then filter in code. This avoids composite indexes.
+     const allIncompleteTasksQuery = query(
         collection(db, "tasks"),
-        where("completed", "==", false),
-        where("description", "==", "Send initial contact")
-     );
-      const incompleteTasksQuery = query(
-        collection(db, "tasks"),
-        where("completed", "==", false),
-        orderBy("dueDate", "asc")
+        where("completed", "==", false)
     );
 
-
     [
-      overdueSnapshot,
       hotFollowupsSnapshot,
-      newLeadsSnapshot,
-      incompleteTasksSnapshot,
+      allIncompleteTasksSnapshot,
     ] = await Promise.all([
-      getDocs(overdueQuery),
       getDocs(hotFollowupsQuery),
-      getDocs(newLeadsQuery),
-      getDocs(incompleteTasksQuery),
+      getDocs(allIncompleteTasksQuery),
     ]);
 
   } catch (e) {
@@ -104,21 +88,40 @@ async function getDashboardData() {
     };
   }
 
-  const overdueTasks = overdueSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
   const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
-  const newLeadsTasks = newLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
-  const allIncompleteTasks = incompleteTasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+  const allIncompleteTasks = allIncompleteTasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
 
-  const regularFollowupsTasks = allIncompleteTasks.filter(task => 
-    task.nature === "Interactive" && 
-    task.description !== "Send initial contact" &&
-    !overdueTasks.some(overdueTask => overdueTask.id === task.id)
-  );
+  const overdueTasks: Task[] = [];
+  const newLeadsTasks: Task[] = [];
+  const regularFollowupsTasks: Task[] = [];
+  const adminTasks: Task[] = [];
 
-  const adminTasks = allIncompleteTasks.filter(task => 
-    task.nature === "Procedural" &&
-    !overdueTasks.some(overdueTask => overdueTask.id === task.id)
-  );
+  allIncompleteTasks.forEach(task => {
+    const dueDate = toDate(task.dueDate);
+    if (dueDate && isPast(dueDate) && !isToday(dueDate)) {
+      overdueTasks.push(task);
+    } else if (task.description === "Send initial contact") {
+      newLeadsTasks.push(task);
+    } else if (task.nature === "Interactive") {
+      regularFollowupsTasks.push(task);
+    } else if (task.nature === "Procedural") {
+      adminTasks.push(task);
+    }
+  });
+
+  // Sort tasks after filtering
+  const sortTasks = (a: Task, b: Task) => {
+    const dateA = toDate(a.dueDate);
+    const dateB = toDate(b.dueDate);
+    if (dateA && dateB) return dateA.getTime() - dateB.getTime();
+    if (dateA) return -1;
+    if (dateB) return 1;
+    return 0;
+  };
+  
+  overdueTasks.sort(sortTasks);
+  regularFollowupsTasks.sort(sortTasks);
+  adminTasks.sort(sortTasks);
   
   return {
     overdueTasks,
@@ -139,22 +142,25 @@ export default async function TasksPage() {
      <div className="flex flex-col min-h-screen bg-background">
       <header className="bg-card border-b p-3 sticky top-0 z-10">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <SidebarTrigger />
             <div className="flex items-baseline gap-2">
               <h1 className="text-xl font-bold tracking-tight leading-none">My Tasks</h1>
               {overdueTasks.length > 0 && (
                   <Link href={{ pathname: `/tasks/focus/${overdueTasks[0].id}`, query: { queue: getTaskQueueParams(overdueTasks) }}}>
-                    <Badge variant="destructive" className="hover:underline">
-                        <AlertTriangle className="inline-block h-3 w-3 mr-1" />
-                        {overdueTasks.length} overdue
+                    <Badge variant="destructive" className="hover:underline blinking-badge">
+                        {overdueTasks.length} due
                     </Badge>
                   </Link>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ManualTaskDialog allTasks={[]} />
+            <ManualTaskDialog allTasks={[...newLeadsTasks, ...regularFollowupsTasks, ...adminTasks]} />
+            <Button variant="outline" size="icon" className="w-8 h-8">
+              <Calendar className="h-4 w-4"/>
+              <span className="sr-only">Calendar View</span>
+            </Button>
           </div>
         </div>
       </header>
