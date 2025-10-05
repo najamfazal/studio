@@ -6,14 +6,11 @@ import {
   orderBy,
   limit,
   getDoc,
-  where,
-  Timestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Lead, AppSettings, LeadStatus } from "@/lib/types";
+import type { Lead, AppSettings } from "@/lib/types";
 import { ContactsPageClient } from "@/components/contacts-page-client";
 import { unstable_noStore as noStore } from 'next/cache';
-import { startOfDay, endOfDay } from "date-fns";
 
 const PAGE_SIZE = 10;
 
@@ -32,10 +29,9 @@ async function getLeads() {
     const leads = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as Lead)
     );
-    const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
     const hasMore = leads.length === PAGE_SIZE;
 
-    return { leads, lastVisible, hasMore };
+    return { leads, hasMore };
 }
 
 async function getAppSettings() {
@@ -49,34 +45,14 @@ async function getAppSettings() {
 
 
 export default async function ContactsPage() {
-    const { leads, lastVisible, hasMore } = await getLeads();
+    const { leads, hasMore } = await getLeads();
     const appSettings = await getAppSettings();
-
-    // Serialize the lastVisible doc
-    const serializedLastVisible = lastVisible ? {
-        _path: {
-            segments: lastVisible.ref.path.split('/')
-        },
-        _converter: {},
-        _firestore: lastVisible.ref.firestore,
-        _document: {
-            data: {
-                value: {
-                    mapValue: {
-                        fields: lastVisible.data()
-                    }
-                }
-            }
-        },
-    } : null;
-
 
     return (
         <ContactsPageClient 
             initialLeads={JSON.parse(JSON.stringify(leads))} 
             initialAppSettings={appSettings}
             initialHasMore={hasMore}
-            initialLastVisible={null} // Firestore docs can't be serialized directly
         />
     );
 }

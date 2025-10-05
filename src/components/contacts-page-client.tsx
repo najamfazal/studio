@@ -75,16 +75,15 @@ interface ContactsPageClientProps {
     initialLeads: Lead[];
     initialAppSettings: AppSettings | null;
     initialHasMore: boolean;
-    initialLastVisible: any; // Serialized document
 }
 
 
-export function ContactsPageClient({ initialLeads, initialAppSettings, initialHasMore, initialLastVisible }: ContactsPageClientProps) {
+export function ContactsPageClient({ initialLeads, initialAppSettings, initialHasMore }: ContactsPageClientProps) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] =
-    useState<QueryDocumentSnapshot<DocumentData> | null>(initialLastVisible);
+    useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(initialHasMore);
   
   const [appSettings, setAppSettings] = useState<AppSettings | null>(initialAppSettings);
