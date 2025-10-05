@@ -186,31 +186,52 @@ export default function FocusPage() {
                 )}
 
                 {/* Main Content */}
-                <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-                     {(isLoadingLead || (currentTask && !currentLead)) ? (
-                        <div className="flex h-full items-center justify-center">
-                            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                        </div>
-                    ) : currentLead && currentTask && appSettings ? (
-                        <FocusView 
-                            lead={currentLead}
-                            task={currentTask}
-                            appSettings={appSettings}
-                            onInteractionLogged={handleInteractionLogged}
-                            onLeadUpdate={handleLeadUpdate}
-                        />
-                    ) : currentTask ? ( // Task exists but maybe no lead
-                        <div className="flex flex-col h-full items-center justify-center text-center">
-                            <ListTodo className="h-12 w-12 text-muted-foreground mb-4"/>
-                            <h2 className="text-xl font-semibold">No Contact Associated</h2>
-                            <p className="text-muted-foreground mt-1">This task is not linked to a contact.</p>
-                        </div>
-                    ) : (
-                         <div className="flex h-full items-center justify-center">
-                            <p>Loading task...</p>
-                         </div>
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <main className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
+                         {(isLoadingLead || (currentTask && !currentLead)) ? (
+                            <div className="flex h-full items-center justify-center">
+                                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                            </div>
+                        ) : currentLead && currentTask && appSettings ? (
+                            <FocusView 
+                                lead={currentLead}
+                                task={currentTask}
+                                appSettings={appSettings}
+                                onInteractionLogged={handleInteractionLogged}
+                                onLeadUpdate={handleLeadUpdate}
+                            />
+                        ) : currentTask ? ( // Task exists but maybe no lead
+                            <div className="flex flex-col h-full items-center justify-center text-center">
+                                <ListTodo className="h-12 w-12 text-muted-foreground mb-4"/>
+                                <h2 className="text-xl font-semibold">No Contact Associated</h2>
+                                <p className="text-muted-foreground mt-1">This task is not linked to a contact.</p>
+                            </div>
+                        ) : (
+                             <div className="flex h-full items-center justify-center">
+                                <p>Loading task...</p>
+                             </div>
+                        )}
+                    </main>
+
+                     {/* Desktop Navigation */}
+                    {!isMobile && (
+                        <footer className="bg-card/80 backdrop-blur-sm border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
+                             <Button variant="outline" size="icon" onClick={() => navigateToTask(0)} disabled={currentIndex === 0}>
+                                <ChevronsLeft />
+                            </Button>
+                            <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex === 0}>
+                                <ChevronLeft />
+                            </Button>
+                            <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= queueIds.length - 1}>
+                                Next Task
+                                <ChevronRight />
+                            </Button>
+                            <Button variant="outline" size="icon" onClick={() => navigateToTask(queueIds.length - 1)} disabled={currentIndex >= queueIds.length - 1}>
+                                <ChevronsRight />
+                            </Button>
+                        </footer>
                     )}
-                </main>
+                </div>
             </div>
 
             {/* Mobile Navigation */}
@@ -222,7 +243,8 @@ export default function FocusPage() {
                     <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex === 0}>
                         <ChevronLeft />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= queueIds.length - 1}>
+                    <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= queueIds.length - 1}>
+                        Next
                         <ChevronRight />
                     </Button>
                     <Button variant="outline" size="icon" onClick={() => navigateToTask(queueIds.length - 1)} disabled={currentIndex >= queueIds.length - 1}>
@@ -233,3 +255,5 @@ export default function FocusPage() {
         </div>
     );
 }
+
+    
