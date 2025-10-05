@@ -44,7 +44,7 @@ export function QuickLogDialog() {
     
     // --- Global State ---
     const [step, setStep] = useState<LogStep>('contact');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState<string | false>(false);
 
     // --- Contact Selection State ---
     const [allLeads, setAllLeads] = useState<(Pick<Lead, 'id' | 'name'> & { courses: string[] })[]>([]);
@@ -136,9 +136,9 @@ export function QuickLogDialog() {
         }
     };
     
-    const handleLogInteraction = async (interactionData: Partial<Interaction>) => {
+    const handleLogInteraction = async (interactionData: Partial<Interaction>, logType: string) => {
         if (!selectedLead) return;
-        setIsSubmitting(true);
+        setIsSubmitting(logType);
     
         const leadRef = doc(db, 'leads', selectedLead.id);
         const newInteraction: Interaction = {
@@ -150,7 +150,20 @@ export function QuickLogDialog() {
         try {
           await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
           toast({ title: `Log saved for ${selectedLead.name}` });
-          handleClose();
+
+          // Reset the specific part of the form that was submitted
+           if (logType === 'QuickLog') {
+                setSelectedQuickLog(null);
+                setQuickLogStep('initial');
+                setWithdrawalReasons([]);
+            } else if (logType === 'Feedback') {
+                setFeedback({});
+                setActiveChipCategory(null);
+            } else if (logType === 'Outcome') {
+                setSelectedOutcome(null);
+                setOutcomeNotes('');
+                setDateTimePickerValue(undefined);
+            }
         } catch (error) {
           console.error("Error logging interaction:", error);
           toast({ variant: "destructive", title: "Failed to log interaction." });
@@ -167,14 +180,14 @@ export function QuickLogDialog() {
             }
             let interaction: Partial<Interaction> = { quickLogType: selectedQuickLog };
             if (selectedQuickLog === 'Withdrawn') interaction.withdrawalReasons = withdrawalReasons;
-            handleLogInteraction(interaction);
+            handleLogInteraction(interaction, logType);
         }
         else if (logType === 'Feedback') {
             if (Object.keys(feedback).length === 0) {
                  toast({ variant: 'destructive', title: 'Please select a perception.'});
                 return;
             }
-             handleLogInteraction({ feedback });
+             handleLogInteraction({ feedback }, logType);
         }
         else if (logType === 'Outcome') {
             if (!selectedOutcome) return;
@@ -191,7 +204,7 @@ export function QuickLogDialog() {
                 if (!selectedLead?.eventDetails?.type || !date) { toast({ variant: 'destructive', title: 'Please select event type and date.' }); return; }
                 payload.eventDetails = { ...selectedLead.eventDetails, dateTime: date, status: 'Scheduled' };
             }
-             handleLogInteraction(payload);
+             handleLogInteraction(payload, logType);
         }
     };
 
@@ -203,7 +216,7 @@ export function QuickLogDialog() {
     return (
         <Dialog open={isOpen} onOpenChange={handleClose}>
             <DialogContent className="max-w-lg">
-                {isFetching && <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>}
+                {(isFetching || !!isSubmitting) && <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>}
                 
                 {step === 'contact' && (
                     <>
@@ -257,7 +270,7 @@ export function QuickLogDialog() {
                     <DialogHeader>
                         <DialogTitle>Log for: {selectedLead.name}</DialogTitle>
                          <div className="flex items-center justify-between">
-                            <DialogDescription>Select one of the logging options below.</DialogDescription>
+                            <DialogDescription>Log interactions, then close when done.</DialogDescription>
                             <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setStep('contact')}>Change Contact</Button>
                          </div>
                     </DialogHeader>
@@ -265,14 +278,14 @@ export function QuickLogDialog() {
                         <Card>
                              <CardHeader className="flex-row items-center justify-between p-2">
                                 <CardTitle className="text-sm font-medium">Quick Log</CardTitle>
-                                <Button onClick={() => handleGenericLog('QuickLog')} size="icon" variant="ghost" disabled={isSubmitting || !selectedQuickLog} className="h-7 w-7">
-                                    {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
+                                <Button onClick={() => handleGenericLog('QuickLog')} size="icon" variant="ghost" disabled={!!isSubmitting || !selectedQuickLog} className="h-7 w-7">
+                                    {isSubmitting === 'QuickLog' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
                                 </Button>
                             </CardHeader>
                             {quickLogStep === 'initial' && (
                             <CardContent className="flex flex-wrap gap-2 p-2 pt-0">
                                 {quickLogOptions.map(opt => (
-                                <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="xs" onClick={() => { setSelectedQuickLog(opt.value); if(opt.multistep) setQuickLogStep(opt.multistep); }} disabled={isSubmitting}>{opt.label}</Button>
+                                <Button key={opt.value} variant={selectedQuickLog === opt.value ? 'default' : 'outline'} size="xs" onClick={() => { setSelectedQuickLog(opt.value); if(opt.multistep) setQuickLogStep(opt.multistep); }} disabled={!!isSubmitting}>{opt.label}</Button>
                                 ))}
                             </CardContent>
                             )}
@@ -291,8 +304,8 @@ export function QuickLogDialog() {
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between p-2">
                                 <CardTitle className="text-sm font-medium">Log Feedback</CardTitle>
-                                <Button onClick={() => handleGenericLog('Feedback')} disabled={isSubmitting || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-7 w-7">
-                                {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
+                                <Button onClick={() => handleGenericLog('Feedback')} disabled={!!isSubmitting || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-7 w-7">
+                                {isSubmitting === 'Feedback' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
                                 </Button>
                             </CardHeader>
                              <CardContent className="space-y-3 p-2 pt-0">
@@ -323,8 +336,8 @@ export function QuickLogDialog() {
                          <Card>
                             <CardHeader className="flex flex-row items-center justify-between p-2">
                                 <CardTitle className="text-sm font-medium">Log Outcome</CardTitle>
-                                <Button onClick={() => handleGenericLog('Outcome')} disabled={isSubmitting || !selectedOutcome} size="icon" variant="ghost" className="h-7 w-7">
-                                    {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
+                                <Button onClick={() => handleGenericLog('Outcome')} disabled={!!isSubmitting || !selectedOutcome} size="icon" variant="ghost" className="h-7 w-7">
+                                    {isSubmitting === 'Outcome' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
                                 </Button>
                             </CardHeader>
                             <CardContent className="space-y-3 p-2 pt-0">
@@ -347,6 +360,9 @@ export function QuickLogDialog() {
                             </CardContent>
                         </Card>
                     </div>
+                     <DialogFooter>
+                        <Button variant="outline" onClick={handleClose}>Done</Button>
+                    </DialogFooter>
                     </>
                 )}
                 <DateTimePicker isOpen={isDateTimePickerOpen} onClose={() => setIsDateTimePickerOpen(false)} onSelect={dateTimePickerCallback} initialDate={dateTimePickerValue} />
@@ -354,3 +370,5 @@ export function QuickLogDialog() {
         </Dialog>
     )
 }
+
+    
