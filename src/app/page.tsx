@@ -42,7 +42,7 @@ const getInteractionSnippet = (lead: Lead): string => {
     if (!lead.interactions || lead.interactions.length === 0) {
         return "No interactions yet";
     }
-    const lastInteraction = lead.interactions[lead.interactions.length - 1];
+    const lastInteraction = lead.interactions.slice().sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     const text = lastInteraction.notes || lastInteraction.quickLogType || `Outcome: ${lastInteraction.outcome}` || "Interaction";
     // Return first 10 characters of the text
     return text.length > 15 ? `${text.substring(0, 15)}...` : text;
@@ -53,14 +53,11 @@ async function getDashboardData() {
   noStore();
   const today = startOfToday();
 
-  // --- Simpler, combined query to avoid composite indexes ---
   const allIncompleteTasksQuery = query(
     collection(db, "tasks"),
-    where("completed", "==", false),
-    orderBy("dueDate", "asc")
+    where("completed", "==", false)
   );
 
-  // Hot Follow-ups query remains the same as it's simple
   const hotFollowupsQuery = query(
     collection(db, "leads"),
     where("onFollowList", "==", true)
@@ -69,13 +66,26 @@ async function getDashboardData() {
   let allTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>,
       hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
 
-  [
-    allTasksSnapshot,
-    hotFollowupsSnapshot,
-  ] = await Promise.all([
-    getDocs(allIncompleteTasksQuery),
-    getDocs(hotFollowupsQuery),
-  ]);
+  try {
+    [
+      allTasksSnapshot,
+      hotFollowupsSnapshot,
+    ] = await Promise.all([
+      getDocs(allIncompleteTasksQuery),
+      getDocs(hotFollowupsQuery),
+    ]);
+  } catch (e) {
+     console.error("Error fetching dashboard data:", e);
+    // Return empty arrays on error to prevent render failures
+    return {
+        overdueTasks: [],
+        hotFollowups: [],
+        newLeadsTasks: [],
+        regularFollowupsTasks: [],
+        adminTasks: [],
+    };
+  }
+
 
   const allIncompleteTasks = allTasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
   const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
@@ -92,15 +102,15 @@ async function getDashboardData() {
     task.nature === "Interactive" && 
     task.description !== "Send initial contact" &&
     !overdueTasks.some(overdueTask => overdueTask.id === task.id) // Exclude overdue
-  );
+  ).sort((a, b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime());
 
   const adminTasks = allIncompleteTasks.filter(task => 
     task.nature === "Procedural" &&
     !overdueTasks.some(overdueTask => overdueTask.id === task.id) // Exclude overdue
-  );
+  ).sort((a, b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime());
   
   return {
-    overdueTasks,
+    overdueTasks: overdueTasks.sort((a, b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime()),
     hotFollowups,
     newLeadsTasks,
     regularFollowupsTasks,
@@ -252,5 +262,3 @@ export default async function TasksPage() {
     </div>
   )
 }
-
-    
