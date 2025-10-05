@@ -18,8 +18,17 @@ export const leadSchema = z.object({
       });
     }
   }),
-  courses: z.array(z.string()).optional(),
   relationship: z.string().min(1, { message: "Relationship type is required." }),
 });
 
 export type LeadFormValues = z.infer<typeof leadSchema>;
+
+export const dealSchema = z.object({
+  id: z.string(),
+  courses: z.array(z.string()).min(1, "At least one course is required."),
+  price: z.number().min(0, "Price must be a positive number."),
+  mode: z.enum(["Online", "In-person"]),
+  format: z.enum(["1-1", "Batch"]),
+});
+
+export type DealFormValues = z.infer<typeof dealSchema>;

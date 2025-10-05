@@ -42,11 +42,7 @@ const manualTaskSchema = z.object({
 });
 type ManualTaskValues = z.infer<typeof manualTaskSchema>;
 
-interface ManualTaskDialogProps {
-  allTasks: Task[];
-}
-
-export function ManualTaskDialog({ allTasks }: ManualTaskDialogProps) {
+export function ManualTaskDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [leads, setLeads] = useState<(Pick<Lead, 'id' | 'name'>)[]>([]);
   const [isLeadsLoading, setIsLeadsLoading] = useState(false);
@@ -99,7 +95,6 @@ export function ManualTaskDialog({ allTasks }: ManualTaskDialogProps) {
         leadName: leadName,
       });
       toast({ title: "Manual task added!" });
-      // Note: we can't easily refresh server component data, but the new task will appear on next load.
       handleOpen(false);
     } catch (error) {
       console.error("Error adding manual task:", error);
@@ -112,7 +107,7 @@ export function ManualTaskDialog({ allTasks }: ManualTaskDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="w-8 h-8">
+        <Button variant="ghost" size="icon" className="w-8 h-8">
             <Plus className="h-4 w-4" />
             <span className="sr-only">New Task</span>
         </Button>

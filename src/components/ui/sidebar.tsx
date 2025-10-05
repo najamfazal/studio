@@ -5,7 +5,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays, Users, BarChart, NotebookPen } from 'lucide-react'
+import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays, Users, BarChart, NotebookPen, Zap } from 'lucide-react'
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -21,7 +21,7 @@ import { Logo } from "../icons"
 import { useQuickLog } from "@/hooks/use-quick-log"
 
 const sidebarItems = [
-    { href: '/', icon: ListChecks, label: 'Tasks' },
+    { href: '/', icon: Zap, label: 'Routines' },
     { href: '/contacts', icon: Users, label: 'Contacts' },
     { href: '/events', icon: CalendarDays, label: 'Events' },
     { href: '/reports', icon: BarChart, label: 'Reports' },
@@ -113,6 +113,7 @@ Sidebar.displayName = "Sidebar"
 
 function DesktopSidebarItem({ href, icon: Icon, label }: { href: string, icon: React.ElementType, label: string }) {
   const pathname = usePathname();
+  const isActive = pathname === href;
   return (
     <Tooltip delayDuration={0}>
         <TooltipTrigger asChild>
@@ -120,7 +121,7 @@ function DesktopSidebarItem({ href, icon: Icon, label }: { href: string, icon: R
                 href={href}
                 className={cn(
                     "group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
-                    pathname === href && "bg-primary text-primary-foreground hover:text-primary-foreground"
+                    isActive && "bg-primary text-primary-foreground hover:text-primary-foreground"
                 )}
             >
                 <Icon className="h-5 w-5" />

@@ -17,10 +17,21 @@ export type LeadStatus =
   | 'Archived'
   | 'Graduated';
 
+// New Deal Type
+export type Deal = {
+  id: string;
+  courses: string[];
+  price: number;
+  mode: 'Online' | 'In-person';
+  format: '1-1' | 'Batch';
+}
+
 export type CommitmentSnapshot = {
+  // `price` and `courses` are deprecated in favor of `deals`
   price?: string;
+  courses?: string[]; 
+  deals?: Deal[]; // New field for deals
   schedule?: string;
-  courses?: string[]; // Changed from course to courses
   keyNotes?: string;
   paymentPlan?: string;
 };
