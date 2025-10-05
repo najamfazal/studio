@@ -17,7 +17,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { FocusView } from '@/components/focus-view';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-export default function FocusPage() {
+export default function NewLeadFocusPage() {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -118,7 +118,7 @@ export default function FocusPage() {
         if (index >= 0 && index < queueIds.length) {
             setCurrentIndex(index);
             const nextTaskId = queueIds[index];
-            router.push(`/tasks/focus/${nextTaskId}?queue=${queueIds.join(',')}`, { scroll: false });
+            router.push(`/routines/new/${nextTaskId}?queue=${queueIds.join(',')}`, { scroll: false });
         }
     }
 
@@ -256,4 +256,3 @@ export default function FocusPage() {
     );
 }
 
-    
