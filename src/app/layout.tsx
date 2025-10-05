@@ -8,6 +8,7 @@ import { Sidebar, SidebarProvider } from '@/components/ui/sidebar';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { AppSettings, ThemeSettings } from '@/lib/types';
+import { QuickLogProvider } from '@/hooks/use-quick-log';
 
 export const metadata: Metadata = {
   title: 'LeadTrack Solo',
@@ -52,12 +53,14 @@ export default async function RootLayout({
         <meta name="theme-color" content="#5B21B6" />
       </head>
       <body className="font-body antialiased h-full">
-        <SidebarProvider>
-          <div className="flex min-h-screen w-full">
-            <Sidebar />
-            <div className="flex-1 w-full">{children}</div>
-          </div>
-        </SidebarProvider>
+        <QuickLogProvider>
+          <SidebarProvider>
+            <div className="flex min-h-screen w-full">
+              <Sidebar />
+              <div className="flex-1 w-full">{children}</div>
+            </div>
+          </SidebarProvider>
+        </QuickLogProvider>
         <Toaster />
       </body>
     </html>

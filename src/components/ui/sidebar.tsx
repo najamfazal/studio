@@ -5,7 +5,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays, Users, BarChart } from 'lucide-react'
+import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays, Users, BarChart, NotebookPen } from 'lucide-react'
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -18,15 +18,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Logo } from "../icons"
+import { useQuickLog } from "@/hooks/use-quick-log"
 
 const sidebarItems = [
     { href: '/', icon: ListChecks, label: 'Tasks' },
     { href: '/contacts', icon: Users, label: 'Contacts' },
     { href: '/events', icon: CalendarDays, label: 'Events' },
     { href: '/reports', icon: BarChart, label: 'Reports' },
+]
+
+const secondarySidebarItems = [
     { href: '/follow-list', icon: UserCheck, label: 'Follow List' },
     { href: '/recall-trainer', icon: Brain, label: 'Recall Trainer' },
-    { href: '/settings', icon: Settings, label: 'Settings' },
 ]
 
 type SidebarContext = {
@@ -63,20 +66,44 @@ const Sidebar = React.forwardRef<
     React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
     const { isMobile } = useSidebar();
+    const { openQuickLog } = useQuickLog();
 
     if (isMobile) {
         return <MobileSidebar />
     }
 
     return (
-        <nav className={cn("hidden sm:flex flex-col items-center gap-4 border-r bg-card px-2 sm:px-4 py-8", className)} ref={ref} {...props}>
+        <nav className={cn("hidden sm:flex flex-col justify-between items-center gap-4 border-r bg-card px-2 sm:px-4 py-8", className)} ref={ref} {...props}>
             <TooltipProvider>
-                <Link href="/" className="mb-4">
-                  <Logo className="h-8 w-8 text-primary" />
-                </Link>
-                {sidebarItems.map(item => (
-                    <DesktopSidebarItem key={item.href} {...item} />
-                ))}
+                <div className="flex flex-col items-center gap-4">
+                  <Link href="/" className="mb-4">
+                    <Logo className="h-8 w-8 text-primary" />
+                  </Link>
+                  {sidebarItems.map(item => (
+                      <DesktopSidebarItem key={item.href} {...item} />
+                  ))}
+                   <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                          <Button
+                              variant="ghost"
+                              size="icon"
+                              className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+                              onClick={openQuickLog}
+                          >
+                              <NotebookPen className="h-5 w-5" />
+                              <span className="sr-only">Quick Log</span>
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">Quick Log</TooltipContent>
+                  </Tooltip>
+                </div>
+
+                <div className="flex flex-col items-center gap-4">
+                   {secondarySidebarItems.map(item => (
+                        <DesktopSidebarItem key={item.href} {...item} />
+                    ))}
+                    <DesktopSidebarItem href="/settings" icon={Settings} label="Settings" />
+                </div>
             </TooltipProvider>
         </nav>
     )
@@ -84,7 +111,7 @@ const Sidebar = React.forwardRef<
 Sidebar.displayName = "Sidebar"
 
 
-function DesktopSidebarItem({ href, icon: Icon, label }: typeof sidebarItems[number]) {
+function DesktopSidebarItem({ href, icon: Icon, label }: { href: string, icon: React.ElementType, label: string }) {
   const pathname = usePathname();
   return (
     <Tooltip delayDuration={0}>
@@ -107,7 +134,14 @@ function DesktopSidebarItem({ href, icon: Icon, label }: typeof sidebarItems[num
 
 function MobileSidebar() {
     const { open, setOpen } = useSidebar();
+    const { openQuickLog } = useQuickLog();
     const pathname = usePathname();
+    
+    const handleQuickLogClick = () => {
+        setOpen(false);
+        openQuickLog();
+    }
+
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetContent side="left" className="sm:max-w-xs p-0 bg-card">
@@ -133,6 +167,39 @@ function MobileSidebar() {
                             {item.label}
                         </Link>
                     ))}
+                     <button
+                        onClick={handleQuickLogClick}
+                        className="flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground"
+                    >
+                        <NotebookPen className="h-5 w-5" />
+                        Quick Log
+                    </button>
+                    <div className="my-4 border-t border-border -mx-4"></div>
+                    {secondarySidebarItems.map(item => (
+                         <Link
+                            key={item.href}
+                            href={item.href}
+                            className={cn(
+                                "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
+                                pathname === item.href && "bg-muted text-foreground"
+                            )}
+                            onClick={() => setOpen(false)}
+                        >
+                            <item.icon className="h-5 w-5" />
+                            {item.label}
+                        </Link>
+                    ))}
+                    <Link
+                        href="/settings"
+                        className={cn(
+                            "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
+                            pathname === '/settings' && "bg-muted text-foreground"
+                        )}
+                        onClick={() => setOpen(false)}
+                    >
+                        <Settings className="h-5 w-5" />
+                        Settings
+                    </Link>
                 </nav>
             </SheetContent>
         </Sheet>
