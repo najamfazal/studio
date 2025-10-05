@@ -112,9 +112,9 @@ export function ManualTaskDialog({ allTasks }: ManualTaskDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            New Task
+        <Button variant="outline" size="icon" className="w-8 h-8">
+            <Plus className="h-4 w-4" />
+            <span className="sr-only">New Task</span>
         </Button>
       </DialogTrigger>
       <DialogContent>

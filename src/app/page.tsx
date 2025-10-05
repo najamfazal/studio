@@ -53,6 +53,8 @@ async function getDashboardData() {
   noStore();
   const today = startOfToday();
 
+  // We can't use a single query with multiple `where` on different fields
+  // without a composite index. So we fetch all and filter in code.
   const allIncompleteTasksQuery = query(
     collection(db, "tasks"),
     where("completed", "==", false)
@@ -62,7 +64,7 @@ async function getDashboardData() {
     collection(db, "leads"),
     where("onFollowList", "==", true)
   );
-
+  
   let allTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>,
       hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
 
@@ -86,10 +88,9 @@ async function getDashboardData() {
     };
   }
 
-
   const allIncompleteTasks = allTasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
   const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
-
+  
   // --- Filter tasks on the server ---
   const overdueTasks = allIncompleteTasks.filter(task => {
     const dueDate = toDate(task.dueDate);
@@ -102,15 +103,16 @@ async function getDashboardData() {
     task.nature === "Interactive" && 
     task.description !== "Send initial contact" &&
     !overdueTasks.some(overdueTask => overdueTask.id === task.id) // Exclude overdue
-  ).sort((a, b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime());
+  ).sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
+
 
   const adminTasks = allIncompleteTasks.filter(task => 
     task.nature === "Procedural" &&
     !overdueTasks.some(overdueTask => overdueTask.id === task.id) // Exclude overdue
-  ).sort((a, b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime());
+  ).sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
   
   return {
-    overdueTasks: overdueTasks.sort((a, b) => toDate(a.dueDate)!.getTime() - toDate(b.dueDate)!.getTime()),
+    overdueTasks: overdueTasks.sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0)),
     hotFollowups,
     newLeadsTasks,
     regularFollowupsTasks,
@@ -126,21 +128,20 @@ export default async function TasksPage() {
 
   return (
      <div className="flex flex-col min-h-screen bg-background">
-      <header className="bg-card border-b p-4 sticky top-0 z-10">
+      <header className="bg-card border-b p-3 sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <SidebarTrigger />
-            <ListTodo className="h-8 w-8 text-primary hidden sm:block" />
-            <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Tasks</h1>
-                {overdueTasks.length > 0 && (
-                   <Link href={{ pathname: '/tasks/focus', query: { queue: getTaskQueueParams(overdueTasks), initial: overdueTasks[0].id }}}>
-                    <Button variant="destructive" size="sm" className="h-7 blinking-badge">
-                        <AlertTriangle className="h-4 w-4 mr-2" />
-                        {overdueTasks.length} Overdue
-                    </Button>
-                   </Link>
-                )}
+            <div className="flex flex-col">
+              <h1 className="text-xl font-bold tracking-tight leading-none">My Tasks</h1>
+              {overdueTasks.length > 0 && (
+                  <Link href={{ pathname: '/tasks/focus', query: { queue: getTaskQueueParams(overdueTasks), initial: overdueTasks[0].id }}}>
+                  <div className="text-xs font-bold text-destructive hover:underline mt-1">
+                      <AlertTriangle className="inline-block h-3 w-3 mr-1" />
+                      {overdueTasks.length} overdue
+                  </div>
+                  </Link>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -149,7 +150,7 @@ export default async function TasksPage() {
         </div>
       </header>
 
-       <main className="flex-1 p-4 sm:p-6 space-y-6">
+       <main className="flex-1 p-4 space-y-4">
         {hotFollowups.length === 0 && newLeadsTasks.length === 0 && regularFollowupsTasks.length === 0 && adminTasks.length === 0 ? (
            <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
@@ -164,18 +165,18 @@ export default async function TasksPage() {
           <>
             {hotFollowups.length > 0 && (
               <section>
-                <h2 className="text-lg font-semibold tracking-tight mb-2">Hot Follow-ups</h2>
-                <div className="space-y-3">
+                <h2 className="text-base font-semibold tracking-tight mb-2">Hot Follow-ups</h2>
+                <div className="space-y-2">
                   {hotFollowups.map(lead => (
                     <Link key={lead.id} href={`/contacts/${lead.id}`}>
                       <Card className="hover:bg-muted/50 transition-colors">
-                        <CardHeader className="flex-row items-center justify-between p-3">
+                        <CardHeader className="flex-row items-center justify-between p-2">
                            <div className="flex items-center gap-3">
-                             <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                               <User className="h-5 w-5 text-muted-foreground"/>
+                             <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                               <User className="h-4 w-4 text-muted-foreground"/>
                              </div>
                              <div>
-                                <CardTitle className="text-base leading-tight">{lead.name}</CardTitle>
+                                <CardTitle className="text-sm leading-tight">{lead.name}</CardTitle>
                                 <CardDescription className="text-xs">{lead.commitmentSnapshot?.courses?.join(', ') || "No course"}</CardDescription>
                              </div>
                            </div>
@@ -192,15 +193,15 @@ export default async function TasksPage() {
 
             {newLeadsTasks.length > 0 && (
                <section>
-                <h2 className="text-lg font-semibold tracking-tight mb-2">New Leads</h2>
+                <h2 className="text-base font-semibold tracking-tight mb-2">New Leads</h2>
                  <Link href={{ pathname: `/tasks/focus/${newLeadsTasks[0].id}`, query: { queue: getTaskQueueParams(newLeadsTasks) } }}>
                   <Card className="bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors">
-                    <CardHeader className="flex-row items-center justify-between p-4">
+                    <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
-                        <Users className="h-6 w-6 text-primary"/>
+                        <Users className="h-5 w-5 text-primary"/>
                         <div>
-                          <CardTitle className="text-lg">First Contact Blitz</CardTitle>
-                          <CardDescription>{newLeadsTasks.length} new leads to call</CardDescription>
+                          <CardTitle className="text-base">First Contact Blitz</CardTitle>
+                          <CardDescription className="text-xs">{newLeadsTasks.length} new leads to call</CardDescription>
                         </div>
                       </div>
                       <Button size="sm">
@@ -213,14 +214,14 @@ export default async function TasksPage() {
               </section>
             )}
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <section>
-                <h2 className="text-lg font-semibold tracking-tight mb-2">Regular Follow-ups</h2>
+                <h2 className="text-base font-semibold tracking-tight mb-2">Regular Follow-ups</h2>
                 {regularFollowupsTasks.length > 0 ? (
                   <div className="space-y-2">
                     {regularFollowupsTasks.map(task => (
                        <Link key={task.id} href={{ pathname: `/tasks/focus/${task.id}`, query: { queue: getTaskQueueParams(regularFollowupsTasks) } }}>
-                        <div className="p-3 rounded-md border bg-card hover:bg-muted/50 transition-colors flex items-center justify-between">
+                        <div className="p-2.5 rounded-md border bg-card hover:bg-muted/50 transition-colors flex items-center justify-between">
                             <div>
                                 <p className="font-medium text-sm">{task.leadName}</p>
                                 <p className="text-xs text-muted-foreground">{task.description}</p>
@@ -236,12 +237,12 @@ export default async function TasksPage() {
               </section>
 
               <section>
-                <h2 className="text-lg font-semibold tracking-tight mb-2">Administrative</h2>
+                <h2 className="text-base font-semibold tracking-tight mb-2">Administrative</h2>
                 {adminTasks.length > 0 ? (
                   <div className="space-y-2">
                      {adminTasks.map(task => (
                        <Link key={task.id} href={task.leadId ? `/contacts/${task.leadId}`: '#'}>
-                        <div className="p-3 rounded-md border bg-card hover:bg-muted/50 transition-colors flex items-center justify-between">
+                        <div className="p-2.5 rounded-md border bg-card hover:bg-muted/50 transition-colors flex items-center justify-between">
                             <div>
                                 <p className="font-medium text-sm">{task.description}</p>
                                 <p className="text-xs text-muted-foreground">{task.leadName}</p>
