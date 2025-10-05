@@ -13,7 +13,7 @@ import {
 import Link from 'next/link';
 import { unstable_noStore as noStore } from 'next/cache';
 import { addDays, format, isPast, isSameDay, isToday, startOfToday } from "date-fns";
-import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users } from "lucide-react";
+import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { Task, Lead } from "@/lib/types";
@@ -53,29 +53,45 @@ async function getDashboardData() {
   noStore();
   const today = startOfToday();
 
-  // We can't use a single query with multiple `where` on different fields
-  // without a composite index. So we fetch all and filter in code.
-  const allIncompleteTasksQuery = query(
-    collection(db, "tasks"),
-    where("completed", "==", false)
-  );
-
-  const hotFollowupsQuery = query(
-    collection(db, "leads"),
-    where("onFollowList", "==", true)
-  );
+  let overdueSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let newLeadsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let incompleteTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
   
-  let allTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>,
-      hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-
   try {
+     const overdueQuery = query(
+        collection(db, "tasks"),
+        where("completed", "==", false),
+        where("dueDate", "<", today)
+     );
+     const hotFollowupsQuery = query(
+        collection(db, "leads"),
+        where("onFollowList", "==", true)
+     );
+     const newLeadsQuery = query(
+        collection(db, "tasks"),
+        where("completed", "==", false),
+        where("description", "==", "Send initial contact")
+     );
+      const incompleteTasksQuery = query(
+        collection(db, "tasks"),
+        where("completed", "==", false),
+        orderBy("dueDate", "asc")
+    );
+
+
     [
-      allTasksSnapshot,
+      overdueSnapshot,
       hotFollowupsSnapshot,
+      newLeadsSnapshot,
+      incompleteTasksSnapshot,
     ] = await Promise.all([
-      getDocs(allIncompleteTasksQuery),
+      getDocs(overdueQuery),
       getDocs(hotFollowupsQuery),
+      getDocs(newLeadsQuery),
+      getDocs(incompleteTasksQuery),
     ]);
+
   } catch (e) {
      console.error("Error fetching dashboard data:", e);
     // Return empty arrays on error to prevent render failures
@@ -88,31 +104,24 @@ async function getDashboardData() {
     };
   }
 
-  const allIncompleteTasks = allTasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+  const overdueTasks = overdueSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
   const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
-  
-  // --- Filter tasks on the server ---
-  const overdueTasks = allIncompleteTasks.filter(task => {
-    const dueDate = toDate(task.dueDate);
-    return dueDate && isPast(dueDate) && !isToday(dueDate);
-  });
-  
-  const newLeadsTasks = allIncompleteTasks.filter(task => task.description === "Send initial contact");
+  const newLeadsTasks = newLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+  const allIncompleteTasks = incompleteTasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
 
   const regularFollowupsTasks = allIncompleteTasks.filter(task => 
     task.nature === "Interactive" && 
     task.description !== "Send initial contact" &&
-    !overdueTasks.some(overdueTask => overdueTask.id === task.id) // Exclude overdue
-  ).sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
-
+    !overdueTasks.some(overdueTask => overdueTask.id === task.id)
+  );
 
   const adminTasks = allIncompleteTasks.filter(task => 
     task.nature === "Procedural" &&
-    !overdueTasks.some(overdueTask => overdueTask.id === task.id) // Exclude overdue
-  ).sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
+    !overdueTasks.some(overdueTask => overdueTask.id === task.id)
+  );
   
   return {
-    overdueTasks: overdueTasks.sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0)),
+    overdueTasks,
     hotFollowups,
     newLeadsTasks,
     regularFollowupsTasks,
@@ -132,14 +141,14 @@ export default async function TasksPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <SidebarTrigger />
-            <div className="flex flex-col">
+            <div className="flex items-baseline gap-2">
               <h1 className="text-xl font-bold tracking-tight leading-none">My Tasks</h1>
               {overdueTasks.length > 0 && (
-                  <Link href={{ pathname: '/tasks/focus', query: { queue: getTaskQueueParams(overdueTasks), initial: overdueTasks[0].id }}}>
-                  <div className="text-xs font-bold text-destructive hover:underline mt-1">
-                      <AlertTriangle className="inline-block h-3 w-3 mr-1" />
-                      {overdueTasks.length} overdue
-                  </div>
+                  <Link href={{ pathname: `/tasks/focus/${overdueTasks[0].id}`, query: { queue: getTaskQueueParams(overdueTasks) }}}>
+                    <Badge variant="destructive" className="hover:underline">
+                        <AlertTriangle className="inline-block h-3 w-3 mr-1" />
+                        {overdueTasks.length} overdue
+                    </Badge>
                   </Link>
               )}
             </div>
@@ -151,7 +160,7 @@ export default async function TasksPage() {
       </header>
 
        <main className="flex-1 p-4 space-y-4">
-        {hotFollowups.length === 0 && newLeadsTasks.length === 0 && regularFollowupsTasks.length === 0 && adminTasks.length === 0 ? (
+        {hotFollowups.length === 0 && newLeadsTasks.length === 0 && regularFollowupsTasks.length === 0 && adminTasks.length === 0 && overdueTasks.length === 0 ? (
            <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
