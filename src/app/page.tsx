@@ -89,7 +89,17 @@ async function getDashboardData() {
   }
 
   const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
-  const allIncompleteTasks = allIncompleteTasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+  const allIncompleteTasks = allIncompleteTasksSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+          id: doc.id,
+          ...data,
+          // Convert Timestamps to serializable format (ISO strings)
+          dueDate: data.dueDate ? toDate(data.dueDate)?.toISOString() : undefined,
+          createdAt: data.createdAt ? toDate(data.createdAt)?.toISOString() : undefined,
+      } as Task;
+  });
+
 
   const overdueTasks: Task[] = [];
   const newLeadsTasks: Task[] = [];
@@ -144,7 +154,7 @@ export default async function TasksPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <SidebarTrigger />
-            <div className="flex items-baseline gap-2">
+            <div className="grid gap-0.5">
               <h1 className="text-xl font-bold tracking-tight leading-none">My Tasks</h1>
               {overdueTasks.length > 0 && (
                   <Link href={{ pathname: `/tasks/focus/${overdueTasks[0].id}`, query: { queue: getTaskQueueParams(overdueTasks) }}}>
