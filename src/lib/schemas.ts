@@ -1,4 +1,5 @@
 
+
 import { z } from "zod";
 
 export const phoneSchema = z.object({
@@ -19,6 +20,8 @@ export const leadSchema = z.object({
     }
   }),
   relationship: z.string().min(1, { message: "Relationship type is required." }),
+  source: z.string().optional(),
+  assignedAt: z.string().optional(),
 });
 
 export type LeadFormValues = z.infer<typeof leadSchema>;

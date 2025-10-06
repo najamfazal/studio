@@ -17,7 +17,6 @@ export type LeadStatus =
   | 'Archived'
   | 'Graduated';
 
-// New Deal Type
 export type Deal = {
   id: string;
   courses: string[];
@@ -27,10 +26,7 @@ export type Deal = {
 }
 
 export type CommitmentSnapshot = {
-  // `price` and `courses` are deprecated in favor of `deals`
-  price?: string;
-  courses?: string[]; 
-  deals?: Deal[]; // New field for deals
+  deals?: Deal[];
   schedule?: string;
   keyNotes?: string;
   paymentPlan?: string;
@@ -125,6 +121,8 @@ export type Lead = {
   commitmentSnapshot: CommitmentSnapshot;
   interactions?: Interaction[];
   search_keywords?: { [key: string]: boolean };
+  source?: string;
+  assignedAt?: string; // ISO date string
   
   // Temporary state for event logging
   eventDetails?: InteractionEventDetails;

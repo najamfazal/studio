@@ -24,18 +24,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { leadSchema, type LeadFormValues } from "@/lib/schemas";
 import type { Lead } from "@/lib/types";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
+import { format, parseISO } from "date-fns";
 
 interface LeadDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onSave: (values: Omit<LeadFormValues, 'courses'>) => void;
+  onSave: (values: LeadFormValues) => void;
   leadToEdit: Lead | null;
   isSaving?: boolean;
-  courseNames: string[];
   relationshipTypes: string[];
 }
 
@@ -45,7 +47,6 @@ export function LeadDialog({
   onSave,
   leadToEdit,
   isSaving,
-  courseNames,
   relationshipTypes,
 }: LeadDialogProps) {
   
@@ -56,6 +57,8 @@ export function LeadDialog({
       email: "",
       phones: [{ number: "", type: "both" }],
       relationship: "Lead",
+      source: "",
+      assignedAt: "",
     },
   });
 
@@ -72,6 +75,8 @@ export function LeadDialog({
           email: leadToEdit.email,
           phones: leadToEdit.phones?.length ? leadToEdit.phones.map(p => ({ number: p.number || '', type: p.type || 'both' })) : [{ number: "", type: "both" }],
           relationship: leadToEdit.relationship || 'Lead',
+          source: leadToEdit.source || "",
+          assignedAt: leadToEdit.assignedAt || "",
         });
       } else {
         form.reset({
@@ -79,6 +84,8 @@ export function LeadDialog({
           email: "",
           phones: [{ number: "", type: "both" }],
           relationship: "Lead",
+          source: "",
+          assignedAt: new Date().toISOString(),
         });
       }
     }
@@ -215,6 +222,59 @@ export function LeadDialog({
                   <FormMessage />
                 </FormItem>
               )}
+            />
+
+            <FormField
+              control={form.control}
+              name="source"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Source</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Website, Referral" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+             <FormField
+                control={form.control}
+                name="assignedAt"
+                render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                    <FormLabel>Assigned Date</FormLabel>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <FormControl>
+                            <Button
+                            variant={"outline"}
+                            className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                            )}
+                            >
+                            {field.value ? (
+                                format(parseISO(field.value), "PPP")
+                            ) : (
+                                <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                            mode="single"
+                            selected={field.value ? parseISO(field.value) : undefined}
+                            onSelect={(date) => field.onChange(date?.toISOString())}
+                            initialFocus
+                        />
+                        </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                    </FormItem>
+                )}
             />
 
             <DialogFooter className="pt-4 sticky bottom-0 bg-background/95 pb-1">

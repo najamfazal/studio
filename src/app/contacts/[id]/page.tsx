@@ -5,13 +5,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion, startAfter, limit } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon, FileUp, CircleUser } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, PaymentPlan, PaymentInstallment } from '@/lib/types';
+import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, PaymentPlan, PaymentInstallment, Deal } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo, WhatsAppIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Switch } from '@/components/ui/switch';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CheckIcon } from 'lucide-react';
+import { DealDialog } from '@/components/deal-dialog';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -118,8 +119,9 @@ export default function ContactDetailPage() {
   const [eventToManage, setEventToManage] = useState<Interaction | null>(null);
   const [isEventActionLoading, setIsEventActionLoading] = useState(false);
 
-  // Course management state
-  const [isCoursePopoverOpen, setIsCoursePopoverOpen] = useState(false);
+  // Deal management
+  const [isDealModalOpen, setIsDealModalOpen] = useState(false);
+  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
 
   const fetchInitialData = useCallback(async () => {
     if (!id) return;
@@ -132,7 +134,8 @@ export default function ContactDetailPage() {
         const leadData = { id: leadDoc.id, ...leadDoc.data() } as Lead;
         setLead(leadData);
         setCurrentSchedule(leadData.courseSchedule || { sessionGroups: [] });
-        setCurrentPayPlan(leadData.paymentPlan || { totalPrice: parseFloat(leadData.commitmentSnapshot.price || '0'), installments: [] });
+        const totalPrice = (leadData.commitmentSnapshot?.deals || []).reduce((sum, deal) => sum + deal.price, 0);
+        setCurrentPayPlan(leadData.paymentPlan || { totalPrice: totalPrice, installments: [] });
         setInteractions((leadData.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
       } else {
         toast({ variant: 'destructive', title: 'Contact not found.' });
@@ -254,6 +257,31 @@ export default function ContactDetailPage() {
     }
   };
 
+  const handleSaveDeal = async (dealToSave: Deal) => {
+    if (!lead || !appSettings) return;
+
+    const newDeals = produce(lead.commitmentSnapshot?.deals || [], draft => {
+      const index = draft.findIndex(d => d.id === dealToSave.id);
+      if (index > -1) {
+        draft[index] = dealToSave;
+      } else {
+        draft.push(dealToSave);
+      }
+    });
+
+    await handleUpdate('commitmentSnapshot.deals', newDeals);
+    setIsDealModalOpen(false);
+    setEditingDeal(null);
+  };
+
+  const handleDeleteDeal = async (dealId: string) => {
+    if (!lead) return;
+    const newDeals = (lead.commitmentSnapshot?.deals || []).filter(d => d.id !== dealId);
+    await handleUpdate('commitmentSnapshot.deals', newDeals);
+    toast({ title: "Deal removed" });
+  };
+
+
   const generateScheduleSummary = (schedule: CourseSchedule | null | undefined): string => {
     if (!schedule || !schedule.sessionGroups || schedule.sessionGroups.length === 0) {
       return 'Not set.';
@@ -322,7 +350,6 @@ export default function ContactDetailPage() {
     const updatePayload = {
       paymentPlan: currentPayPlan,
       'commitmentSnapshot.paymentPlan': summary,
-      'commitmentSnapshot.price': currentPayPlan.totalPrice.toString(),
     };
 
     const originalLead = lead;
@@ -330,7 +357,6 @@ export default function ContactDetailPage() {
         draft.paymentPlan = currentPayPlan;
         if(draft.commitmentSnapshot) {
             draft.commitmentSnapshot.paymentPlan = summary;
-            draft.commitmentSnapshot.price = currentPayPlan.totalPrice.toString();
         }
     }) : null);
 
@@ -719,15 +745,6 @@ export default function ContactDetailPage() {
 
   const isLearner = useMemo(() => lead?.relationship?.toLowerCase() === 'learner', [lead]);
 
-  const handleCourseSelection = (course: string) => {
-        if (!lead) return;
-        const currentCourses = lead.commitmentSnapshot?.courses || [];
-        const newCourses = currentCourses.includes(course)
-            ? currentCourses.filter(c => c !== course)
-            : [...currentCourses, course];
-        handleUpdate('commitmentSnapshot.courses', newCourses);
-    };
-
   if (isLoading || !lead || !appSettings) {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -771,7 +788,7 @@ export default function ContactDetailPage() {
             <TabsContent value="overview" className="space-y-4 mt-4">
               <Card>
                   <CardHeader className="p-4"><CardTitle className="text-lg">Contact Details</CardTitle></CardHeader>
-                  <CardContent className="p-4 pt-0 space-y-2">
+                  <CardContent className="p-4 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
                       {lead.email && (
                       <div className="flex items-center gap-3">
                           <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -801,84 +818,92 @@ export default function ContactDetailPage() {
                             </div>
                             )
                       })}
+                      {lead.source && (
+                        <div className="flex items-center gap-3">
+                          <FileUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <p className="text-sm">{lead.source}</p>
+                        </div>
+                      )}
+                      {lead.assignedAt && (
+                        <div className="flex items-center gap-3">
+                          <CircleUser className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <p className="text-sm">Assigned on {format(parseISO(lead.assignedAt), "MMM d, yyyy")}</p>
+                        </div>
+                      )}
                   </CardContent>
               </Card>
 
               <Card>
-                  <CardHeader className="p-4"><CardTitle className="text-lg">Commitment Snapshot</CardTitle></CardHeader>
+                  <CardHeader className="p-4 flex-row items-center justify-between">
+                    <CardTitle className="text-lg">Commitment Snapshot</CardTitle>
+                    <Button size="sm" onClick={() => setIsDealModalOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" /> Add Deal
+                    </Button>
+                  </CardHeader>
                   <CardContent className="p-4 pt-0 space-y-4">
-                  <div className="flex items-start gap-4">
-                      <div className="flex-grow-[3]">
+                    {(lead.commitmentSnapshot?.deals || []).length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(lead.commitmentSnapshot.deals || []).map((deal) => (
+                          <Card key={deal.id}>
+                            <CardHeader className="p-3">
+                              <div className="flex justify-between items-start">
+                                <div className="font-semibold">${deal.price.toLocaleString()}</div>
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingDeal(deal); setIsDealModalOpen(true);}}>
+                                      <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Delete Deal?</AlertDialogTitle>
+                                                <AlertDialogDescription>This will permanently remove this deal. Are you sure?</AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                <Button variant="destructive" onClick={() => handleDeleteDeal(deal.id)}>Delete</Button>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
+                                <p className="font-medium text-foreground">{(deal.courses || []).join(', ')}</p>
+                                <p>{deal.mode} &middot; {deal.format}</p>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                          No deals have been added for this contact yet.
+                      </div>
+                    )}
+                     <Separator />
+                     <div className="space-y-4">
                         <div className="space-y-1">
-                            <Label className="text-muted-foreground text-xs">Courses</Label>
-                             <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        role="combobox"
-                                        aria-expanded={isCoursePopoverOpen}
-                                        className="w-full justify-start font-normal h-auto min-h-10"
-                                    >
-                                        {(lead.commitmentSnapshot?.courses || []).length > 0 ? (
-                                            <div className="flex gap-1 flex-wrap">
-                                                {(lead.commitmentSnapshot.courses || []).map(course => (
-                                                    <Badge key={course} variant="secondary" className="font-normal">{course}</Badge>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                        "Select courses..."
-                                        )}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                    <Command>
-                                        <CommandInput placeholder="Search courses..." />
-                                        <CommandList>
-                                            <CommandEmpty>No course found.</CommandEmpty>
-                                            <CommandGroup>
-                                                {appSettings.courseNames.map(course => (
-                                                    <CommandItem
-                                                        key={course}
-                                                        value={course}
-                                                        onSelect={() => handleCourseSelection(course)}
-                                                    >
-                                                        <CheckIcon
-                                                            className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                (lead.commitmentSnapshot.courses || []).includes(course) ? "opacity-100" : "opacity-0"
-                                                            )}
-                                                        />
-                                                        {course}
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
+                          <Label className="text-muted-foreground text-xs">Schedule</Label>
+                          <p className="text-sm min-h-[20px] flex items-center">
+                              {lead.commitmentSnapshot?.schedule || "Not set. Manage in Schedule tab."}
+                          </p>
                         </div>
-                      </div>
-                      <div className="flex-grow-[1]">
-                      <EditableField label="Price" value={lead.commitmentSnapshot?.price || ""} onSave={(val) => handleUpdate('commitmentSnapshot.price', val)} inputType="number" placeholder="Enter price"/>
-                      </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Schedule</Label>
-                    <p className="text-sm min-h-[20px] flex items-center">
-                        {lead.commitmentSnapshot?.schedule || "Not set. Manage in Schedule tab."}
-                    </p>
-                  </div>
-                  {lead.commitmentSnapshot?.paymentPlan && (
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Payment Plan</Label>
-                    <p className="text-sm min-h-[20px] flex items-center">
-                        {lead.commitmentSnapshot.paymentPlan}
-                    </p>
-                  </div>
-                  )}
-                  <div>
-                      <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
-                  </div>
+                        {lead.commitmentSnapshot?.paymentPlan && (
+                        <div className="space-y-1">
+                          <Label className="text-muted-foreground text-xs">Payment Plan</Label>
+                          <p className="text-sm min-h-[20px] flex items-center">
+                              {lead.commitmentSnapshot.paymentPlan}
+                          </p>
+                        </div>
+                        )}
+                        <div>
+                            <EditableField label="Key Notes" value={lead.commitmentSnapshot?.keyNotes || ""} onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)} type="textarea" placeholder="Add key negotiation points..."/>
+                        </div>
+                     </div>
                   </CardContent>
               </Card>
               
@@ -1321,6 +1346,19 @@ export default function ContactDetailPage() {
             editingGroup={editingGroup}
           />
        )}
+       
+       {isDealModalOpen && appSettings && (
+        <DealDialog
+            isOpen={isDealModalOpen}
+            onClose={() => {
+                setIsDealModalOpen(false);
+                setEditingDeal(null);
+            }}
+            onSave={handleSaveDeal}
+            dealToEdit={editingDeal}
+            courseNames={appSettings.courseNames}
+        />
+       )}
 
        <AlertDialog open={!!eventToManage} onOpenChange={(open) => {if (!open) setEventToManage(null)}}>
           <AlertDialogContent>
@@ -1617,5 +1655,3 @@ function PayPlanEditor({ plan, onPlanChange, onSave }: { plan: PaymentPlan, onPl
         </Card>
     );
 }
-
-    

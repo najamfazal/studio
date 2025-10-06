@@ -180,6 +180,24 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             traits = row.get("traits", [])
             insights = row.get("insights", [])
             
+            # --- NEW SOURCE AND ASSIGNEDAT FIELDS ---
+            source = row.get("source", row.get("Source", "")).strip()
+            assigned_at_raw = row.get("assignedAt", row.get("Assigned", ""))
+            assigned_at = None
+            if assigned_at_raw:
+                try:
+                    # Attempt to parse various date formats
+                    # This is a basic attempt, for production more robust parsing would be needed
+                    assigned_at = datetime.fromisoformat(str(assigned_at_raw).replace("Z", "+00:00")).isoformat()
+                except (ValueError, TypeError):
+                     # Fallback for simple date formats like YYYY-MM-DD
+                    try:
+                        assigned_at = datetime.strptime(str(assigned_at_raw), '%Y-%m-%d').isoformat()
+                    except ValueError:
+                         print(f"Could not parse date: {assigned_at_raw}")
+                         assigned_at = None
+
+
             # --- STATUS MAPPING ---
             status = row.get("status", "").strip()
             if not status:
@@ -194,15 +212,16 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "name": name, "email": email, "phones": phones,
                 "relationship": relationship,
                 "commitmentSnapshot": {
-                    "courses": courses,
+                    "courses": courses, # Retaining for backward compatibility, will be part of deals
                     "keyNotes": notes,
-                    "price": price
                 },
                 "status": status, "afc_step": 0, "hasEngaged": has_engaged,
                 "onFollowList": on_follow_list, "traits": traits, "insights": insights, 
                 "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
                 "search_keywords": search_keywords,
+                "source": source,
+                "assignedAt": assigned_at if assigned_at else datetime.now(timezone.utc).isoformat(),
             }
             
             # --- RELATIONSHIP-BASED LOGIC ---
@@ -822,41 +841,37 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
 
         for lead in all_leads:
             lead_data = lead.to_dict()
-            courses = lead_data.get("commitmentSnapshot", {}).get("courses", [])
+            deals = lead_data.get("commitmentSnapshot", {}).get("deals", [])
             status = lead_data.get("status")
-            price_str = lead_data.get("commitmentSnapshot", {}).get("price")
 
-            if not courses or not status or not price_str:
+            if not deals or not status:
                 continue
 
-            try:
-                price = float(price_str)
-            except (ValueError, TypeError):
-                continue
-            
-            # Since a lead can have multiple courses, we can divide the price among them
-            # or assign the full price to each. Let's assign full price to each for now.
-            for course_name in courses:
-                if not course_name:
+            for deal in deals:
+                price = deal.get('price', 0)
+                courses = deal.get('courses', [])
+
+                if not isinstance(price, (int, float)) or price <= 0:
                     continue
 
-                # Initialize course entry if it doesn't exist
-                if course_name not in course_data:
-                    course_data[course_name] = {
-                        "courseName": course_name,
-                        "enrolledRevenue": 0,
-                        "opportunityRevenue": 0
-                    }
-                
-                if status == "Enrolled":
-                    course_data[course_name]["enrolledRevenue"] += price
-                elif status == "Active":
-                    course_data[course_name]["opportunityRevenue"] += price
+                for course_name in courses:
+                    if not course_name:
+                        continue
 
-        # Convert dictionary to a list for Firestore
+                    if course_name not in course_data:
+                        course_data[course_name] = {
+                            "courseName": course_name,
+                            "enrolledRevenue": 0,
+                            "opportunityRevenue": 0
+                        }
+                    
+                    if status == "Enrolled":
+                        course_data[course_name]["enrolledRevenue"] += price
+                    elif status == "Active":
+                        course_data[course_name]["opportunityRevenue"] += price
+
         report_courses = list(course_data.values())
 
-        # Create the report object
         report_id = f"CR-{datetime.now().strftime('%Y-%m')}"
         report_data = {
             "id": report_id,
@@ -864,7 +879,6 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
             "courses": report_courses
         }
 
-        # Save the report to the 'reports' collection
         db.collection("reports").document(report_id).set(report_data, merge=True)
         
         print(f"Successfully generated and saved report {report_id}.")
