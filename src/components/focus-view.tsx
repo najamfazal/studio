@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -25,6 +25,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DealDialog } from './deal-dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from './ui/alert-dialog';
+import { WhatsAppIcon } from './icons';
 
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
@@ -294,9 +295,20 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     <Badge variant="secondary" className="text-xs">{currentLead.relationship}</Badge>
                     <Badge className="text-xs">{currentLead.status}</Badge>
                 </div>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                 <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
                     {currentLead.email && <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground"><Mail className="h-3 w-3" /> {currentLead.email}</a>}
-                    {(currentLead.phones || []).length > 0 && <a href={`tel:${currentLead.phones[0].number}`} className="flex items-center gap-1.5 hover:text-foreground"><Phone className="h-3 w-3" /> {currentLead.phones[0].number}</a>}
+                    {(currentLead.phones || []).map((phone, index) => {
+                        const cleanNumber = phone.number.replace(/\D/g, '');
+                        return (
+                            <div key={index} className="flex items-center gap-1.5 hover:text-foreground">
+                                <Phone className="h-3 w-3" />
+                                <a href={`tel:${cleanNumber}`}>{phone.number}</a>
+                                {(phone.type === 'chat' || phone.type === 'both') && 
+                                    <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon className="h-3 w-3" /></a>}
+                            </div>
+                        )
+                    })}
+                    {currentLead.source && <div className="flex items-center gap-1.5"><FileUp className="h-3 w-3" /><Badge variant="outline" className="text-xs">{currentLead.source}</Badge></div>}
                 </div>
             </div>
             
@@ -551,3 +563,5 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
+
+    

@@ -739,7 +739,7 @@ export default function ContactDetailPage() {
       });
       if (newSchedule) handleScheduleSave(newSchedule);
   };
-
+  
   const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
     return (Object.keys(feedbackData) as (keyof InteractionFeedback)[])
         .map(category => {
@@ -816,20 +816,23 @@ export default function ContactDetailPage() {
                             const cleanNumber = phone.number.replace(/\D/g, '');
                             return (
                             <div key={index} className="flex items-center gap-3">
-                                {phone.type === 'calling' && <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
-                                {(phone.type === 'chat' || phone.type === 'both') && <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" /></a>}
-                                <div className="flex items-center gap-2">
-                                  {(phone.type === 'calling' || phone.type === 'both') ? (
-                                    <a href={`tel:${cleanNumber}`} className="text-sm">
-                                      {phone.number}
+                                {(phone.type === 'calling' || phone.type === 'both') ? (
+                                    <a href={`tel:${cleanNumber}`} className="flex items-center gap-2 group">
+                                        <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                        <span className="text-sm group-hover:underline">{phone.number}</span>
                                     </a>
-                                  ) : (
-                                    <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer" className="text-sm">
-                                      {phone.number}
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                        <span className="text-sm">{phone.number}</span>
+                                    </div>
+                                )}
+                                {(phone.type === 'chat' || phone.type === 'both') && 
+                                    <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-700">
+                                        <WhatsAppIcon className="h-4 w-4" />
                                     </a>
-                                  )}
-                                  {phone.type !== 'both' && <Badge variant="secondary" className="text-xs capitalize">{phone.type}</Badge>}
-                                </div>
+                                }
+                                {phone.type !== 'both' && <Badge variant="secondary" className="text-xs capitalize">{phone.type}</Badge>}
                             </div>
                             )
                       })}
@@ -1692,3 +1695,5 @@ function PayPlanEditor({ plan, onPlanChange, onSave }: { plan: PaymentPlan, onPl
         </Card>
     );
 }
+
+    

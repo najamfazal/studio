@@ -36,6 +36,7 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial
   { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
   { value: "Enrolled", label: "Enrolled", multistep: null },
 ];
+const infoLogOptions = ["Sent brochure", "Quoted", "Shared schedule"];
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 
 export function QuickLogDialog() {
@@ -68,6 +69,8 @@ export function QuickLogDialog() {
     const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
     const [dateTimePickerValue, setDateTimePickerValue] = useState<Date | undefined>(undefined);
     const [dateTimePickerCallback, setDateTimePickerCallback] = useState<(date: Date) => void>(() => {});
+
+    const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
 
     const fetchAllLeads = useCallback(async () => {
         setIsFetching(true);
@@ -111,6 +114,7 @@ export function QuickLogDialog() {
         setSelectedOutcome(null);
         setOutcomeNotes("");
         setDateTimePickerValue(undefined);
+        setSelectedInfoLogs([]);
         setIsSubmitting(false);
     };
 
@@ -163,6 +167,8 @@ export function QuickLogDialog() {
                 setSelectedOutcome(null);
                 setOutcomeNotes('');
                 setDateTimePickerValue(undefined);
+            } else if (logType === 'Info') {
+                setSelectedInfoLogs([]);
             }
         } catch (error) {
           console.error("Error logging interaction:", error);
@@ -172,8 +178,12 @@ export function QuickLogDialog() {
         }
     };
 
-     const handleGenericLog = (logType: 'QuickLog' | 'Feedback' | 'Outcome') => {
-        if (logType === 'QuickLog') {
+     const handleGenericLog = (logType: 'QuickLog' | 'Feedback' | 'Outcome' | 'Info') => {
+        if (logType === 'Info') {
+            if (selectedInfoLogs.length === 0) return;
+            handleLogInteraction({ infoLogs: selectedInfoLogs }, 'Info');
+        }
+        else if (logType === 'QuickLog') {
             if (!selectedQuickLog || (selectedQuickLog === 'Withdrawn' && withdrawalReasons.length === 0)) {
                 toast({ variant: 'destructive', title: 'Please complete the log.'});
                 return;
@@ -275,6 +285,26 @@ export function QuickLogDialog() {
                          </div>
                     </DialogHeader>
                     <div className="py-4 space-y-3 max-h-[60vh] overflow-y-auto pr-3">
+                         <Card>
+                            <CardHeader className="flex-row items-center justify-between p-2">
+                                <CardTitle className="text-sm font-medium">Log Info</CardTitle>
+                                <Button onClick={() => handleGenericLog('Info')} disabled={!!isSubmitting || selectedInfoLogs.length === 0} size="icon" variant="ghost" className="h-7 w-7">
+                                {isSubmitting === 'Info' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
+                                </Button>
+                            </CardHeader>
+                            <CardContent className="flex flex-wrap gap-2 p-2 pt-0">
+                                {infoLogOptions.map(opt => (
+                                    <Badge
+                                        key={opt}
+                                        variant={selectedInfoLogs.includes(opt) ? 'default' : 'secondary'}
+                                        onClick={() => setSelectedInfoLogs(prev => prev.includes(opt) ? prev.filter(i => i !== opt) : [...prev, opt])}
+                                        className="cursor-pointer text-xs"
+                                    >
+                                        {opt}
+                                    </Badge>
+                                ))}
+                            </CardContent>
+                        </Card>
                         <Card>
                              <CardHeader className="flex-row items-center justify-between p-2">
                                 <CardTitle className="text-sm font-medium">Quick Log</CardTitle>
