@@ -97,11 +97,13 @@ export type Interaction = {
   followUpDate?: string; // For 'Later' outcome
   eventDetails?: InteractionEventDetails;
   notes?: string;
+
+  infoLogs?: string[]; // For informational logs like "Sent brochure"
 };
 
 
 export type Lead = {
-  id: string;
+  id:string;
   name: string;
   email: string;
   phones: PhoneNumber[];

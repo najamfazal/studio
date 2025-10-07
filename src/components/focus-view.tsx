@@ -36,6 +36,8 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial
   { value: "Enrolled", label: "Enrolled", multistep: null },
 ];
 
+const infoLogOptions = ["Sent brochure", "Quoted", "Shared schedule"];
+
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 type QuickLogStep = 'initial' | 'withdrawn';
 type FeedbackCategory = keyof InteractionFeedback;
@@ -103,6 +105,9 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
     const [dateTimePickerValue, setDateTimePickerValue] = useState<Date | undefined>(undefined);
     const [dateTimePickerCallback, setDateTimePickerCallback] = useState<(date: Date) => void>(() => {});
+
+    const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
+    const [isLoggingInfo, setIsLoggingInfo] = useState(false);
 
     const sortedInteractions = useMemo(() => {
         return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
@@ -215,6 +220,17 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             setQuickLogStep('initial');
             setWithdrawalReasons([]);
         }, 1000);
+    }
+
+    const handleInfoLog = async () => {
+        if (selectedInfoLogs.length === 0) {
+            toast({ variant: 'destructive', title: 'Please select an item to log.' });
+            return;
+        }
+        setIsLoggingInfo(true);
+        await handleLogInteraction({ infoLogs: selectedInfoLogs });
+        setSelectedInfoLogs([]);
+        setIsLoggingInfo(false);
     }
 
     const handleLogFeedback = async () => {
@@ -348,6 +364,26 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </TabsContent>
                 
                 <TabsContent value="log" className="mt-3 space-y-3">
+                    <Card>
+                        <CardHeader className="flex-row items-center justify-between p-2">
+                            <CardTitle className="text-sm font-medium">Log Info</CardTitle>
+                            <Button onClick={handleInfoLog} disabled={isLoggingInfo || selectedInfoLogs.length === 0} size="icon" variant="ghost" className="h-7 w-7">
+                            {isLoggingInfo ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="flex flex-wrap gap-2 p-2 pt-0">
+                            {infoLogOptions.map(opt => (
+                                <Badge
+                                    key={opt}
+                                    variant={selectedInfoLogs.includes(opt) ? 'default' : 'secondary'}
+                                    onClick={() => setSelectedInfoLogs(prev => prev.includes(opt) ? prev.filter(i => i !== opt) : [...prev, opt])}
+                                    className="cursor-pointer text-xs"
+                                >
+                                    {opt}
+                                </Badge>
+                            ))}
+                        </CardContent>
+                    </Card>
                      <Card>
                         <CardHeader className="flex-row items-center justify-between p-2">
                             <CardTitle className="text-sm font-medium">Quick Log</CardTitle>
@@ -454,6 +490,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                                                     {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
                                                     interaction.feedback ? 'Feedback' :
                                                     interaction.outcome ? `Outcome: ${interaction.outcome}` : 
+                                                    interaction.infoLogs ? 'Info' :
                                                     interaction.notes ? 'Note' :
                                                     'Interaction'}
                                                 </p>
@@ -472,6 +509,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                                                 {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
                                                 : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
                                                 : interaction.withdrawalReasons ? `Reasons: ${interaction.withdrawalReasons.join(', ')}`
+                                                : interaction.infoLogs ? interaction.infoLogs.join(', ')
                                                 : interaction.notes}
                                             </p>
                                         </div>

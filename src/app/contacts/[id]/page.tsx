@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion, startAfter, limit } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon, FileUp, CircleUser } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon, FileUp, CircleUser, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -63,6 +63,8 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: QuickLog
   { value: "Enrolled", label: "Enrolled", multistep: null },
 ];
 
+const infoLogOptions = ["Sent brochure", "Quoted", "Shared schedule"];
+
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 
 export default function ContactDetailPage() {
@@ -106,6 +108,8 @@ export default function ContactDetailPage() {
   const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
   const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'submitted'>('idle');
   const [withdrawalReasons, setWithdrawalReasons] = useState<string[]>([]);
+  const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
+  const [isLoggingInfo, setIsLoggingInfo] = useState(false);
 
   // Outcome Log State
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeType | null>(null);
@@ -490,6 +494,17 @@ export default function ContactDetailPage() {
         setQuickLogStep('initial');
         setWithdrawalReasons([]);
     }, 1000);
+  }
+
+  const handleInfoLog = async () => {
+    if (selectedInfoLogs.length === 0) {
+      toast({ variant: 'destructive', title: 'Please select an item to log.' });
+      return;
+    }
+    setIsLoggingInfo(true);
+    await handleLogInteraction({ infoLogs: selectedInfoLogs });
+    setSelectedInfoLogs([]);
+    setIsLoggingInfo(false);
   }
 
   const handlePerceptionChange = (category: FeedbackCategory, perception: 'positive' | 'negative') => {
@@ -1042,6 +1057,26 @@ export default function ContactDetailPage() {
             )}
 
             <TabsContent value="logs" className="space-y-4 mt-4">
+                <Card>
+                    <CardHeader className="flex-row items-center justify-between p-4">
+                        <CardTitle className="text-lg font-normal">Log Info</CardTitle>
+                        <Button onClick={handleInfoLog} disabled={isLoggingInfo || selectedInfoLogs.length === 0} size="icon" variant="ghost">
+                        {isLoggingInfo ? <Loader2 className="animate-spin" /> : <Send />}
+                        </Button>
+                    </CardHeader>
+                    <CardContent className="flex flex-wrap gap-2 p-4 pt-0">
+                        {infoLogOptions.map(opt => (
+                            <Badge
+                                key={opt}
+                                variant={selectedInfoLogs.includes(opt) ? 'default' : 'secondary'}
+                                onClick={() => setSelectedInfoLogs(prev => prev.includes(opt) ? prev.filter(i => i !== opt) : [...prev, opt])}
+                                className="cursor-pointer text-sm"
+                            >
+                                {opt}
+                            </Badge>
+                        ))}
+                    </CardContent>
+                </Card>
                 <Card className="relative overflow-hidden min-h-[148px]">
                 <AnimatePresence initial={false}>
                     <motion.div
@@ -1233,6 +1268,7 @@ export default function ContactDetailPage() {
                                           {interaction.quickLogType ? `Quick Log: ${interaction.quickLogType}` :
                                           interaction.feedback ? 'Feedback' :
                                           interaction.outcome ? `Outcome: ${interaction.outcome}` : 
+                                          interaction.infoLogs ? 'Info' :
                                           interaction.notes ? 'Note' :
                                           'Interaction'}
                                       </p>
@@ -1251,6 +1287,7 @@ export default function ContactDetailPage() {
                                   {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
                                   : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
                                   : interaction.withdrawalReasons ? `Reasons: ${interaction.withdrawalReasons.join(', ')}`
+                                  : interaction.infoLogs ? interaction.infoLogs.join(', ')
                                   : interaction.notes}
                                   </p>
                               </div>
