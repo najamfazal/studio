@@ -2,5 +2,5 @@
 
 firebase-functions
 firebase-admin>=6.0.0
-
+algoliasearch>=3.0.0
     

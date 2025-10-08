@@ -8,7 +8,8 @@ import csv
 import re
 # import google.generativeai as genai
 import os
-# from google.cloud import secretmanager
+from google.cloud import secretmanager
+from algoliasearch.search_client import SearchClient
 
 # --- Environment Setup ---
 # For local development, use a .env file to set GOOGLE_CLOUD_PROJECT
@@ -18,6 +19,43 @@ project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
 # Initialize Firebase Admin SDK
 initialize_app()
 db = firestore.client()
+
+def access_secret_version(secret_id, version_id="latest"):
+    """
+    Access the payload for the given secret version and return it.
+    """
+    # This check is for local development where project_id might not be set.
+    # In a deployed Cloud Function environment, project_id will always be available.
+    if not project_id:
+        print(f"GOOGLE_CLOUD_PROJECT not set. Skipping secret access for {secret_id}.")
+        return os.environ.get(secret_id)
+
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error accessing secret {secret_id}: {e}. Falling back to env var.")
+        return os.environ.get(secret_id)
+
+# --- Algolia Client Initialization ---
+ALGOLIA_APP_ID = access_secret_version("ALGOLIA_APP_ID")
+ALGOLIA_ADMIN_KEY = access_secret_version("ALGOLIA_ADMIN_KEY")
+ALGOLIA_INDEX_NAME = "leads"
+
+algolia_client = None
+algolia_index = None
+if ALGOLIA_APP_ID and ALGOLIA_ADMIN_KEY:
+    try:
+        algolia_client = SearchClient.create(ALGOLIA_APP_ID, ALGOLIA_ADMIN_KEY)
+        algolia_index = algolia_client.init_index(ALGOLIA_INDEX_NAME)
+        print("Algolia client initialized successfully.")
+    except Exception as e:
+        print(f"Error initializing Algolia client: {e}")
+else:
+    print("Algolia credentials not found. Search indexing will be disabled.")
+
 
 # def access_secret_version(secret_id, version_id="latest"):
 #     """
@@ -1131,3 +1169,4 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
 
     
+
