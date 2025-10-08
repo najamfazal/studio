@@ -129,8 +129,3 @@ export async function reindexLeadsToAlgoliaAction() {
         return { success: false, error: errorMessage };
     }
 }
-
-
-    
-
-```

@@ -16,7 +16,7 @@ import {
   where,
   Timestamp,
 } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import algoliasearch from "algoliasearch/lite";
 import { Plus, Users, Loader2, Filter, Upload, Search, CalendarIcon, X, Layers, Trash2 } from "lucide-react";
 import { startOfDay, endOfDay } from "date-fns";
 
@@ -76,6 +76,12 @@ interface ContactsPageClientProps {
     initialAppSettings: AppSettings | null;
     initialHasMore: boolean;
 }
+
+const searchClient = algoliasearch(
+  process.env.NEXT_PUBLIC_ALGOLIA_APP_ID!,
+  process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY!
+);
+const leadsIndex = searchClient.initIndex("leads");
 
 
 export function ContactsPageClient({ initialLeads, initialAppSettings, initialHasMore }: ContactsPageClientProps) {
@@ -194,12 +200,10 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
         if (debouncedSearchTerm) {
             setIsSearching(true);
             try {
-                const functions = getFunctions(app);
-                const searchLeads = httpsCallable(functions, 'searchLeads');
-                const result = await searchLeads({ term: debouncedSearchTerm });
-                setSearchResults(result.data as Lead[]);
+                const { hits } = await leadsIndex.search<Lead>(debouncedSearchTerm);
+                setSearchResults(hits as Lead[]);
             } catch (error) {
-                console.error("Search failed:", error);
+                console.error("Algolia search failed:", error);
                 toast({ variant: 'destructive', title: "Search failed" });
                 setSearchResults([]);
             } finally {
@@ -258,33 +262,12 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
     try {
         const { courses, ...leadData } = values;
 
-        // Generate keywords for searching
-        const keywords = new Set<string>();
-        const name = leadData.name.toLowerCase();
-        for (let i = 0; i < name.length; i++) {
-            for (let j = i + 1; j <= name.length; j++) {
-                keywords.add(name.substring(i, j));
-            }
-        }
-        (leadData.phones || []).forEach((phone: {number: string}) => {
-            if (phone.number) {
-                const normalizedPhone = phone.number.replace(/\D/g, '');
-                for (let i = 0; i < normalizedPhone.length; i++) {
-                    for (let j = i + 1; j <= normalizedPhone.length; j++) {
-                        keywords.add(normalizedPhone.substring(i, j));
-                    }
-                }
-            }
-        });
-        const searchKeywords = Object.fromEntries(Array.from(keywords).map(k => [k, true]));
-
         const dataToSave: Partial<Lead> = {
             ...leadData,
             commitmentSnapshot: {
                 ...(leadToEdit?.commitmentSnapshot || {}),
                 ...(courses ? { courses } : {}),
             },
-            search_keywords: searchKeywords,
         };
 
         if (leadToEdit) {
@@ -308,10 +291,8 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
         setIsLeadDialogOpen(false);
         // Refresh the list after save
         if(debouncedSearchTerm) {
-            const functions = getFunctions(app);
-            const searchLeads = httpsCallable(functions, 'searchLeads');
-            const result = await searchLeads({ term: debouncedSearchTerm });
-            setSearchResults(result.data as Lead[]);
+            const { hits } = await leadsIndex.search<Lead>(debouncedSearchTerm);
+            setSearchResults(hits as Lead[]);
         } else {
             fetchLeads(false, { statuses: statusFilters, date: createdDateFilter });
         }

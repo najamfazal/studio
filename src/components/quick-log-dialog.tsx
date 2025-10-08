@@ -4,13 +4,15 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { collection, query, getDocs, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, ChevronsUpDown, CheckIcon, NotebookPen, User } from 'lucide-react';
+import algoliasearch from 'algoliasearch/lite';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, ChevronsUpDown, CheckIcon, NotebookPen, User, Search } from 'lucide-react';
 import { format } from 'date-fns';
 
 import { db } from '@/lib/firebase';
 import type { AppSettings, Lead, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType } from '@/lib/types';
 import { useQuickLog } from '@/hooks/use-quick-log';
 import { useToast } from '@/hooks/use-toast';
+import { useDebounce } from '@/hooks/use-debounce';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -19,10 +21,10 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { DateTimePicker } from '@/components/date-time-picker';
+import { ScrollArea } from './ui/scroll-area';
 
 type LogStep = "contact" | "log";
 type QuickLogStep = 'initial' | 'withdrawn';
@@ -39,6 +41,12 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial
 const infoLogOptions = ["Sent brochure", "Quoted", "Shared schedule"];
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 
+const searchClient = algoliasearch(
+  process.env.NEXT_PUBLIC_ALGOLIA_APP_ID!,
+  process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY!
+);
+const leadsIndex = searchClient.initIndex("leads");
+
 export function QuickLogDialog() {
     const { isOpen, closeQuickLog } = useQuickLog();
     const { toast } = useToast();
@@ -48,10 +56,11 @@ export function QuickLogDialog() {
     const [isSubmitting, setIsSubmitting] = useState<string | false>(false);
 
     // --- Contact Selection State ---
-    const [allLeads, setAllLeads] = useState<(Pick<Lead, 'id' | 'name'> & { courses: string[] })[]>([]);
-    const [isContactListOpen, setIsContactListOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
+    const [searchResults, setSearchResults] = useState<Lead[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-    const [isFetching, setIsFetching] = useState(false);
 
     // --- App Settings ---
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -72,40 +81,40 @@ export function QuickLogDialog() {
 
     const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
 
-    const fetchAllLeads = useCallback(async () => {
-        setIsFetching(true);
-        try {
-            const q = query(collection(db, "leads"));
-            const snapshot = await getDocs(q);
-            const leads = snapshot.docs.map(doc => ({
-                id: doc.id,
-                name: doc.data().name,
-                courses: doc.data().commitmentSnapshot?.courses || [],
-            }));
-            setAllLeads(leads);
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Could not load contacts.' });
-        } finally {
-            setIsFetching(false);
-        }
-    }, [toast]);
-    
     useEffect(() => {
-        if (isOpen && allLeads.length === 0) {
-            fetchAllLeads();
-        }
-         if (isOpen && !appSettings) {
+        if (isOpen && !appSettings) {
             getDoc(doc(db, "settings", "appConfig")).then(docSnap => {
                 if (docSnap.exists()) {
                     setAppSettings(docSnap.data() as AppSettings);
                 }
             })
         }
-    }, [isOpen, allLeads, fetchAllLeads, appSettings]);
+    }, [isOpen, appSettings]);
+
+    useEffect(() => {
+        const search = async () => {
+            if (debouncedSearchTerm) {
+                setIsSearching(true);
+                try {
+                    const { hits } = await leadsIndex.search<Lead>(debouncedSearchTerm);
+                    setSearchResults(hits as Lead[]);
+                } catch (error) {
+                    toast({ variant: 'destructive', title: 'Search failed' });
+                } finally {
+                    setIsSearching(false);
+                }
+            } else {
+                setSearchResults([]);
+            }
+        };
+        search();
+    }, [debouncedSearchTerm, toast]);
 
     const resetState = () => {
         setStep('contact');
         setSelectedLead(null);
+        setSearchTerm('');
+        setSearchResults([]);
         setFeedback({});
         setActiveChipCategory(null);
         setQuickLogStep('initial');
@@ -124,11 +133,10 @@ export function QuickLogDialog() {
         setTimeout(resetState, 300);
     };
 
-    const handleContactSelect = async (leadInfo: { id: string; name: string; courses: string[] }) => {
-        setIsContactListOpen(false);
-        setIsFetching(true);
+    const handleContactSelect = async (leadInfo: Lead) => {
+        setIsSearching(true);
         try {
-            const leadDoc = await getDoc(doc(db, 'leads', leadInfo.id));
+            const leadDoc = await getDoc(doc(db, 'leads', leadInfo.objectID));
             if(leadDoc.exists()) {
                 setSelectedLead({ id: leadDoc.id, ...leadDoc.data() } as Lead);
                 setStep('log');
@@ -136,7 +144,7 @@ export function QuickLogDialog() {
         } catch (error) {
             toast({ variant: 'destructive', title: 'Failed to load contact details.'});
         } finally {
-            setIsFetching(false);
+            setIsSearching(false);
         }
     };
     
@@ -218,15 +226,10 @@ export function QuickLogDialog() {
         }
     };
 
-    const displayLeads = useMemo(() => allLeads.map(l => ({
-        ...l,
-        display: `${l.name} - ${(l.courses[0] || 'No Course')}`
-    })), [allLeads]);
-
     return (
         <Dialog open={isOpen} onOpenChange={handleClose}>
             <DialogContent className="max-w-lg">
-                {(isFetching || !!isSubmitting) && <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>}
+                {(isSearching || !!isSubmitting) && <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-20"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>}
                 
                 {step === 'contact' && (
                     <>
@@ -235,42 +238,30 @@ export function QuickLogDialog() {
                         <DialogDescription>Select a contact to log an interaction for.</DialogDescription>
                     </DialogHeader>
                     <div className="py-4">
-                        <Popover open={isContactListOpen} onOpenChange={setIsContactListOpen}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={isContactListOpen}
-                                    className="w-full justify-between font-normal"
-                                >
-                                   <div className="flex items-center gap-2">
-                                     <User className="h-4 w-4 text-muted-foreground"/>
-                                     Select a contact...
-                                   </div>
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Search contact or course..." />
-                                    <CommandEmpty>No contact found.</CommandEmpty>
-                                    <CommandList>
-                                        <CommandGroup>
-                                            {displayLeads.map((lead) => (
-                                                <CommandItem
-                                                    key={lead.id}
-                                                    value={lead.display}
-                                                    onSelect={() => handleContactSelect(lead)}
-                                                >
-                                                    <CheckIcon className="mr-2 h-4 w-4 opacity-0" />
-                                                    {lead.display}
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search by name or phone..."
+                                className="pl-9"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        <ScrollArea className="h-60 mt-2">
+                             <div className="space-y-2 pr-4">
+                                {searchResults.length > 0 ? (
+                                    searchResults.map(hit => (
+                                        <button key={hit.objectID} onClick={() => handleContactSelect(hit)} className="w-full text-left p-3 rounded-md border bg-background hover:bg-muted">
+                                            <p className="font-semibold">{hit.name}</p>
+                                            <p className="text-sm text-muted-foreground">{(hit.courses || []).join(', ') || 'No course specified'}</p>
+                                        </button>
+                                    ))
+                                ) : (
+                                    debouncedSearchTerm && !isSearching && <p className="text-center text-sm text-muted-foreground pt-10">No results found.</p>
+                                )}
+                            </div>
+                        </ScrollArea>
                     </div>
                     </>
                 )}
@@ -332,7 +323,7 @@ export function QuickLogDialog() {
                         </Card>
                         
                         <Card>
-                            <CardHeader className="flex flex-row items-center justify-between p-2">
+                            <CardHeader className="flex-row items-center justify-between p-2">
                                 <CardTitle className="text-sm font-medium">Log Feedback</CardTitle>
                                 <Button onClick={() => handleGenericLog('Feedback')} disabled={!!isSubmitting || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-7 w-7">
                                 {isSubmitting === 'Feedback' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
@@ -364,7 +355,7 @@ export function QuickLogDialog() {
                         </Card>
 
                          <Card>
-                            <CardHeader className="flex flex-row items-center justify-between p-2">
+                            <CardHeader className="flex-row items-center justify-between p-2">
                                 <CardTitle className="text-sm font-medium">Log Outcome</CardTitle>
                                 <Button onClick={() => handleGenericLog('Outcome')} disabled={!!isSubmitting || !selectedOutcome} size="icon" variant="ghost" className="h-7 w-7">
                                     {isSubmitting === 'Outcome' ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
@@ -400,5 +391,3 @@ export function QuickLogDialog() {
         </Dialog>
     )
 }
-
-    
