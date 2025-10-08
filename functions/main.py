@@ -9,7 +9,7 @@ import re
 # import google.generativeai as genai
 import os
 from google.cloud import secretmanager
-from algoliasearch.search_client import SearchClient
+from algoliasearch.search.client import SearchClient
 
 # --- Environment Setup ---
 # For local development, use a .env file to set GOOGLE_CLOUD_PROJECT
@@ -1126,5 +1126,7 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
     
 
 
+
+    
 
     
