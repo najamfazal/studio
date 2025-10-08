@@ -720,7 +720,7 @@ def sync_payment_plan_tasks(lead_id: str, lead_name: str, plan_before, plan_afte
     batch.commit()
 
 
-@firestore_fn.on_document_deleted(document="leads/{leadId}", region="us-central1")
+@firestore_fn.on_document_deleted(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
 def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
     Handles the cascading deletion of a lead's associated tasks and Algolia record.
@@ -1267,4 +1267,5 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
     
 
     
+
 
