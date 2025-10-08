@@ -39,51 +39,6 @@ def access_secret_version(secret_id, version_id="latest"):
         print(f"Error accessing secret {secret_id}: {e}. Falling back to env var.")
         return os.environ.get(secret_id)
 
-# --- Algolia Client Initialization ---
-ALGOLIA_APP_ID = access_secret_version("ALGOLIA_APP_ID")
-ALGOLIA_ADMIN_KEY = access_secret_version("ALGOLIA_ADMIN_KEY")
-ALGOLIA_INDEX_NAME = "leads"
-
-algolia_client = None
-algolia_index = None
-if ALGOLIA_APP_ID and ALGOLIA_ADMIN_KEY:
-    try:
-        algolia_client = SearchClient.create(ALGOLIA_APP_ID, ALGOLIA_ADMIN_KEY)
-        algolia_index = algolia_client.init_index(ALGOLIA_INDEX_NAME)
-        print("Algolia client initialized successfully.")
-    except Exception as e:
-        print(f"Error initializing Algolia client: {e}")
-else:
-    print("Algolia credentials not found. Search indexing will be disabled.")
-
-
-# def access_secret_version(secret_id, version_id="latest"):
-#     """
-#     Access the payload for the given secret version and return it.
-#     """
-#     # This check is for local development where project_id might not be set.
-#     # In a deployed Cloud Function environment, project_id will always be available.
-#     if not project_id:
-#         print("GOOGLE_CLOUD_PROJECT environment variable not set. Skipping secret access.")
-#         # Fallback to os.environ for local dev if GOOGLE_API_KEY is in the .env file
-#         return os.environ.get("GEMINI_API_KEY")
-
-#     try:
-#         client = secretmanager.SecretManagerServiceClient()
-#         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
-#         response = client.access_secret_version(request={"name": name})
-#         return response.payload.data.decode("UTF-8")
-#     except Exception as e:
-#         print(f"Error accessing secret: {e}. Falling back to environment variable.")
-#         # Fallback for cases where the secret might not be set up yet.
-#         return os.environ.get("GEMINI_API_KEY")
-
-# # Fetch the API key and initialize GenAI
-# GEMINI_API_KEY = access_secret_version("GEMINI_API_KEY")
-# if GEMINI_API_KEY:
-#     genai.configure(api_key=GEMINI_API_KEY)
-
-
 # --- AFC (Automated Follow-up Cycle) Configuration ---
 AFC_SCHEDULE = {
     1: 1,  # 1st follow-up on Day 1
@@ -1170,3 +1125,6 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+
+    
