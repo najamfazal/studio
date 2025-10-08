@@ -46,13 +46,13 @@ def access_secret_version(secret_id, version_id="latest"):
 # --- Algolia Client Initialization ---
 def get_algolia_client():
     """Initializes and returns an Algolia search client."""
-    # The App ID is public and can be stored as an environment variable.
-    algolia_app_id = os.environ.get("ALGOLIA_APP_ID")
+    # The App ID is public and can be stored directly.
+    algolia_app_id = "LD2R9KI9AJ"
     # The Admin API Key is secret and fetched from Secret Manager.
     algolia_admin_key = access_secret_version("ALGOLIA_APP_KEY")
     
     if not algolia_app_id:
-        print("Algolia client initialization failed: ALGOLIA_APP_ID environment variable is missing.")
+        print("Algolia client initialization failed: ALGOLIA_APP_ID is missing.")
     if not algolia_admin_key:
         print("Algolia client initialization failed: ALGOLIA_APP_KEY secret is missing or inaccessible.")
         
@@ -1028,7 +1028,7 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
 #         print(f"Error during log analysis report generation: {e}")
 #         raise https_fn.HttpsError(
 #             code=https_fn.FunctionsErrorCode.INTERNAL,
-#             message=f"An internal error occurred during report generation: {e}",
+            # message=f"An internal error occurred during report generation: {e}",
 #         )
 
 @https_fn.on_call(region="us-central1")
@@ -1289,3 +1289,4 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
     
 
     
+
