@@ -116,9 +116,21 @@ export async function bulkDeleteLeadsAction(leadIds: string[]) {
     }
 }
     
+export async function reindexLeadsToAlgoliaAction() {
+    try {
+        const functions = getFunctions(app);
+        const reindexAlgolia = httpsCallable(functions, 'reindexLeadsToAlgolia');
+        const result = await reindexAlgolia();
+        return { success: true, ...(result.data as any) };
+    } catch (error) {
+        console.error('Error re-indexing to Algolia:', error);
+        const httpsError = error as any;
+        const errorMessage = httpsError.message || 'An unknown error occurred during Algolia re-indexing.';
+        return { success: false, error: errorMessage };
+    }
+}
+
 
     
 
-
-
-    
+```

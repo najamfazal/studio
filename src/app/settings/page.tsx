@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { reindexLeadsAction } from '@/app/actions';
+import { reindexLeadsAction, reindexLeadsToAlgoliaAction } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
@@ -48,6 +48,7 @@ export default function SettingsPage() {
 
     const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
     const [isReindexing, setIsReindexing] = useState(false);
+    const [isReindexingAlgolia, setIsReindexingAlgolia] = useState(false);
 
 
     const fetchSettings = useCallback(async () => {
@@ -282,6 +283,23 @@ export default function SettingsPage() {
             setIsReindexing(false);
         }
     };
+    
+    const handleReindexAlgolia = async () => {
+        setIsReindexingAlgolia(true);
+        toast({ title: 'Algolia re-indexing started...', description: 'This may take a few moments.' });
+        try {
+            const result = await reindexLeadsToAlgoliaAction();
+            if (result.success) {
+                toast({ title: 'Algolia Re-indexing Complete!', description: `${result.processed} contacts synced to Algolia.` });
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Algolia Re-indexing Failed', description: error instanceof Error ? error.message : "An unknown error occurred." });
+        } finally {
+            setIsReindexingAlgolia(false);
+        }
+    };
 
 
     const renderChipList = (
@@ -405,15 +423,25 @@ export default function SettingsPage() {
                         <CardHeader>
                             <CardTitle>Data Management</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-4">
                            <div className="flex items-center justify-between rounded-lg border p-4">
                                 <div>
-                                    <h3 className="font-semibold">Search Indexing</h3>
+                                    <h3 className="font-semibold">Native Search Indexing</h3>
                                     <p className="text-sm text-muted-foreground">Make all existing contacts searchable. Run this after a large manual import.</p>
                                 </div>
                                 <Button onClick={handleReindex} disabled={isReindexing}>
                                     {isReindexing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                     Re-index Contacts
+                                </Button>
+                           </div>
+                            <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div>
+                                    <h3 className="font-semibold">Algolia Search Sync</h3>
+                                    <p className="text-sm text-muted-foreground">Sync all existing contacts to your Algolia index. Run this once after setup.</p>
+                                </div>
+                                <Button onClick={handleReindexAlgolia} disabled={isReindexingAlgolia}>
+                                    {isReindexingAlgolia && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Sync to Algolia
                                 </Button>
                            </div>
                         </CardContent>
@@ -567,5 +595,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    

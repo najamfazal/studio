@@ -39,6 +39,17 @@ def access_secret_version(secret_id, version_id="latest"):
         print(f"Error accessing secret {secret_id}: {e}. Falling back to env var.")
         return os.environ.get(secret_id)
 
+# --- Algolia Client Initialization ---
+def get_algolia_client():
+    """Initializes and returns an Algolia search client."""
+    algolia_app_id = access_secret_version("ALGOLIA_APP_ID")
+    algolia_admin_key = access_secret_version("ALGOLIA_ADMIN_KEY")
+    if not algolia_app_id or not algolia_admin_key:
+        print("Algolia credentials are not fully configured. Algolia functions will be disabled.")
+        return None
+    return SearchClient.create(algolia_app_id, algolia_admin_key)
+
+
 # --- AFC (Automated Follow-up Cycle) Configuration ---
 AFC_SCHEDULE = {
     1: 1,  # 1st follow-up on Day 1
@@ -562,10 +573,10 @@ def onTaskUpdate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
     task_id = event.params.get("taskId")
     data_after = event.data.after.to_dict()
-    data_before = data_before.get("completed")
+    data_before = event.data.before.to_dict()
 
     # Check if the task was just marked as completed
-    if data_before == False and data_after.get('completed') == True:
+    if data_before.get('completed') == False and data_after.get('completed') == True:
         # Check if it's a procedural task from an 'Info' outcome
         if data_after.get('nature') == 'Procedural':
             lead_id = data_after.get('leadId')
@@ -709,27 +720,36 @@ def sync_payment_plan_tasks(lead_id: str, lead_name: str, plan_before, plan_afte
     batch.commit()
 
 
-# --- New Function for Cascading Deletes ---
 @firestore_fn.on_document_deleted(document="leads/{leadId}", region="us-central1")
 def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
-    Handles the cascading deletion of a lead's associated tasks.
-    Interactions are now deleted automatically as they are part of the lead doc.
+    Handles the cascading deletion of a lead's associated tasks and Algolia record.
     """
     lead_id = event.params.get("leadId")
-    print(f"Lead {lead_id} deleted. Cleaning up associated tasks...")
+    print(f"Lead {lead_id} deleted. Cleaning up associated tasks and Algolia record...")
 
+    # --- Algolia Deletion ---
+    algolia_client = get_algolia_client()
+    if algolia_client:
+        index = algolia_client.init_index("leads")
+        try:
+            index.delete_object(lead_id).wait()
+            print(f"Successfully deleted lead {lead_id} from Algolia.")
+        except Exception as e:
+            print(f"Error deleting lead {lead_id} from Algolia: {e}")
+    else:
+        print("Skipping Algolia deletion, client not initialized.")
+    
+
+    # --- Task Deletion ---
     batch = db.batch()
     deleted_tasks_count = 0
-    
-    # Delete associated tasks
     tasks_ref = db.collection("tasks")
     tasks_query = tasks_ref.where("leadId", "==", lead_id).stream()
     for task in tasks_query:
         batch.delete(task.reference)
         deleted_tasks_count += 1
     
-    # Commit the batched deletions
     if deleted_tasks_count > 0:
         batch.commit()
         print(f"Cleanup for lead {lead_id} complete. Deleted {deleted_tasks_count} tasks.")
@@ -1114,7 +1134,112 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
             message=f"An internal error occurred during deletion: {e}",
         )
     
+# --- Algolia Sync Functions ---
 
+def get_algolia_record_from_lead_data(lead_data):
+    """Creates an Algolia record from lead data."""
+    # Ensure there's a valid 'createdAt' timestamp for Algolia
+    created_at_val = lead_data.get("createdAt")
+    if created_at_val and hasattr(created_at_val, 'timestamp'):
+        # This is a Firestore ServerTimestamp, get its seconds value
+        created_at_timestamp = int(created_at_val.timestamp())
+    elif isinstance(created_at_val, datetime):
+        created_at_timestamp = int(created_at_val.timestamp())
+    else:
+        # Fallback if createdAt is missing or in an unexpected format
+        created_at_timestamp = int(datetime.now().timestamp())
+
+    return {
+        'objectID': lead_data.get("id"),
+        'name': lead_data.get('name'),
+        'email': lead_data.get('email'),
+        'relationship': lead_data.get('relationship'),
+        'status': lead_data.get('status'),
+        'courses': [d.get('courses', []) for d in lead_data.get('commitmentSnapshot', {}).get('deals', [])],
+        'createdAt': created_at_timestamp,
+    }
+
+
+@firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
+def on_lead_created_algolia(event: firestore_fn.Event[firestore_fn.Change]):
+    """Adds a new lead to the Algolia index."""
+    algolia_client = get_algolia_client()
+    if not algolia_client:
+        return
+
+    lead_id = event.params.get("leadId")
+    lead_data = event.data.to_dict()
+    lead_data['id'] = lead_id
+
+    record = get_algolia_record_from_lead_data(lead_data)
+
+    index = algolia_client.init_index("leads")
+    try:
+        index.save_object(record).wait()
+        print(f"Successfully indexed lead {lead_id} in Algolia.")
+    except Exception as e:
+        print(f"Error indexing lead {lead_id} in Algolia: {e}")
+
+@firestore_fn.on_document_updated(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
+def on_lead_updated_algolia(event: firestore_fn.Event[firestore_fn.Change]):
+    """Updates a lead in the Algolia index."""
+    algolia_client = get_algolia_client()
+    if not algolia_client:
+        return
+
+    lead_id = event.params.get("leadId")
+    lead_data = event.data.after.to_dict()
+    lead_data['id'] = lead_id
+
+    record = get_algolia_record_from_lead_data(lead_data)
+    
+    index = algolia_client.init_index("leads")
+    try:
+        index.partial_update_object(record).wait()
+        print(f"Successfully updated lead {lead_id} in Algolia.")
+    except Exception as e:
+        print(f"Error updating lead {lead_id} in Algolia: {e}")
+
+@https_fn.on_call(region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
+def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
+    """
+    Re-indexes all leads from Firestore to Algolia.
+    """
+    algolia_client = get_algolia_client()
+    if not algolia_client:
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                                  message="Algolia client not initialized.")
+    
+    print("Starting re-indexing of all leads to Algolia...")
+    try:
+        leads_ref = db.collection("leads")
+        all_leads_stream = leads_ref.stream()
+        
+        algolia_records = []
+        for lead_doc in all_leads_stream:
+            lead_data = lead_doc.to_dict()
+            lead_data["id"] = lead_doc.id
+            record = get_algolia_record_from_lead_data(lead_data)
+            algolia_records.append(record)
+
+        if not algolia_records:
+            return {"message": "No leads found to re-index.", "processed": 0}
+
+        index = algolia_client.init_index("leads")
+        # clear_objects can be used if you want to ensure a clean slate
+        # index.clear_objects().wait() 
+        index.save_objects(algolia_records).wait()
+
+        processed_count = len(algolia_records)
+        print(f"Re-indexing to Algolia complete. Processed {processed_count} leads.")
+        return {"message": "Re-indexing to Algolia complete.", "processed": processed_count}
+
+    except Exception as e:
+        print(f"Error during Algolia re-indexing: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during Algolia re-indexing: {e}",
+        )
 
     
 
