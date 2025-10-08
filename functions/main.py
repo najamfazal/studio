@@ -43,7 +43,7 @@ def access_secret_version(secret_id, version_id="latest"):
 def get_algolia_client():
     """Initializes and returns an Algolia search client."""
     algolia_app_id = access_secret_version("ALGOLIA_APP_ID")
-    algolia_admin_key = access_secret_version("ALGOLIA_ADMIN_KEY")
+    algolia_admin_key = access_secret_version("ALGOLIA_API_KEY")
     if not algolia_app_id or not algolia_admin_key:
         print("Algolia credentials are not fully configured. Algolia functions will be disabled.")
         return None
@@ -720,7 +720,7 @@ def sync_payment_plan_tasks(lead_id: str, lead_name: str, plan_before, plan_afte
     batch.commit()
 
 
-@firestore_fn.on_document_deleted(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
+@firestore_fn.on_document_deleted(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_API_KEY"])
 def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     """
     Handles the cascading deletion of a lead's associated tasks and Algolia record.
@@ -1172,7 +1172,7 @@ def get_algolia_record_from_lead_data(lead_data):
     }
 
 
-@firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
+@firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_API_KEY"])
 def on_lead_created_algolia(event: firestore_fn.Event[firestore_fn.Change]):
     """Adds a new lead to the Algolia index."""
     algolia_client = get_algolia_client()
@@ -1192,7 +1192,7 @@ def on_lead_created_algolia(event: firestore_fn.Event[firestore_fn.Change]):
     except Exception as e:
         print(f"Error indexing lead {lead_id} in Algolia: {e}")
 
-@firestore_fn.on_document_updated(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
+@firestore_fn.on_document_updated(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_API_KEY"])
 def on_lead_updated_algolia(event: firestore_fn.Event[firestore_fn.Change]):
     """Updates a lead in the Algolia index."""
     algolia_client = get_algolia_client()
@@ -1212,7 +1212,7 @@ def on_lead_updated_algolia(event: firestore_fn.Event[firestore_fn.Change]):
     except Exception as e:
         print(f"Error updating lead {lead_id} in Algolia: {e}")
 
-@https_fn.on_call(region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY"])
+@https_fn.on_call(region="us-central1", secrets=["ALGOLIA_APP_ID", "ALGOLIA_API_KEY"])
 def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
     """
     Re-indexes all leads from Firestore to Algolia.
@@ -1269,3 +1269,6 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
     
 
 
+
+
+    
