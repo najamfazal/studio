@@ -1148,6 +1148,18 @@ def get_algolia_record_from_lead_data(lead_data):
     else:
         # Fallback if createdAt is missing or in an unexpected format
         created_at_timestamp = int(datetime.now().timestamp())
+    
+    # Flatten the courses from all deals into a single list
+    all_courses = []
+    deals = lead_data.get('commitmentSnapshot', {}).get('deals', [])
+    if deals:
+        for deal in deals:
+            courses = deal.get('courses', [])
+            if courses:
+                all_courses.extend(courses)
+    
+    # Remove duplicates
+    unique_courses = list(set(all_courses))
 
     return {
         'objectID': lead_data.get("id"),
@@ -1155,7 +1167,7 @@ def get_algolia_record_from_lead_data(lead_data):
         'email': lead_data.get('email'),
         'relationship': lead_data.get('relationship'),
         'status': lead_data.get('status'),
-        'courses': [d.get('courses', []) for d in lead_data.get('commitmentSnapshot', {}).get('deals', [])],
+        'courses': unique_courses,
         'createdAt': created_at_timestamp,
     }
 
@@ -1255,3 +1267,4 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
     
 
     
+
