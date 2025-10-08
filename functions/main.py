@@ -27,14 +27,18 @@ def access_secret_version(secret_id, version_id="latest"):
     # This check is for local development where project_id might not be set.
     # In a deployed Cloud Function environment, project_id will always be available.
     if not project_id:
-        print(f"GOOGLE_CLOUD_PROJECT not set. Skipping secret access for {secret_id}.")
+        print(f"GOOGLE_CLOUD_PROJECT not set. Attempting to fall back to env var for {secret_id}.")
         return os.environ.get(secret_id)
 
     try:
         client = secretmanager.SecretManagerServiceClient()
         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
         response = client.access_secret_version(request={"name": name})
-        return response.payload.data.decode("UTF-8")
+        payload = response.payload.data.decode("UTF-8")
+        if not payload:
+             print(f"Warning: Secret {secret_id} found but payload is empty. Falling back to env var.")
+             return os.environ.get(secret_id)
+        return payload
     except Exception as e:
         print(f"Error accessing secret {secret_id}: {e}. Falling back to env var.")
         return os.environ.get(secret_id)
@@ -46,9 +50,16 @@ def get_algolia_client():
     algolia_app_id = os.environ.get("ALGOLIA_APP_ID")
     # The Admin API Key is secret and fetched from Secret Manager.
     algolia_admin_key = access_secret_version("ALGOLIA_APP_KEY")
+    
+    if not algolia_app_id:
+        print("Algolia client initialization failed: ALGOLIA_APP_ID environment variable is missing.")
+    if not algolia_admin_key:
+        print("Algolia client initialization failed: ALGOLIA_APP_KEY secret is missing or inaccessible.")
+        
     if not algolia_app_id or not algolia_admin_key:
-        print("Algolia credentials are not fully configured. Algolia functions will be disabled.")
+        print("Algolia functions will be disabled.")
         return None
+        
     return SearchClient.create(algolia_app_id, algolia_admin_key)
 
 
