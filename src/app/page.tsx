@@ -1,4 +1,6 @@
 
+"use client";
+
 import {
   collection,
   getDocs,
@@ -13,9 +15,12 @@ import {
 import Link from 'next/link';
 import { unstable_noStore as noStore } from 'next/cache';
 import { addDays, format, isPast, isSameDay, isToday, startOfToday } from "date-fns";
-import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen, Flame, Sparkles, Zap } from "lucide-react";
+import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen, Flame, Sparkles, Zap, Loader2 } from "lucide-react";
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import type { Task, Lead } from "@/lib/types";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -27,6 +32,7 @@ import {
 } from "@/components/ui/card";
 import { ManualTaskDialog } from "@/components/manual-task-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Logo } from "@/components/icons";
 
 const getInteractionSnippet = (lead: Lead): string => {
     if (!lead.interactions || lead.interactions.length === 0) {
@@ -47,7 +53,7 @@ const toDate = (timestamp: any): Date => {
 };
 
 
-async function getDashboardData() {
+async function getDashboardData(userId: string) {
   noStore();
   
   let hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
@@ -72,7 +78,6 @@ async function getDashboardData() {
 
   } catch (e) {
     console.error("Error fetching dashboard data:", e);
-    // Return empty arrays on error to prevent render failures
     return {
       hotFollowups: [],
       newLeadsTasks: [],
@@ -109,11 +114,36 @@ async function getDashboardData() {
   };
 }
 
+interface DashboardData {
+    hotFollowups: Lead[];
+    newLeadsTasks: Task[];
+    regularFollowupsTasks: Task[];
+    adminTasks: Task[];
+    overdueTasks: Task[];
+}
 
-export default async function RoutinesPage() {
-  const { hotFollowups, newLeadsTasks, regularFollowupsTasks, adminTasks, overdueTasks } = await getDashboardData();
+
+export default function RoutinesPage() {
+  const [user, loading] = useAuthState(auth);
+  const router = useRouter();
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+    if (user) {
+        getDashboardData(user.uid).then(setDashboardData);
+    }
+  }, [user, loading, router]);
+
+
+  if (loading || !user || !dashboardData) {
+    return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
+  }
   
-  const getQueueParams = (items: (Lead | Task)[]) => items.map(item => 'leadId' in item && item.leadId ? item.leadId : item.id).join(',');
+  const { hotFollowups, newLeadsTasks, regularFollowupsTasks, adminTasks, overdueTasks } = dashboardData;
+
   const getTaskQueueParams = (tasks: Task[]) => tasks.map(task => task.id).join(',');
 
   return (
