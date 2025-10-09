@@ -125,6 +125,11 @@ export async function reindexLeadsToAlgoliaAction() {
     } catch (error) {
         console.error('Error re-indexing to Algolia:', error);
         const httpsError = error as any;
+        // This is a GUESS. We assume a permission error from a callable function is a firestore error.
+        // A more robust solution would have the cloud function return a specific error code.
+        if (httpsError.code === 'permission-denied' || (httpsError.message && httpsError.message.includes('permission'))) {
+             return { success: false, error: "Permission denied. Please check Firestore rules." , isPermissionError: true };
+        }
         const errorMessage = httpsError.message || 'An unknown error occurred during Algolia re-indexing.';
         return { success: false, error: errorMessage };
     }

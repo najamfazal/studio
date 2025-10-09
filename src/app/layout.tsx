@@ -9,6 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { AppSettings, ThemeSettings } from '@/lib/types';
 import { QuickLogProvider } from '@/hooks/use-quick-log';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 export const metadata: Metadata = {
   title: 'LeadTrack Solo',
@@ -55,6 +56,7 @@ export default async function RootLayout({
       <body className="font-body antialiased h-full">
         <QuickLogProvider>
           <SidebarProvider>
+            <FirebaseErrorListener />
             <div className="flex min-h-screen w-full">
               <Sidebar />
               <div className="flex-1 w-full">{children}</div>

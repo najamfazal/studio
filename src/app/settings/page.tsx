@@ -19,6 +19,8 @@ import { reindexLeadsAction, reindexLeadsToAlgoliaAction } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
+import { errorEmitter } from '@/lib/error-emitter';
+import { FirestorePermissionError } from '@/lib/errors';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots';
@@ -90,8 +92,15 @@ export default function SettingsPage() {
                 setSettings(defaultSettings);
                 toast({ title: "Settings initialized with default values." });
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error fetching settings:", error);
+            if (error.code === 'permission-denied') {
+                const permissionError = new FirestorePermissionError({
+                    path: 'settings/appConfig',
+                    operation: 'get',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            }
             toast({ variant: "destructive", title: "Could not load app settings." });
         } finally {
             setIsLoading(false);
@@ -112,7 +121,18 @@ export default function SettingsPage() {
 
         try {
             const settingsDocRef = doc(db, "settings", "appConfig");
-            await updateDoc(settingsDocRef, updatePayload);
+            await updateDoc(settingsDocRef, updatePayload)
+            .catch(async (serverError) => {
+                if (serverError.code === 'permission-denied') {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'settings/appConfig',
+                        operation: 'update',
+                        requestResourceData: updatePayload,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                }
+                throw serverError; // re-throw to be caught by outer catch
+            });
             toast({ title: "Settings Saved", description: "Your changes have been saved successfully." });
             
             if (updatePayload.theme) {
@@ -292,10 +312,20 @@ export default function SettingsPage() {
             if (result.success) {
                 toast({ title: 'Algolia Re-indexing Complete!', description: `${result.processed} contacts synced to Algolia.` });
             } else {
+                if (result.isPermissionError) {
+                    const permissionError = new FirestorePermissionError({
+                        path: '/leads',
+                        operation: 'list',
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                }
                 throw new Error(result.error);
             }
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Algolia Re-indexing Failed', description: error instanceof Error ? error.message : "An unknown error occurred." });
+            const msg = error instanceof Error ? error.message : "An unknown error occurred.";
+            if (!msg.includes("Permission")) {
+                toast({ variant: 'destructive', title: 'Algolia Re-indexing Failed', description: msg });
+            }
         } finally {
             setIsReindexingAlgolia(false);
         }
