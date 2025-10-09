@@ -18,7 +18,7 @@ import { addDays, format, isPast, isSameDay, isToday, startOfToday } from "date-
 import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen, Flame, Sparkles, Zap, Loader2 } from "lucide-react";
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { db, auth } from "@/lib/firebase";
 import type { Task, Lead } from "@/lib/types";
@@ -33,6 +33,8 @@ import {
 import { ManualTaskDialog } from "@/components/manual-task-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/icons";
+import { errorEmitter } from "@/lib/error-emitter";
+import { FirestorePermissionError } from "@/lib/errors";
 
 const getInteractionSnippet = (lead: Lead): string => {
     if (!lead.interactions || lead.interactions.length === 0) {
@@ -59,24 +61,36 @@ async function getDashboardData(userId: string) {
   let hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
   let allIncompleteTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
 
-  try {
-    const hotFollowupsQuery = query(
+  const hotFollowupsQuery = query(
       collection(db, "leads"),
       where("onFollowList", "==", true),
       limit(5)
-    );
+  );
 
-    const allIncompleteTasksQuery = query(
+  const allIncompleteTasksQuery = query(
       collection(db, "tasks"),
       where("completed", "==", false)
-    );
-    
-    [hotFollowupsSnapshot, allIncompleteTasksSnapshot] = await Promise.all([
-      getDocs(hotFollowupsQuery),
-      getDocs(allIncompleteTasksQuery),
-    ]);
+  );
+
+  try {
+    hotFollowupsSnapshot = await getDocs(hotFollowupsQuery).catch(serverError => {
+        if (serverError.code === 'permission-denied') {
+            throw new FirestorePermissionError({ path: 'leads', operation: 'list' });
+        }
+        throw serverError;
+    });
+
+    allIncompleteTasksSnapshot = await getDocs(allIncompleteTasksQuery).catch(serverError => {
+        if (serverError.code === 'permission-denied') {
+            throw new FirestorePermissionError({ path: 'tasks', operation: 'list' });
+        }
+        throw serverError;
+    });
 
   } catch (e) {
+    if (e instanceof FirestorePermissionError) {
+        errorEmitter.emit('permission-error', e);
+    }
     console.error("Error fetching dashboard data:", e);
     return {
       hotFollowups: [],
