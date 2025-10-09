@@ -9,7 +9,7 @@ import re
 # import google.generativeai as genai
 import os
 from google.cloud import secretmanager
-from algoliasearch.search.client import SearchClient
+from algoliasearch.search_client import SearchClient
 
 # --- Environment Setup ---
 # Initialize Firebase Admin SDK
@@ -38,21 +38,23 @@ def access_secret_version(secret_id, version_id="latest"):
 # --- Algolia Client Initialization ---
 def get_algolia_client():
     """Initializes and returns an Algolia search client."""
-    # The App ID is public and can be stored directly.
-    algolia_app_id = "LD2R9KI9AJ"
-    # The Admin API Key is secret and fetched from Secret Manager.
-    algolia_admin_key = access_secret_version("ALGOLIA_APP_KEY")
-    
-    if not algolia_app_id:
-        print("Algolia client initialization failed: ALGOLIA_APP_ID is missing.")
-    if not algolia_admin_key:
-        print("Algolia client initialization failed: ALGOLIA_APP_KEY secret is missing or inaccessible.")
+    try:
+        # The App ID is public and can be stored directly.
+        algolia_app_id = "LD2R9KI9AJ"
+        # The Admin API Key is secret and fetched from Secret Manager.
+        algolia_admin_key = access_secret_version("ALGOLIA_APP_KEY")
         
-    if not algolia_app_id or not algolia_admin_key:
-        print("Algolia functions will be disabled.")
-        return None
-        
-    return SearchClient.create(algolia_app_id, algolia_admin_key)
+        if not algolia_app_id:
+            print("Algolia client initialization failed: ALGOLIA_APP_ID is missing.")
+            return None, "ALGOLIA_APP_ID is missing."
+        if not algolia_admin_key:
+            print("Algolia client initialization failed: ALGOLIA_APP_KEY secret is missing or inaccessible.")
+            return None, "ALGOLIA_APP_KEY secret is missing or inaccessible."
+            
+        return SearchClient.create(algolia_app_id, algolia_admin_key), None
+    except Exception as e:
+        print(f"Error initializing Algolia client: {e}")
+        return None, str(e)
 
 
 # --- AFC (Automated Follow-up Cycle) Configuration ---
@@ -734,7 +736,7 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     print(f"Lead {lead_id} deleted. Cleaning up associated tasks and Algolia record...")
 
     # --- Algolia Deletion ---
-    algolia_client = get_algolia_client()
+    algolia_client, error_message = get_algolia_client()
     if algolia_client:
         index = algolia_client.init_index("leads")
         try:
@@ -743,7 +745,7 @@ def onLeadDelete(event: firestore_fn.Event[firestore_fn.Change]) -> None:
         except Exception as e:
             print(f"Error deleting lead {lead_id} from Algolia: {e}")
     else:
-        print("Skipping Algolia deletion, client not initialized.")
+        print(f"Skipping Algolia deletion, client not initialized: {error_message}")
     
 
     # --- Task Deletion ---
@@ -1180,8 +1182,9 @@ def get_algolia_record_from_lead_data(lead_data):
 @firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_KEY"])
 def on_lead_created_algolia(event: firestore_fn.Event[firestore_fn.Change]):
     """Adds a new lead to the Algolia index."""
-    algolia_client = get_algolia_client()
+    algolia_client, error_message = get_algolia_client()
     if not algolia_client:
+        print(f"Skipping Algolia creation, client not initialized: {error_message}")
         return
 
     lead_id = event.params.get("leadId")
@@ -1200,8 +1203,9 @@ def on_lead_created_algolia(event: firestore_fn.Event[firestore_fn.Change]):
 @firestore_fn.on_document_updated(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_KEY"])
 def on_lead_updated_algolia(event: firestore_fn.Event[firestore_fn.Change]):
     """Updates a lead in the Algolia index."""
-    algolia_client = get_algolia_client()
+    algolia_client, error_message = get_algolia_client()
     if not algolia_client:
+        print(f"Skipping Algolia update, client not initialized: {error_message}")
         return
 
     lead_id = event.params.get("leadId")
@@ -1222,10 +1226,10 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
     """
     Re-indexes all leads from Firestore to Algolia.
     """
-    algolia_client = get_algolia_client()
+    algolia_client, error_message = get_algolia_client()
     if not algolia_client:
         raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-                                  message="Algolia client not initialized.")
+                                  message=f"Algolia client not initialized: {error_message}")
     
     print("Starting re-indexing of all leads to Algolia...")
     try:
@@ -1286,5 +1290,7 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
