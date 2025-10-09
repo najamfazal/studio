@@ -14,7 +14,7 @@ from algoliasearch.search.client import SearchClient
 # --- Environment Setup ---
 # For local development, use a .env file to set GOOGLE_CLOUD_PROJECT
 # For deployment, the project ID is automatically available.
-project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+project_id = os.environ.get("GCP_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT")
 
 # Initialize Firebase Admin SDK
 initialize_app()
@@ -1290,3 +1290,6 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+
+    
