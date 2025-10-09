@@ -1,6 +1,6 @@
 
 from firebase_functions import firestore_fn, options, scheduler_fn, https_fn
-from firebase_admin import initialize_app, firestore
+from firebase_admin import initialize_app, firestore, get_app
 from datetime import datetime, timedelta, timezone
 import json
 import io
@@ -12,10 +12,6 @@ from google.cloud import secretmanager
 from algoliasearch.search.client import SearchClient
 
 # --- Environment Setup ---
-# For local development, use a .env file to set GOOGLE_CLOUD_PROJECT
-# For deployment, the project ID is automatically available.
-project_id = os.environ.get("GCP_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT")
-
 # Initialize Firebase Admin SDK
 initialize_app()
 db = firestore.client()
@@ -23,14 +19,10 @@ db = firestore.client()
 def access_secret_version(secret_id, version_id="latest"):
     """
     Access the payload for the given secret version and return it.
+    The project ID is retrieved dynamically from the initialized Firebase app.
     """
-    # This check is for local development where project_id might not be set.
-    # In a deployed Cloud Function environment, project_id will always be available.
-    if not project_id:
-        print(f"GOOGLE_CLOUD_PROJECT not set. Attempting to fall back to env var for {secret_id}.")
-        return os.environ.get(secret_id)
-
     try:
+        project_id = get_app().project_id
         client = secretmanager.SecretManagerServiceClient()
         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
         response = client.access_secret_version(request={"name": name})
@@ -1290,6 +1282,9 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+
+    
 
 
     
