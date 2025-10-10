@@ -16,7 +16,6 @@ import {
   where,
   Timestamp,
 } from "firebase/firestore";
-import algoliasearch from "algoliasearch/lite";
 import { Plus, Users, Loader2, Filter, Upload, Search, CalendarIcon, X, Layers, Trash2 } from "lucide-react";
 import { startOfDay, endOfDay } from "date-fns";
 
@@ -49,7 +48,7 @@ import {
 import { LeadDialog } from "@/components/lead-dialog";
 import { addDoc, getDoc, updateDoc } from "firebase/firestore";
 import { ImportDialog } from "@/components/import-dialog";
-import { bulkDeleteLeadsAction, mergeLeadsAction } from "@/app/actions";
+import { bulkDeleteLeadsAction, mergeLeadsAction, searchLeadsAction } from "@/app/actions";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -76,12 +75,6 @@ interface ContactsPageClientProps {
     initialAppSettings: AppSettings | null;
     initialHasMore: boolean;
 }
-
-const searchClient = algoliasearch(
-  process.env.NEXT_PUBLIC_ALGOLIA_APP_ID!,
-  process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY!
-);
-const leadsIndex = searchClient.initIndex("leads");
 
 
 export function ContactsPageClient({ initialLeads, initialAppSettings, initialHasMore }: ContactsPageClientProps) {
@@ -200,10 +193,14 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
         if (debouncedSearchTerm) {
             setIsSearching(true);
             try {
-                const { hits } = await leadsIndex.search<Lead>(debouncedSearchTerm);
-                setSearchResults(hits as Lead[]);
+                const result = await searchLeadsAction(debouncedSearchTerm);
+                if (result.success) {
+                    setSearchResults(result.leads as Lead[]);
+                } else {
+                    throw new Error(result.error);
+                }
             } catch (error) {
-                console.error("Algolia search failed:", error);
+                console.error("Native search failed:", error);
                 toast({ variant: 'destructive', title: "Search failed" });
                 setSearchResults([]);
             } finally {
@@ -291,8 +288,8 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
         setIsLeadDialogOpen(false);
         // Refresh the list after save
         if(debouncedSearchTerm) {
-            const { hits } = await leadsIndex.search<Lead>(debouncedSearchTerm);
-            setSearchResults(hits as Lead[]);
+             const result = await searchLeadsAction(debouncedSearchTerm);
+             if (result.success) setSearchResults(result.leads as Lead[]);
         } else {
             fetchLeads(false, { statuses: statusFilters, date: createdDateFilter });
         }
@@ -603,7 +600,6 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
         onSave={handleDialogSave}
         leadToEdit={leadToEdit}
         isSaving={isSaving}
-        courseNames={appSettings?.courseNames || []}
         relationshipTypes={appSettings?.relationshipTypes || ['Lead', 'Learner']}
       />
 

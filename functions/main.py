@@ -28,30 +28,26 @@ def access_secret_version(secret_id, version_id="latest"):
         response = client.access_secret_version(request={"name": name})
         payload = response.payload.data.decode("UTF-8")
         if not payload:
-             print(f"Warning: Secret {secret_id} found but payload is empty. Falling back to env var.")
-             return os.environ.get(secret_id)
+             print(f"Warning: Secret {secret_id} found but payload is empty. This may cause issues.")
+             return None
         return payload
     except Exception as e:
-        print(f"Error accessing secret {secret_id}: {e}. Falling back to env var.")
-        return os.environ.get(secret_id)
+        print(f"Error accessing secret {secret_id}: {e}. This function may fail if the secret is required.")
+        return None
 
 # --- Algolia Client Initialization ---
 def get_algolia_client():
     """Initializes and returns an Algolia search client."""
     try:
-        # The App ID is public and can be stored directly.
         algolia_app_id = "LD2R9KI9AJ"
-        # The Admin API Key is secret and fetched from Secret Manager.
         algolia_admin_key = access_secret_version("ALGOLIA_APP_KEY")
         
         if not algolia_app_id:
-            print("Algolia client initialization failed: ALGOLIA_APP_ID is missing.")
-            return None, "ALGOLIA_APP_ID is missing."
+            return None, "Algolia App ID is missing."
         if not algolia_admin_key:
-            print("Algolia client initialization failed: ALGOLIA_APP_KEY secret is missing or inaccessible.")
-            return None, "ALGOLIA_APP_KEY secret is missing or inaccessible."
+            return None, "Algolia Admin Key secret is missing or inaccessible."
             
-        return SearchClient.create(algolia_app_id, algolia_admin_key), None
+        return SearchClient(algolia_app_id, algolia_admin_key), None
     except Exception as e:
         print(f"Error initializing Algolia client: {e}")
         return None, str(e)
@@ -237,8 +233,11 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             
             # --- RELATIONSHIP-BASED LOGIC ---
             if relationship.lower() == "lead":
-                auto_log_initiated = row.get("autoLogInitiated")
-                if auto_log_initiated == 1:
+                afc_stage_day = row.get("autoLogInitiated")
+                if isinstance(afc_stage_day, int) and afc_stage_day in AFC_SCHEDULE:
+                    lead_data["afc_step"] = afc_stage_day
+                    lead_data["autoLogInitiated"] = True # For preview
+                else:
                     now_iso = datetime.now(timezone.utc).isoformat()
                     initiated_log = {
                         "id": f"import_init_{int(datetime.now().timestamp())}",
@@ -247,7 +246,6 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                         "notes": "Automatically logged upon import.",
                     }
                     lead_data["interactions"].append(initiated_log)
-                    lead_data["autoLogInitiated"] = True # For preview
 
             elif relationship.lower() == "learner":
                 # Task creation will happen post-import if it's a new learner
@@ -299,8 +297,11 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     new_doc_ref = leads_ref.document()
                     batch.set(new_doc_ref, lead_data)
                     
-                    # If new learner, create the task
-                    if relationship.lower() == "learner":
+                    if relationship.lower() == "lead" and lead_data.get("afc_step") in AFC_SCHEDULE:
+                        afc_day = AFC_SCHEDULE[lead_data["afc_step"]]
+                        due_date = datetime.now() + timedelta(days=afc_day)
+                        create_task(new_doc_ref.id, name, f"Day {afc_day} Follow-up", "Interactive", due_date)
+                    elif relationship.lower() == "learner":
                          create_task(new_doc_ref.id, name, f"set schedule and plan for {name}", "Procedural", datetime.now())
 
                     batch_count += 1
@@ -350,10 +351,14 @@ def onLeadCreate(event: firestore_fn.Event[firestore_fn.Change]) -> None:
         print("Lead data is missing ID or name. Aborting task creation.")
         return
 
-    # If lead has a status, it's from an import.
+    # If lead has afc_step > 0, it was imported with a specific stage.
+    if lead_data.get("afc_step", 0) > 0:
+        # The task for this is now handled during the import transaction itself.
+        print(f"Imported lead {lead_name} created with AFC step {lead_data['afc_step']}. Task created during import.")
+        return
+    
+    # If lead has a status, it's from an import without a specific AFC stage.
     if lead_data.get("status"):
-        # Task for new "learner" is now handled during import to link to doc ID.
-        # This now only handles imported "leads".
         if lead_data.get("relationship", "Lead").lower() == "lead":
             print(f"Imported lead created: {lead_name} ({lead_id}). Creating initial contact task.")
             due_date = datetime.now() # Due today
@@ -1226,13 +1231,14 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
     """
     Re-indexes all leads from Firestore to Algolia.
     """
-    algolia_client, error_message = get_algolia_client()
-    if not algolia_client:
-        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-                                  message=f"Algolia client not initialized: {error_message}")
-    
-    print("Starting re-indexing of all leads to Algolia...")
     try:
+        algolia_client, error_message = get_algolia_client()
+        if not algolia_client:
+            raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                                    message=f"Algolia client not initialized: {error_message}")
+        
+        print("Starting re-indexing of all leads to Algolia...")
+        
         leads_ref = db.collection("leads")
         all_leads_stream = leads_ref.stream()
         
@@ -1255,6 +1261,8 @@ def reindexLeadsToAlgolia(req: https_fn.CallableRequest) -> dict:
         print(f"Re-indexing to Algolia complete. Processed {processed_count} leads.")
         return {"message": "Re-indexing to Algolia complete.", "processed": processed_count}
 
+    except https_fn.HttpsError as e:
+        raise e
     except Exception as e:
         print(f"Error during Algolia re-indexing: {e}")
         raise https_fn.HttpsError(

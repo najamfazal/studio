@@ -134,3 +134,21 @@ export async function reindexLeadsToAlgoliaAction() {
         return { success: false, error: errorMessage };
     }
 }
+
+export async function searchLeadsAction(term: string) {
+    if (!term) {
+        return { success: true, leads: [] };
+    }
+
+    try {
+        const functions = getFunctions(app);
+        const searchLeads = httpsCallable(functions, 'searchLeads');
+        const result = await searchLeads({ term });
+        return { success: true, leads: result.data as any[] };
+    } catch (error) {
+        console.error('Error searching leads:', error);
+        const httpsError = error as any;
+        const errorMessage = httpsError.message || 'An unknown error occurred during search.';
+        return { success: false, error: errorMessage, leads: [] };
+    }
+}
