@@ -37,6 +37,8 @@ import { Switch } from '@/components/ui/switch';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CheckIcon } from 'lucide-react';
 import { DealDialog } from '@/components/deal-dialog';
+import { LeadDialog } from '@/components/lead-dialog';
+import { LeadFormValues } from '@/lib/schemas';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -126,6 +128,10 @@ export default function ContactDetailPage() {
   // Deal management
   const [isDealModalOpen, setIsDealModalOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+
+  // Edit Lead state
+  const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const fetchInitialData = useCallback(async () => {
     if (!id) return;
@@ -258,6 +264,27 @@ export default function ContactDetailPage() {
       console.error('Error updating contact:', error);
       toast({ variant: 'destructive', title: 'Update failed' });
       setLead(originalLead); // Revert on failure
+    }
+  };
+
+  const handleDialogSave = async (values: LeadFormValues) => {
+    if (!lead) return;
+    setIsSaving(true);
+    try {
+        await handleUpdate('name', values.name);
+        await handleUpdate('email', values.email);
+        await handleUpdate('phones', values.phones);
+        await handleUpdate('relationship', values.relationship);
+        await handleUpdate('status', values.status);
+        await handleUpdate('source', values.source);
+        await handleUpdate('assignedAt', values.assignedAt);
+        
+        setIsLeadDialogOpen(false);
+        fetchInitialData(); // Re-fetch to ensure all state is in sync
+    } catch (error) {
+        console.error("Error saving contact from dialog:", error);
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -802,7 +829,12 @@ export default function ContactDetailPage() {
             
             <TabsContent value="overview" className="space-y-4 mt-4">
               <Card>
-                  <CardHeader className="p-4"><CardTitle className="text-lg">Contact Details</CardTitle></CardHeader>
+                  <CardHeader className="p-4 flex flex-row items-center justify-between">
+                    <CardTitle className="text-lg">Contact Details</CardTitle>
+                    <Button variant="outline" size="sm" onClick={() => setIsLeadDialogOpen(true)}>
+                      <Pencil className="mr-2 h-4 w-4" /> Edit
+                    </Button>
+                  </CardHeader>
                   <CardContent className="p-4 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
                       {lead.email && (
                       <div className="flex items-center gap-3">
@@ -1375,6 +1407,17 @@ export default function ContactDetailPage() {
             </TabsContent>
         </Tabs>
       </main>
+
+       {isLeadDialogOpen && appSettings && (
+          <LeadDialog
+              isOpen={isLeadDialogOpen}
+              setIsOpen={setIsLeadDialogOpen}
+              leadToEdit={lead}
+              onSave={handleDialogSave}
+              isSaving={isSaving}
+              relationshipTypes={appSettings.relationshipTypes}
+          />
+       )}
       
        {isScheduleModalOpen && appSettings && (
           <ScheduleEditorModal
@@ -1695,3 +1738,5 @@ function PayPlanEditor({ plan, onPlanChange, onSave }: { plan: PaymentPlan, onPl
         </Card>
     );
 }
+
+    

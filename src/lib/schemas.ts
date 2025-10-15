@@ -1,5 +1,4 @@
 
-
 import { z } from "zod";
 
 export const phoneSchema = z.object({
@@ -9,7 +8,7 @@ export const phoneSchema = z.object({
 
 export const leadSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Please enter a valid email." }),
+  email: z.string().email({ message: "Please enter a valid email." }).optional().or(z.literal('')),
   phones: z.array(phoneSchema).min(1, { message: "At least one phone number is required." }).superRefine((phones, ctx) => {
     if (phones.some(p => !p.number)) {
       ctx.addIssue({
@@ -20,6 +19,7 @@ export const leadSchema = z.object({
     }
   }),
   relationship: z.string().min(1, { message: "Relationship type is required." }),
+  status: z.string().min(1, { message: "Status is required." }),
   source: z.string().optional(),
   assignedAt: z.string().optional(),
 });
@@ -35,3 +35,5 @@ export const dealSchema = z.object({
 });
 
 export type DealFormValues = z.infer<typeof dealSchema>;
+
+    

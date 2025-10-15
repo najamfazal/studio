@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { leadSchema, type LeadFormValues } from "@/lib/schemas";
-import type { Lead } from "@/lib/types";
+import type { Lead, LeadStatus } from "@/lib/types";
 import { CalendarIcon, Loader2, Plus, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,10 @@ import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
 import { format, parseISO } from "date-fns";
+
+const ALL_STATUSES: LeadStatus[] = [
+  'Active', 'Paused', 'Snoozed', 'Cooling', 'Dormant', 'Enrolled', 'Withdrawn', 'Archived', 'Graduated'
+];
 
 interface LeadDialogProps {
   isOpen: boolean;
@@ -57,6 +61,7 @@ export function LeadDialog({
       email: "",
       phones: [{ number: "", type: "both" }],
       relationship: "Lead",
+      status: "Active",
       source: "",
       assignedAt: "",
     },
@@ -75,6 +80,7 @@ export function LeadDialog({
           email: leadToEdit.email,
           phones: leadToEdit.phones?.length ? leadToEdit.phones.map(p => ({ number: p.number || '', type: p.type || 'both' })) : [{ number: "", type: "both" }],
           relationship: leadToEdit.relationship || 'Lead',
+          status: leadToEdit.status || 'Active',
           source: leadToEdit.source || "",
           assignedAt: leadToEdit.assignedAt || "",
         });
@@ -84,6 +90,7 @@ export function LeadDialog({
           email: "",
           phones: [{ number: "", type: "both" }],
           relationship: "Lead",
+          status: "Active",
           source: "",
           assignedAt: new Date().toISOString(),
         });
@@ -205,7 +212,7 @@ export function LeadDialog({
                     <RadioGroup
                       onValueChange={field.onChange}
                       defaultValue={field.value}
-                      className="flex space-x-2"
+                      className="flex flex-wrap gap-x-4 gap-y-2"
                     >
                       {relationshipTypes.map(name => (
                          <FormItem key={name} className="flex items-center space-x-2 space-y-0">
@@ -219,6 +226,29 @@ export function LeadDialog({
                       ))}
                     </RadioGroup>
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {ALL_STATUSES.map(status => (
+                            <SelectItem key={status} value={status}>{status}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -298,3 +328,5 @@ export function LeadDialog({
     </Dialog>
   );
 }
+
+    
