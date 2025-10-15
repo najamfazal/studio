@@ -151,16 +151,29 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 if phone_generic:
                     phones.append({"number": phone_generic, "type": "both"})
             
-            # --- DYNAMIC COURSE MAPPING ---
-            courses = []
+            # --- DYNAMIC DEAL MAPPING ---
+            deals = []
+            deal_data = {}
             for key, value in row.items():
-                if re.match(r'course\d*', key, re.IGNORECASE) and value:
-                    courses.append(str(value).strip())
-            # Legacy single course field support
-            single_course = str(row.get("courseName", row.get("Course", ""))).strip()
-            if single_course and single_course not in courses:
-                courses.append(single_course)
-            
+                match = re.match(r'd(\d+)(.*)', key, re.IGNORECASE)
+                if match:
+                    deal_num = match.group(1)
+                    prop_name = match.group(2).lower()
+                    if deal_num not in deal_data:
+                        deal_data[deal_num] = {}
+                    deal_data[deal_num][prop_name] = value
+
+            for deal_num in sorted(deal_data.keys()):
+                data = deal_data[deal_num]
+                deal = {
+                    "id": f"deal_{deal_num}_{int(datetime.now().timestamp())}",
+                    "courses": [c.strip() for c in str(data.get('courses', '')).split(',')] if data.get('courses') else [],
+                    "price": float(data.get('price', 0)),
+                    "mode": str(data.get('mode', 'Online')).strip(),
+                    "format": str(data.get('format', '1-1')).strip(),
+                }
+                deals.append(deal)
+
             # --- OPTIONAL FIELDS ---
             notes = row.get("notes", row.get("Notes", "")).strip()
             price = str(row.get("price", "")).strip()
@@ -201,7 +214,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "name": name, "email": email, "phones": phones,
                 "relationship": relationship,
                 "commitmentSnapshot": {
-                    "courses": courses, # Retaining for backward compatibility, will be part of deals
+                    "deals": deals,
                     "keyNotes": notes,
                 },
                 "status": status, "afc_step": 0, "hasEngaged": has_engaged,

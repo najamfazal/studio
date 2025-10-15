@@ -31,18 +31,18 @@ const sampleJson = `[
   {
     "Name": "Thomas",
     "Phone1": "971581942012",
-    "Phone1 Type": "Both",
     "Email": "chaithu4k@gmail.com",
-    "Course": "AWS"
+    "d1courses": "AWS",
+    "d1price": 500,
+    "d1mode": "Online",
+    "d1format": "1-1"
   },
   {
     "Name": "Pradeep",
     "Phone1": 562286658,
-    "Phone1 Type": "Call",
     "Email": "ossasun@hotmail.com",
-    "Course": "Data Analytics",
-    "Phone2": "971501234567",
-    "Phone2 Type": "Chat"
+    "d1courses": "Data Analytics, Power BI",
+    "d1price": 1200
   }
 ]`;
 
@@ -211,9 +211,13 @@ export function ImportDialog({
                               </CardHeader>
                               <CardContent className="p-3 pt-0 text-xs text-muted-foreground space-y-1">
                                   <p><span className="font-semibold text-foreground">Email:</span> {data.email || 'N/A'}</p>
-                                  <p><span className="font-semibold text-foreground">Courses:</span> {(data.commitmentSnapshot?.courses || []).join(', ') || 'N/A'}</p>
+                                  {(data.commitmentSnapshot?.deals || []).map((deal: any, i: number) => (
+                                    <div key={i} className="border-t mt-1 pt-1">
+                                      <p><span className="font-semibold text-foreground">Deal {i+1}:</span> {deal.courses.join(', ')} - ${deal.price}</p>
+                                    </div>
+                                  ))}
                                   <p><span className="font-semibold text-foreground">Phones:</span> {(data.phones || []).map((p: any) => p.number).join(', ')}</p>
-                                  {data.autoLogInitiated && <Badge variant="outline" className="mt-1">Will log "Initiated"</Badge>}
+                                  {data.autoLogInitiated && <Badge variant="outline" className="mt-1">Will create AFC task</Badge>}
                               </CardContent>
                           </Card>
                         ))}
