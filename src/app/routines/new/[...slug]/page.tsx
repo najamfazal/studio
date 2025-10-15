@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { onSnapshot, collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2, Pencil } from 'lucide-react';
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
@@ -32,7 +32,7 @@ export default function NewLeadFocusPage() {
     const [leadsCache, setLeadsCache] = useState<Record<string, Lead>>({});
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
-    const [isLoadingQueue, setIsLoadingQueue] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
     const [isQueueVisible, setIsQueueVisible] = useState(true);
 
     const [currentIndex, setCurrentIndex] = useState(-1);
@@ -50,39 +50,52 @@ export default function NewLeadFocusPage() {
     const currentTask = useMemo(() => taskQueue.find(t => t.id === currentTaskId), [taskQueue, currentTaskId]);
     const currentLead = useMemo(() => currentTask?.leadId ? leadsCache[currentTask.leadId] : null, [leadsCache, currentTask]);
     
-    const fetchTaskQueue = useCallback(async () => {
+    const fetchFullQueueData = useCallback(async () => {
         if (queueIds.length === 0) {
-            setIsLoadingQueue(false);
+            setIsLoading(false);
             return;
         }
-        setIsLoadingQueue(true);
+        setIsLoading(true);
         try {
+            // Fetch all tasks in the queue
             const tasksData: Task[] = [];
-            const BATCH_SIZE = 30; // Firestore 'in' query limit
-
+            const BATCH_SIZE = 30;
             for (let i = 0; i < queueIds.length; i += BATCH_SIZE) {
                 const batchIds = queueIds.slice(i, i + BATCH_SIZE);
                 if (batchIds.length > 0) {
                     const q = query(collection(db, "tasks"), where('__name__', 'in', batchIds));
                     const snapshot = await getDocs(q);
-                    const batchTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task));
-                    tasksData.push(...batchTasks);
+                    tasksData.push(...snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
                 }
             }
-            
             const orderedTasks = queueIds.map(id => tasksData.find(t => t.id === id)).filter(Boolean) as Task[];
             setTaskQueue(orderedTasks);
 
+            // Fetch all associated leads
+            const leadIdsToFetch = [...new Set(orderedTasks.map(t => t.leadId).filter(Boolean))];
+            const leadsData: Record<string, Lead> = {};
+            for (let i = 0; i < leadIdsToFetch.length; i += BATCH_SIZE) {
+                const batchIds = leadIdsToFetch.slice(i, i + BATCH_SIZE);
+                if (batchIds.length > 0) {
+                    const q = query(collection(db, "leads"), where('__name__', 'in', batchIds));
+                    const snapshot = await getDocs(q);
+                    snapshot.forEach(doc => {
+                        leadsData[doc.id] = { id: doc.id, ...doc.data() } as Lead;
+                    });
+                }
+            }
+            setLeadsCache(leadsData);
+
         } catch (error) {
-            console.error("Error fetching task queue:", error);
-            toast({ variant: 'destructive', title: 'Failed to load task queue.' });
+            console.error("Error fetching queue data:", error);
+            toast({ variant: 'destructive', title: 'Failed to load routine data.' });
         } finally {
-            setIsLoadingQueue(false);
+            setIsLoading(false);
         }
     }, [queueIds, toast]);
 
     useEffect(() => {
-        fetchTaskQueue();
+        fetchFullQueueData();
         
         const settingsRef = doc(db, 'settings', 'appConfig');
         const unsubSettings = onSnapshot(settingsRef, (doc) => {
@@ -90,35 +103,12 @@ export default function NewLeadFocusPage() {
         });
 
         return () => unsubSettings();
-    }, [fetchTaskQueue]);
+    }, [fetchFullQueueData]);
 
-
-    useEffect(() => {
-        const fetchLeadForCurrentTask = async () => {
-            if (currentTask && currentTask.leadId && !leadsCache[currentTask.leadId]) {
-                setIsLoadingLead(true);
-                try {
-                    const leadDoc = await getDoc(doc(db, 'leads', currentTask.leadId));
-                    if (leadDoc.exists()) {
-                        setLeadsCache(prev => ({ ...prev, [currentTask.leadId!]: { id: leadDoc.id, ...leadDoc.data() } as Lead }));
-                    } else {
-                        toast({ variant: 'destructive', title: 'Contact not found for this task.' });
-                    }
-                } catch (error) {
-                    toast({ variant: 'destructive', title: 'Failed to fetch contact data.' });
-                } finally {
-                    setIsLoadingLead(false);
-                }
-            }
-        };
-        fetchLeadForCurrentTask();
-    }, [currentTask, leadsCache, toast]);
 
     const navigateToTask = (index: number) => {
         if (index >= 0 && index < queueIds.length) {
             setCurrentIndex(index);
-            const nextTaskId = queueIds[index];
-            router.push(`/routines/new/${nextTaskId}?queue=${queueIds.join(',')}`, { scroll: false });
         }
     }
 
@@ -135,7 +125,7 @@ export default function NewLeadFocusPage() {
         setLeadsCache(prev => ({...prev, [updatedLead.id]: updatedLead}));
     }
     
-    if (isLoadingQueue || currentIndex === -1) {
+    if (isLoading || currentIndex === -1) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
@@ -255,4 +245,3 @@ export default function NewLeadFocusPage() {
         </div>
     );
 }
-

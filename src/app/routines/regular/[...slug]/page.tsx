@@ -110,8 +110,6 @@ export default function RegularFocusPage() {
     const navigateToTask = (index: number) => {
         if (index >= 0 && index < queueIds.length) {
             setCurrentIndex(index);
-            const nextTaskId = queueIds[index];
-            router.push(`/routines/regular/${nextTaskId}?queue=${queueIds.join(',')}`, { scroll: false });
         }
     }
 
