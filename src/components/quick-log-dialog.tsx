@@ -4,7 +4,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { collection, query, getDocs, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { produce } from 'immer';
-import algoliasearch from 'algoliasearch/lite';
 import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, ChevronsUpDown, CheckIcon, NotebookPen, User, Search } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -25,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { DateTimePicker } from '@/components/date-time-picker';
 import { ScrollArea } from './ui/scroll-area';
+import { searchLeadsAction } from '@/app/actions';
 
 type LogStep = "contact" | "log";
 type QuickLogStep = 'initial' | 'withdrawn';
@@ -40,12 +40,6 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial
 ];
 const infoLogOptions = ["Sent brochure", "Quoted", "Shared schedule"];
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
-
-const searchClient = algoliasearch(
-  process.env.NEXT_PUBLIC_ALGOLIA_APP_ID!,
-  process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY!
-);
-const leadsIndex = searchClient.initIndex("leads");
 
 export function QuickLogDialog() {
     const { isOpen, closeQuickLog } = useQuickLog();
@@ -96,8 +90,12 @@ export function QuickLogDialog() {
             if (debouncedSearchTerm) {
                 setIsSearching(true);
                 try {
-                    const { hits } = await leadsIndex.search<Lead>(debouncedSearchTerm);
-                    setSearchResults(hits as Lead[]);
+                    const { success, leads, error } = await searchLeadsAction(debouncedSearchTerm);
+                    if (success) {
+                        setSearchResults(leads as Lead[]);
+                    } else {
+                        throw new Error(error);
+                    }
                 } catch (error) {
                     toast({ variant: 'destructive', title: 'Search failed' });
                 } finally {
@@ -133,19 +131,9 @@ export function QuickLogDialog() {
         setTimeout(resetState, 300);
     };
 
-    const handleContactSelect = async (leadInfo: Lead) => {
-        setIsSearching(true);
-        try {
-            const leadDoc = await getDoc(doc(db, 'leads', leadInfo.objectID));
-            if(leadDoc.exists()) {
-                setSelectedLead({ id: leadDoc.id, ...leadDoc.data() } as Lead);
-                setStep('log');
-            }
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Failed to load contact details.'});
-        } finally {
-            setIsSearching(false);
-        }
+    const handleContactSelect = (leadInfo: Lead) => {
+        setSelectedLead(leadInfo);
+        setStep('log');
     };
     
     const handleLogInteraction = async (interactionData: Partial<Interaction>, logType: string) => {
@@ -252,9 +240,9 @@ export function QuickLogDialog() {
                              <div className="space-y-2 pr-4">
                                 {searchResults.length > 0 ? (
                                     searchResults.map(hit => (
-                                        <button key={hit.objectID} onClick={() => handleContactSelect(hit)} className="w-full text-left p-3 rounded-md border bg-background hover:bg-muted">
+                                        <button key={hit.id} onClick={() => handleContactSelect(hit)} className="w-full text-left p-3 rounded-md border bg-background hover:bg-muted">
                                             <p className="font-semibold">{hit.name}</p>
-                                            <p className="text-sm text-muted-foreground">{(hit.courses || []).join(', ') || 'No course specified'}</p>
+                                            <p className="text-sm text-muted-foreground">{(hit.commitmentSnapshot?.deals?.[0]?.courses || []).join(', ') || 'No course specified'}</p>
                                         </button>
                                     ))
                                 ) : (

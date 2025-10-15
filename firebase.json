@@ -17,7 +17,6 @@
   "projects": {
     "default": "leadtrack-solo"
   },
-  "environment": {
-    "algolia_app_id": "LD2R9KI9AJ"
-  }
+  "environment": {}
 }
+

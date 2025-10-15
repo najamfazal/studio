@@ -203,8 +203,8 @@ export default function NewLeadFocusPage() {
                         ) : currentTask ? ( // Task exists but maybe no lead
                             <div className="flex flex-col h-full items-center justify-center text-center">
                                 <ListTodo className="h-12 w-12 text-muted-foreground mb-4"/>
-                                <h2 className="text-xl font-semibold">No Contact Associated</h2>
-                                <p className="text-muted-foreground mt-1">This task is not linked to a contact.</p>
+                                <h2 className="text-xl font-semibold">{currentTask.description}</h2>
+                                <p className="text-muted-foreground mt-1">This is a personal task not linked to a contact.</p>
                             </div>
                         ) : (
                              <div className="flex h-full items-center justify-center">

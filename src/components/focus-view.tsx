@@ -26,6 +26,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DealDialog } from './deal-dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from './ui/alert-dialog';
 import { WhatsAppIcon } from './icons';
+import { LeadDialog } from './lead-dialog';
+import { LeadFormValues } from '@/lib/schemas';
 
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
@@ -110,6 +112,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
     const [isLoggingInfo, setIsLoggingInfo] = useState(false);
 
+    // Edit Lead state
+    const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
     const sortedInteractions = useMemo(() => {
         return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
     }, [currentLead]);
@@ -172,6 +178,38 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         setDealToDelete(null);
     };
 
+    const handleDialogSave = async (values: LeadFormValues) => {
+        if (!currentLead) return;
+        setIsSaving(true);
+        const originalLead = { ...currentLead };
+        const updatedLeadData: Partial<Lead> = {
+            name: values.name,
+            email: values.email,
+            phones: values.phones,
+            relationship: values.relationship,
+            status: values.status as LeadStatus,
+            source: values.source,
+            assignedAt: values.assignedAt,
+        };
+
+        const updatedLead = { ...currentLead, ...updatedLeadData };
+
+        setCurrentLead(updatedLead);
+        onLeadUpdate(updatedLead);
+        
+        try {
+            await updateDoc(doc(db, 'leads', lead.id), updatedLeadData);
+            toast({ title: 'Contact Updated' });
+            setIsLeadDialogOpen(false);
+        } catch (error) {
+            console.error("Error saving contact from dialog:", error);
+            toast({ variant: 'destructive', title: 'Update failed' });
+            setCurrentLead(originalLead);
+            onLeadUpdate(originalLead);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleLogInteraction = async (interactionData: Partial<Interaction>) => {
         if (!currentLead) return;
@@ -299,6 +337,9 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     <h2 className="text-xl font-bold">{currentLead.name}</h2>
                     <Badge variant="secondary" className="text-xs">{currentLead.relationship}</Badge>
                     <Badge className="text-xs">{currentLead.status}</Badge>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsLeadDialogOpen(true)}>
+                        <Pencil className="h-4 w-4" />
+                    </Button>
                 </div>
                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
                     {currentLead.email && <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground"><Mail className="h-3 w-3" /> {currentLead.email}</a>}
@@ -556,6 +597,17 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 />
             )}
 
+            {isLeadDialogOpen && appSettings && (
+                <LeadDialog
+                    isOpen={isLeadDialogOpen}
+                    setIsOpen={setIsLeadDialogOpen}
+                    leadToEdit={currentLead}
+                    onSave={handleDialogSave}
+                    isSaving={isSaving}
+                    relationshipTypes={appSettings.relationshipTypes}
+                />
+            )}
+
             <AlertDialog open={!!dealToDelete} onOpenChange={(open) => !open && setDealToDelete(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -571,5 +623,3 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
-
-    
