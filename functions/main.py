@@ -165,10 +165,16 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
 
             for deal_num in sorted(deal_data.keys()):
                 data = deal_data[deal_num]
+                price_str = str(data.get('price', '0')).strip()
+                try:
+                    price = float(price_str) if price_str else 0.0
+                except ValueError:
+                    price = 0.0
+
                 deal = {
                     "id": f"deal_{deal_num}_{int(datetime.now().timestamp())}",
                     "courses": [c.strip() for c in str(data.get('courses', '')).split(',')] if data.get('courses') else [],
-                    "price": float(data.get('price', 0)),
+                    "price": price,
                     "mode": str(data.get('mode', 'Online')).strip(),
                     "format": str(data.get('format', '1-1')).strip(),
                 }
