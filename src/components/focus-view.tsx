@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -283,6 +283,11 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         setIsLoggingOutcome(false);
     };
     
+    const handleCopyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        toast({ title: "Copied to clipboard", description: text });
+    };
+
     if (!currentLead) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>
     }
@@ -300,9 +305,12 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     {(currentLead.phones || []).map((phone, index) => {
                         const cleanNumber = phone.number.replace(/\D/g, '');
                         return (
-                            <div key={index} className="flex items-center gap-1.5 hover:text-foreground">
+                            <div key={index} className="flex items-center gap-1.5 group">
                                 <Phone className="h-3 w-3" />
-                                <a href={`tel:${cleanNumber}`}>{phone.number}</a>
+                                <a href={`tel:${cleanNumber}`} className="group-hover:underline">{phone.number}</a>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyToClipboard(phone.number)}>
+                                  <Copy className="h-3 w-3" />
+                                </Button>
                                 {(phone.type === 'chat' || phone.type === 'both') && 
                                     <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon className="h-3 w-3" /></a>}
                             </div>
@@ -421,7 +429,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                             )}
                     </Card>
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between p-2">
+                        <CardHeader className="flex-row items-center justify-between p-2">
                             <CardTitle className="text-sm font-medium">Log Feedback</CardTitle>
                             <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost" className="h-7 w-7">
                             {isLoggingFeedback ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
@@ -453,7 +461,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     </Card>
 
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between p-2">
+                        <CardHeader className="flex-row items-center justify-between p-2">
                             <CardTitle className="text-sm font-medium">Log Outcome</CardTitle>
                             <Button onClick={handleLogOutcome} disabled={isLoggingOutcome || !selectedOutcome} size="icon" variant="ghost" className="h-7 w-7">
                                 {isLoggingOutcome ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}

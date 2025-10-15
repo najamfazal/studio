@@ -12,6 +12,7 @@ import {
   Book,
   CheckSquare,
   Square,
+  Copy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import {
 import type { Lead } from "@/lib/types";
 import { cn } from '@/lib/utils';
 import { Checkbox } from './ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
 
 interface ContactCardProps {
   lead: Lead;
@@ -50,6 +52,7 @@ export function ContactCard({
   onToggleSelect,
 }: ContactCardProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const contactName = lead.name || "";
   const truncatedName = contactName.length > 12 ? `${contactName.substring(0, 12)}...` : contactName;
   const email = lead.email || "";
@@ -57,6 +60,12 @@ export function ContactCard({
 
   const stopPropagation = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
+  };
+
+  const handleCopyToClipboard = (text: string, e: React.MouseEvent) => {
+    stopPropagation(e);
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard", description: text });
   };
   
   const handleCardClick = (e: React.MouseEvent) => {
@@ -147,6 +156,10 @@ export function ContactCard({
                     <a href={`tel:${phone.number}`} className="truncate text-xs hover:underline" onClick={stopPropagation}>
                       {phone.number}
                     </a>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => handleCopyToClipboard(phone.number, e)}>
+                        <Copy className="h-3 w-3" />
+                        <span className="sr-only">Copy phone number</span>
+                    </Button>
                 </div>
             ))}
         </div>

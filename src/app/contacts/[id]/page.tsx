@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion, startAfter, limit } from 'firebase/firestore';
 import { useParams, useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon, FileUp, CircleUser, Pencil } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon, FileUp, CircleUser, Pencil, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -785,6 +785,11 @@ export default function ContactDetailPage() {
     return distance.replace(/ seconds?/, 's').replace(/ minutes?/, 'm').replace(/ hours?/, 'h').replace(/ days?/, 'd').replace(/ months?/, 'mo').replace(/ years?/, 'y');
   };
 
+  const handleCopyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard", description: text });
+  };
+
   const isLearner = useMemo(() => lead?.relationship?.toLowerCase() === 'learner', [lead]);
 
   if (isLoading || !lead || !appSettings) {
@@ -847,9 +852,9 @@ export default function ContactDetailPage() {
                       {(lead.phones || []).map((phone, index) => {
                             const cleanNumber = phone.number.replace(/\D/g, '');
                             return (
-                            <div key={index} className="flex items-center gap-3">
+                            <div key={index} className="flex items-center gap-3 group">
                                 {(phone.type === 'calling' || phone.type === 'both') ? (
-                                    <a href={`tel:${cleanNumber}`} className="flex items-center gap-2 group">
+                                    <a href={`tel:${cleanNumber}`} className="flex items-center gap-2">
                                         <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                         <span className="text-sm group-hover:underline">{phone.number}</span>
                                     </a>
@@ -859,6 +864,9 @@ export default function ContactDetailPage() {
                                         <span className="text-sm">{phone.number}</span>
                                     </div>
                                 )}
+                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyToClipboard(phone.number)}>
+                                  <Copy className="h-3 w-3" />
+                                </Button>
                                 {(phone.type === 'chat' || phone.type === 'both') && 
                                     <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-700">
                                         <WhatsAppIcon className="h-4 w-4" />
