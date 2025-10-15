@@ -4,7 +4,6 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { cva, type VariantProps } from "class-variance-authority"
 import { Home, ListChecks, Brain, UserCheck, PanelLeft, Menu, Settings, CalendarDays, Users, BarChart, NotebookPen, Zap, LogOut } from 'lucide-react'
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '@/lib/firebase';
@@ -39,7 +38,6 @@ const secondarySidebarItems = [
 type SidebarContext = {
   open: boolean
   setOpen: (open: boolean) => void
-  isMobile: boolean
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -53,10 +51,9 @@ export function useSidebar() {
 }
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-    const isMobile = useIsMobile()
     const [open, setOpen] = React.useState(false)
 
-    const contextValue = React.useMemo<SidebarContext>(() => ({ open, setOpen, isMobile }), [open, setOpen, isMobile]);
+    const contextValue = React.useMemo<SidebarContext>(() => ({ open, setOpen }), [open, setOpen]);
 
     return (
         <SidebarContext.Provider value={contextValue}>
@@ -69,13 +66,8 @@ const Sidebar = React.forwardRef<
     HTMLDivElement,
     React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
-    const { isMobile } = useSidebar();
     const { openQuickLog } = useQuickLog();
     const [user] = useAuthState(auth);
-
-    if (isMobile) {
-        return <MobileSidebar />
-    }
 
     if (!user) return null;
 
@@ -262,17 +254,20 @@ const SidebarTrigger = React.forwardRef<
   if (!user) return null;
 
   return (
-    <Button
-      ref={ref}
-      variant="ghost"
-      size="icon"
-      className={cn("sm:hidden", className)}
-      onClick={() => setOpen(true)}
-      {...props}
-    >
-      <Menu className="h-5 w-5"/>
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    <>
+      <Button
+        ref={ref}
+        variant="ghost"
+        size="icon"
+        className={cn("sm:hidden", className)}
+        onClick={() => setOpen(true)}
+        {...props}
+      >
+        <Menu className="h-5 w-5"/>
+        <span className="sr-only">Toggle Sidebar</span>
+      </Button>
+      <MobileSidebar />
+    </>
   )
 })
 SidebarTrigger.displayName = "SidebarTrigger"
