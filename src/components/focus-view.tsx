@@ -29,6 +29,7 @@ import { WhatsAppIcon } from './icons';
 import { LeadDialog } from './lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
 import { Input } from './ui/input';
+import { Calendar } from './ui/calendar';
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
     { value: "Followup", label: "Followup", multistep: null },
@@ -44,7 +45,7 @@ type QuickLogStep = 'initial' | 'withdrawn';
 type FeedbackCategory = keyof InteractionFeedback;
 
 interface FocusViewProps {
-    lead: Lead;
+    lead: Lead | null;
     task?: Task;
     appSettings: AppSettings | null;
     onInteractionLogged: () => void;
@@ -102,8 +103,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
     const [dateTimePickerValue, setDateTimePickerValue] = useState<Date | undefined>(undefined);
     const [dateTimePickerCallback, setDateTimePickerCallback] = useState<(date: Date) => void>(() => {});
+    
     const [isLoggingInfo, setIsLoggingInfo] = useState(false);
-
     const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
 
     const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
@@ -119,12 +120,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     }, [lead]);
     
     useEffect(() => {
-       if (task) setCurrentTask(task);
+        if (task) {
+            setCurrentTask(task);
+        }
     }, [task]);
 
-
     const sortedInteractions = useMemo(() => {
-        return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
+        if (!currentLead) return [];
+        return (currentLead.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
     }, [currentLead]);
     
     const handleUpdate = async (field: string, value: any, isDeal: boolean = false) => {
@@ -158,17 +161,23 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         }
 
         setCurrentLead(updatedLead);
-        onLeadUpdate(updatedLead);
+        if (onLeadUpdate) {
+            onLeadUpdate(updatedLead);
+        }
         
         try {
-          const leadRef = doc(db, 'leads', lead.id);
+          const leadRef = doc(db, 'leads', currentLead.id);
           await updateDoc(leadRef, updatePayload);
           toast({ title: isDeal ? 'Deal Saved' : 'Contact Updated' });
         } catch (error) {
           console.error('Error updating contact:', error);
           toast({ variant: 'destructive', title: 'Update failed' });
-          setCurrentLead(lead);
-          onLeadUpdate(lead);
+          if (lead) {
+            setCurrentLead(lead);
+             if (onLeadUpdate) {
+                onLeadUpdate(lead);
+            }
+          }
         }
     };
 
@@ -182,12 +191,16 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             await updateDoc(taskRef, { [field]: value });
             toast({ title: 'Task Updated' });
             if (field === 'completed' && value === true) {
-                onInteractionLogged(); // This effectively marks it done in the parent queue UI
+                if (onInteractionLogged) {
+                    onInteractionLogged(); // This effectively marks it done in the parent queue UI
+                }
             }
         } catch (error) {
             console.error("Error updating task:", error);
             toast({ variant: 'destructive', title: 'Failed to update task' });
-            setCurrentTask(task); // revert
+            if (task) {
+                setCurrentTask(task); // revert
+            }
         }
     };
     
@@ -221,17 +234,21 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         const updatedLead = { ...currentLead, ...updatedLeadData };
 
         setCurrentLead(updatedLead);
-        onLeadUpdate(updatedLead);
+        if (onLeadUpdate) {
+            onLeadUpdate(updatedLead);
+        }
         
         try {
-            await updateDoc(doc(db, 'leads', lead.id), updatedLeadData);
+            await updateDoc(doc(db, 'leads', currentLead.id), updatedLeadData);
             toast({ title: 'Contact Updated' });
             setIsLeadDialogOpen(false);
         } catch (error) {
             console.error("Error saving contact from dialog:", error);
             toast({ variant: 'destructive', title: 'Update failed' });
             setCurrentLead(originalLead);
-            onLeadUpdate(originalLead);
+             if (onLeadUpdate) {
+                onLeadUpdate(originalLead);
+            }
         } finally {
             setIsSaving(false);
         }
@@ -251,17 +268,25 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
           draft.interactions = [newInteraction, ...(draft.interactions || [])];
         });
         setCurrentLead(optimisticLead);
-        onLeadUpdate(optimisticLead);
+        if (onLeadUpdate) {
+            onLeadUpdate(optimisticLead);
+        }
     
         try {
           await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
           toast({ title: 'Interaction Logged' });
-          onInteractionLogged();
+          if (onInteractionLogged) {
+            onInteractionLogged();
+          }
         } catch (error) {
           console.error("Error logging interaction:", error);
           toast({ variant: "destructive", title: "Failed to log interaction." });
-          setCurrentLead(lead);
-          onLeadUpdate(lead);
+          if(lead) {
+            setCurrentLead(lead);
+            if (onLeadUpdate) {
+                onLeadUpdate(lead);
+            }
+          }
         }
     }
 
@@ -393,6 +418,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     }
     
     if (currentTask && !currentLead) {
+        // This is a personal/admin task not linked to a contact
         return (
              <div className="space-y-4 max-w-md mx-auto">
                 <Card>
@@ -409,7 +435,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         />
                         {currentTask?.dueDate && <p className="text-sm text-muted-foreground">Due: {format(toDate(currentTask.dueDate)!, 'PP')}</p>}
                     </CardContent>
-                    <CardFooter className="grid grid-cols-2 gap-2">
+                     <CardFooter className="grid grid-cols-2 gap-2">
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button variant="outline">Defer</Button>
