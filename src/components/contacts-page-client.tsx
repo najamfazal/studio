@@ -16,8 +16,9 @@ import {
   where,
   Timestamp,
 } from "firebase/firestore";
-import { Plus, Users, Loader2, Filter, Upload, Search, CalendarIcon, X, Layers, Trash2 } from "lucide-react";
+import { Plus, Users, Loader2, Filter, Upload, Search, CalendarIcon, X, Layers, Trash2, Focus } from "lucide-react";
 import { startOfDay, endOfDay } from "date-fns";
+import { useRouter } from "next/navigation";
 
 import { app, db } from "@/lib/firebase";
 import type { AppSettings, Lead, LeadStatus } from "@/lib/types";
@@ -78,6 +79,7 @@ interface ContactsPageClientProps {
 
 
 export function ContactsPageClient({ initialLeads, initialAppSettings, initialHasMore }: ContactsPageClientProps) {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -392,6 +394,13 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
     }
   };
 
+  const handleFocusClick = () => {
+    if (displayedLeads.length > 0) {
+      const leadIds = displayedLeads.map(l => l.id).join(',');
+      router.push(`/contacts/focus/${leadIds}`);
+    }
+  }
+
 
   if (isLoading && leads.length === 0 && !debouncedSearchTerm) {
     return (
@@ -438,6 +447,12 @@ export function ContactsPageClient({ initialLeads, initialAppSettings, initialHa
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
               </div>
               <div className="flex items-center gap-2">
+                  {displayedLeads.length > 0 && (
+                    <Button variant="outline" size="icon" className="w-10" onClick={handleFocusClick}>
+                        <Focus className="h-4 w-4" />
+                        <span className="sr-only">Focus Mode</span>
+                    </Button>
+                  )}
                   <Popover>
                       <PopoverTrigger asChild>
                           <Button variant="outline" size="icon" className={cn("w-10 relative", createdDateFilter && "border-primary text-primary")}>
