@@ -112,12 +112,17 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [isTraitPopoverOpen, setIsTraitPopoverOpen] = useState(false);
 
     useEffect(() => {
-        if (lead) setCurrentLead(lead);
+        if (lead) {
+            setCurrentLead(lead);
+        }
     }, [lead]);
     
     useEffect(() => {
-        if (task) setCurrentTask(task);
+        if (task) {
+            setCurrentTask(task);
+        }
     }, [task]);
+
 
     const sortedInteractions = useMemo(() => {
         return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
@@ -384,10 +389,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         return appSettings.commonTraits.filter(trait => !currentLead.traits.includes(trait));
     }, [appSettings?.commonTraits, currentLead?.traits]);
 
-    if (!currentLead || !appSettings) {
+    if (!appSettings) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
-    
+
     if (currentTask?.nature === 'Procedural') {
         return (
             <div className="space-y-4">
@@ -422,7 +427,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             </div>
         );
     }
-
+    
     return (
         <div className="space-y-3">
              <div>
@@ -558,7 +563,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                                         ))}
                                         </CommandGroup>
                                     </CommandList>
-                                    </PopoverContent>
+                                    </Command>
+                                </PopoverContent>
                                 </Popover>
                             </CardHeader>
                             <CardContent className="p-2 pt-0">
@@ -767,5 +773,3 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
-
-    
