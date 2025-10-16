@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -83,9 +82,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const { toast } = useToast();
     
     const [currentLead, setCurrentLead] = useState(lead);
+     const [currentTask, setCurrentTask] = useState(task);
+
     useEffect(() => {
         if (lead) setCurrentLead(lead);
     }, [lead]);
+     useEffect(() => {
+        if (task) setCurrentTask(task);
+    }, [task]);
 
     // Deal management
     const [isDealModalOpen, setIsDealModalOpen] = useState(false);
@@ -166,6 +170,25 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
           toast({ variant: 'destructive', title: 'Update failed' });
           setCurrentLead(lead);
           onLeadUpdate(lead);
+        }
+    };
+
+    const handleTaskUpdate = async (field: keyof Task, value: any) => {
+        if (!currentTask) return;
+        const updatedTask = { ...currentTask, [field]: value };
+        setCurrentTask(updatedTask);
+
+        try {
+            const taskRef = doc(db, 'tasks', currentTask.id);
+            await updateDoc(taskRef, { [field]: value });
+            toast({ title: 'Task Updated' });
+            if (field === 'completed' && value === true) {
+                onInteractionLogged(); // This effectively marks it done in the parent queue UI
+            }
+        } catch (error) {
+            console.error("Error updating task:", error);
+            toast({ variant: 'destructive', title: 'Failed to update task' });
+            setCurrentTask(task); // revert
         }
     };
     
@@ -368,6 +391,41 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
 
     if (!currentLead) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>
+    }
+
+    if (task?.nature === 'Procedural') {
+        return (
+            <div className="space-y-4">
+                <div>
+                    <h2 className="text-xl font-bold">{currentLead.name}</h2>
+                     <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
+                        {currentLead.email && <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground"><Mail className="h-3 w-3" /> {currentLead.email}</a>}
+                        {(currentLead.phones || []).length > 0 && <a href={`tel:${currentLead.phones[0].number}`} className="flex items-center gap-1.5 hover:text-foreground"><Phone className="h-3 w-3" /> {currentLead.phones[0].number}</a>}
+                    </div>
+                </div>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Administrative Task</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <EditableField
+                            label="Task Description"
+                            value={currentTask?.description || ''}
+                            onSave={async (newDesc) => handleTaskUpdate('description', newDesc)}
+                            type="textarea"
+                        />
+                        {currentTask?.dueDate && <p className="text-sm text-muted-foreground">Due: {format(toDate(currentTask.dueDate)!, 'PP')}</p>}
+                    </CardContent>
+                    <CardFooter>
+                        <Button className="w-full" onClick={() => handleTaskUpdate('completed', true)}>
+                            <Check className="mr-2 h-4 w-4" />
+                            Mark as Complete
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </div>
+        )
     }
 
     return (
@@ -625,8 +683,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         </CardContent>
                     </Card>
                 </TabsContent>
-                
-                 <TabsContent value="history" className="mt-3">
+                <TabsContent value="history" className="mt-3">
                     <Card>
                         <CardHeader className="p-2">
                             <CardTitle className="text-sm font-medium">Log History</CardTitle>
