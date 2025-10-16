@@ -157,6 +157,7 @@ export type AppSettings = {
   withdrawalReasons: string[];
   trainers: string[];
   timeSlots: string[];
+  infoLogOptions: string[];
   feedbackChips: {
     content: string[];
     schedule: string[];

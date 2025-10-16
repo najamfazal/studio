@@ -38,7 +38,6 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial
   { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
   { value: "Enrolled", label: "Enrolled", multistep: null },
 ];
-const infoLogOptions = ["Sent brochure", "Quoted", "Shared schedule"];
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 
 export function QuickLogDialog() {
@@ -272,7 +271,7 @@ export function QuickLogDialog() {
                                 </Button>
                             </CardHeader>
                             <CardContent className="flex flex-wrap gap-2 p-2 pt-0">
-                                {infoLogOptions.map(opt => (
+                                {(appSettings.infoLogOptions || []).map(opt => (
                                     <Badge
                                         key={opt}
                                         variant={selectedInfoLogs.includes(opt) ? 'default' : 'secondary'}

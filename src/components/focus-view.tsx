@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -28,6 +29,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { WhatsAppIcon } from './icons';
 import { LeadDialog } from './lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
+import { Input } from './ui/input';
 
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
@@ -38,8 +40,6 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial
   { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
   { value: "Enrolled", label: "Enrolled", multistep: null },
 ];
-
-const infoLogOptions = ["Sent brochure", "Quoted", "Shared schedule"];
 
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 type QuickLogStep = 'initial' | 'withdrawn';
@@ -115,6 +115,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     // Edit Lead state
     const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Insights and Traits state
+    const [newInsight, setNewInsight] = useState("");
+    const [isTraitPopoverOpen, setIsTraitPopoverOpen] = useState(false);
 
     const sortedInteractions = useMemo(() => {
         return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
@@ -326,6 +330,42 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         toast({ title: "Copied to clipboard", description: text });
     };
 
+    const handleAddChip = (type: 'traits' | 'insights', value: string) => {
+        if (!value || !currentLead) return;
+    
+        const chipValue = value.trim();
+        const currentList = currentLead[type] || [];
+        if (currentList.includes(chipValue)) {
+            toast({ variant: 'destructive', title: 'Item already exists' });
+            return;
+        }
+        
+        const newList = [...currentList, chipValue];
+        handleUpdate(type, newList);
+    
+        if (type === 'insights') {
+          setNewInsight("");
+        }
+      };
+
+    const handleAddMultipleTraits = (traitsToAdd: string[]) => {
+        if (!currentLead) return;
+        const currentTraits = currentLead.traits || [];
+        const newTraits = [...new Set([...currentTraits, ...traitsToAdd])];
+        handleUpdate('traits', newTraits);
+    }
+      
+    const handleRemoveChip = (type: 'traits' | 'insights', value: string) => {
+        if (!currentLead) return;
+        const newList = (currentLead[type] || []).filter(item => item !== value);
+        handleUpdate(type, newList);
+    };
+
+    const availableTraits = useMemo(() => {
+        if (!appSettings?.commonTraits || !currentLead?.traits) return [];
+        return appSettings.commonTraits.filter(trait => !currentLead.traits.includes(trait));
+      }, [appSettings?.commonTraits, currentLead?.traits]);
+
     if (!currentLead) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>
     }
@@ -340,6 +380,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsLeadDialogOpen(true)}>
                         <Pencil className="h-4 w-4" />
                     </Button>
+                </div>
+                 <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
+                    {currentLead.source && <div className="flex items-center gap-1.5"><FileUp className="h-3 w-3" /><Badge variant="outline" className="text-xs">{currentLead.source}</Badge></div>}
+                    {currentLead.assignedAt && <div className="flex items-center gap-1.5"><CircleUser className="h-3 w-3" /> Assigned on {format(parseISO(currentLead.assignedAt), "MMM d, yyyy")}</div>}
                 </div>
                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
                     {currentLead.email && <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground"><Mail className="h-3 w-3" /> {currentLead.email}</a>}
@@ -357,10 +401,6 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                             </div>
                         )
                     })}
-                </div>
-                 <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
-                    {currentLead.source && <div className="flex items-center gap-1.5"><FileUp className="h-3 w-3" /><Badge variant="outline" className="text-xs">{currentLead.source}</Badge></div>}
-                    {currentLead.assignedAt && <div className="flex items-center gap-1.5"><CircleUser className="h-3 w-3" /> Assigned on {format(parseISO(currentLead.assignedAt), "MMM d, yyyy")}</div>}
                 </div>
             </div>
             
@@ -425,6 +465,56 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                             />
                          </CardContent>
                     </Card>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Card>
+                            <CardHeader className="p-2"><CardTitle className="text-xs font-semibold text-muted-foreground">Insights</CardTitle></CardHeader>
+                            <CardContent className="p-2 pt-0 space-y-2">
+                                <div className="flex flex-wrap gap-1">
+                                    {(currentLead.insights || []).map(insight => <Badge key={insight} variant="outline" className="text-xs">{insight} <button onClick={() => handleRemoveChip('insights', insight)} className="ml-1.5 p-0.5 rounded-full hover:bg-destructive/20"><X className="h-2.5 w-2.5 text-destructive"/></button></Badge>)}
+                                </div>
+                                <div className="flex gap-1">
+                                    <Input value={newInsight} onChange={e => setNewInsight(e.target.value)} placeholder="Add an insight..." className="h-7 text-xs" onKeyDown={(e) => e.key === 'Enter' && handleAddChip('insights', newInsight)} />
+                                    <Button size="icon" className="h-7 w-7" onClick={() => handleAddChip('insights', newInsight)}><Plus/></Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="p-2 flex-row items-center justify-between">
+                                <CardTitle className="text-xs font-semibold text-muted-foreground">Traits</CardTitle>
+                                <Popover open={isTraitPopoverOpen} onOpenChange={setIsTraitPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6"><Plus className="h-3.5 w-3.5" /></Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-56 p-0">
+                                    <Command>
+                                    <CommandInput placeholder="Select traits..." className="h-9" />
+                                    <CommandList>
+                                        <CommandEmpty>No traits found.</CommandEmpty>
+                                        <CommandGroup>
+                                        {availableTraits.map((trait) => (
+                                            <CommandItem
+                                                key={trait}
+                                                value={trait}
+                                                onSelect={(currentValue) => {
+                                                    handleAddMultipleTraits([currentValue]);
+                                                    setIsTraitPopoverOpen(false);
+                                                }}
+                                            >
+                                                {trait}
+                                            </CommandItem>
+                                        ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                    </PopoverContent>
+                                </Popover>
+                            </CardHeader>
+                            <CardContent className="p-2 pt-0">
+                                <div className="flex flex-wrap gap-1">
+                                    {(currentLead.traits || []).map(trait => <Badge key={trait} variant="secondary" className="text-xs">{trait} <button onClick={() => handleRemoveChip('traits', trait)} className="ml-1.5 p-0.5 rounded-full hover:bg-destructive/20"><X className="h-2.5 w-2.5 text-destructive"/></button></Badge>)}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
                 
                 <TabsContent value="log" className="mt-3 space-y-3">
@@ -436,7 +526,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                             </Button>
                         </CardHeader>
                         <CardContent className="flex flex-wrap gap-2 p-2 pt-0">
-                            {infoLogOptions.map(opt => (
+                            {(appSettings.infoLogOptions || []).map(opt => (
                                 <Badge
                                     key={opt}
                                     variant={selectedInfoLogs.includes(opt) ? 'default' : 'secondary'}

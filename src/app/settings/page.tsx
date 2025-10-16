@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { reindexLeadsAction, reindexLeadsToAlgoliaAction } from '@/app/actions';
+import { reindexLeadsAction } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,7 @@ import { errorEmitter } from '@/lib/error-emitter';
 import { FirestorePermissionError } from '@/lib/errors';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
-type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots';
+type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions';
 
 const colorPalettes: { name: string; colors: ThemeSettings }[] = [
     { name: 'Default', colors: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' } },
@@ -46,11 +46,11 @@ export default function SettingsPage() {
     const [newRelationshipType, setNewRelationshipType] = useState("");
     const [newTrainer, setNewTrainer] = useState("");
     const [newTimeSlot, setNewTimeSlot] = useState("");
+    const [newInfoLogOption, setNewInfoLogOption] = useState("");
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
 
     const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
     const [isReindexing, setIsReindexing] = useState(false);
-    const [isReindexingAlgolia, setIsReindexingAlgolia] = useState(false);
 
 
     const fetchSettings = useCallback(async () => {
@@ -68,6 +68,7 @@ export default function SettingsPage() {
                     relationshipTypes: data.relationshipTypes || ['Lead', 'Learner'],
                     trainers: data.trainers || [],
                     timeSlots: data.timeSlots || [],
+                    infoLogOptions: data.infoLogOptions || ["Sent brochure", "Quoted", "Shared schedule"],
                     feedbackChips: data.feedbackChips || { content: [], schedule: [], price: [] },
                     theme: data.theme || defaultTheme,
                     id: settingsDoc.id,
@@ -81,6 +82,7 @@ export default function SettingsPage() {
                     relationshipTypes: ["Lead", "Learner", "Archived", "Graduated"],
                     trainers: ["Jhonny", "Marie", "Faisal"],
                     timeSlots: ["09:00 A - 11:00 A", "11:00 A - 01:00 P"],
+                    infoLogOptions: ["Sent brochure", "Quoted", "Shared schedule"],
                     feedbackChips: {
                         content: ["Not relevant", "Too complex"],
                         schedule: ["Wrong time", "Too long"],
@@ -188,7 +190,7 @@ export default function SettingsPage() {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' = 'courseNames';
+        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' | 'infoLogOptions' = 'courseNames';
 
         if (field === 'courseNames') {
             if (!newCourseName) return;
@@ -220,6 +222,11 @@ export default function SettingsPage() {
             valueToAdd = newTimeSlot;
             fieldKey = 'timeSlots';
             setNewTimeSlot("");
+        } else if (field === 'infoLogOptions') {
+            if (!newInfoLogOption) return;
+            valueToAdd = newInfoLogOption;
+            fieldKey = 'infoLogOptions';
+            setNewInfoLogOption("");
         }
         else if (field.startsWith('feedbackChips.')) {
             const category = newFeedbackChip.category;
@@ -303,34 +310,6 @@ export default function SettingsPage() {
             setIsReindexing(false);
         }
     };
-    
-    const handleReindexAlgolia = async () => {
-        setIsReindexingAlgolia(true);
-        toast({ title: 'Algolia re-indexing started...', description: 'This may take a few moments.' });
-        try {
-            const result = await reindexLeadsToAlgoliaAction();
-            if (result.success) {
-                toast({ title: 'Algolia Re-indexing Complete!', description: `${result.processed} contacts synced to Algolia.` });
-            } else {
-                if (result.isPermissionError) {
-                    const permissionError = new FirestorePermissionError({
-                        path: '/leads',
-                        operation: 'list',
-                    });
-                    errorEmitter.emit('permission-error', permissionError);
-                }
-                throw new Error(result.error);
-            }
-        } catch (error) {
-            const msg = error instanceof Error ? error.message : "An unknown error occurred.";
-            if (!msg.includes("Permission")) {
-                toast({ variant: 'destructive', title: 'Algolia Re-indexing Failed', description: msg });
-            }
-        } finally {
-            setIsReindexingAlgolia(false);
-        }
-    };
-
 
     const renderChipList = (
         field: AppSettingsField | `feedbackChips.${FeedbackCategory}`,
@@ -464,16 +443,6 @@ export default function SettingsPage() {
                                     Re-index Contacts
                                 </Button>
                            </div>
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div>
-                                    <h3 className="font-semibold">Algolia Search Sync</h3>
-                                    <p className="text-sm text-muted-foreground">Sync all existing contacts to your Algolia index. Run this once after setup.</p>
-                                </div>
-                                <Button onClick={handleReindexAlgolia} disabled={isReindexingAlgolia}>
-                                    {isReindexingAlgolia && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Sync to Algolia
-                                </Button>
-                           </div>
                         </CardContent>
                     </Card>
                     <Card>
@@ -541,6 +510,24 @@ export default function SettingsPage() {
                                 <div className="flex gap-2 pt-2">
                                     <Input value={newTimeSlot} onChange={e => setNewTimeSlot(e.target.value)} placeholder="Add new time slot..." onKeyDown={e => e.key === 'Enter' && handleAddItem('timeSlots')} />
                                     <Button onClick={() => handleAddItem('timeSlots')} disabled={isSaving || !newTimeSlot}>
+                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Log Info Options</CardTitle>
+                            <CardDescription>Manage the chips for the "Log Info" section.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="space-y-2">
+                                {renderChipList('infoLogOptions', settings.infoLogOptions || [])}
+                                <div className="flex gap-2 pt-2">
+                                    <Input value={newInfoLogOption} onChange={e => setNewInfoLogOption(e.target.value)} placeholder="Add new info log..." onKeyDown={e => e.key === 'Enter' && handleAddItem('infoLogOptions')} />
+                                    <Button onClick={() => handleAddItem('infoLogOptions')} disabled={isSaving || !newInfoLogOption}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>
