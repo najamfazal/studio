@@ -593,7 +593,6 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                             )}
                         </CardContent>
                     </Card>
-
                     <Card>
                         <CardHeader className="flex-row items-center justify-between p-2">
                             <CardTitle className="text-sm font-medium">Log Outcome</CardTitle>
@@ -604,7 +603,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         <CardContent className="space-y-2 p-2 pt-0">
                             <div className="flex items-center justify-center gap-2">
                                 {(['Info', 'Later', 'Event Scheduled'] as OutcomeType[]).map(outcome => (
-                                    <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} size="xs" onClick={() => setSelectedOutcome(o => o === outcome ? null : outcome)}>
+                                    <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} size="xs" onClick={() => setSelectedOutcome(o => o === outcome ? null : o)}>
                                         {outcome === 'Info' && <Info className="mr-1 h-3 w-3"/>}
                                         {outcome === 'Later' && <CalendarClock className="mr-1 h-3 w-3"/>}
                                         {outcome === 'Event Scheduled' && <CalendarPlus className="mr-1 h-3 w-3"/>}
