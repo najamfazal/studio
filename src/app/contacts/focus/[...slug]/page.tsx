@@ -27,6 +27,7 @@ export default function ContactsFocusPage() {
     const slug = params.slug as string[];
     const queueIds = useMemo(() => {
         if (slug && slug.length > 0) {
+            // The slug is an array like ['id1,id2,id3'], so we access the first element and split it.
             return slug[0].split(',');
         }
         return [];
