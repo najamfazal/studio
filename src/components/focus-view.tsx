@@ -30,7 +30,6 @@ import { LeadDialog } from './lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
 import { Input } from './ui/input';
 
-
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
   { value: "Followup", label: "Followup", multistep: null },
   { value: "Initiated", label: "Initiated", multistep: null },
@@ -47,7 +46,7 @@ type FeedbackCategory = keyof InteractionFeedback;
 interface FocusViewProps {
     lead: Lead;
     task?: Task;
-    appSettings: AppSettings;
+    appSettings: AppSettings | null;
     onInteractionLogged: () => void;
     onLeadUpdate: (updatedLead: Lead) => void;
 }
@@ -82,13 +81,16 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const { toast } = useToast();
     
     const [currentLead, setCurrentLead] = useState(lead);
-     const [currentTask, setCurrentTask] = useState(task);
+    const [currentTask, setCurrentTask] = useState(task);
 
     useEffect(() => {
         if (lead) setCurrentLead(lead);
     }, [lead]);
-     useEffect(() => {
-        if (task) setCurrentTask(task);
+    
+    useEffect(() => {
+        if (task) {
+            setCurrentTask(task);
+        }
     }, [task]);
 
     // Deal management
@@ -369,7 +371,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         if (type === 'insights') {
           setNewInsight("");
         }
-      };
+    };
 
     const handleAddMultipleTraits = (traitsToAdd: string[]) => {
         if (!currentLead) return;
@@ -387,13 +389,13 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const availableTraits = useMemo(() => {
         if (!appSettings?.commonTraits || !currentLead?.traits) return [];
         return appSettings.commonTraits.filter(trait => !currentLead.traits.includes(trait));
-      }, [appSettings?.commonTraits, currentLead?.traits]);
+    }, [appSettings?.commonTraits, currentLead?.traits]);
 
-    if (!currentLead) {
-        return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>
+    if (!currentLead || !appSettings) {
+        return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
 
-    if (task?.nature === 'Procedural') {
+    if (currentTask?.nature === 'Procedural') {
         return (
             <div className="space-y-4">
                 <div>
@@ -439,11 +441,11 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         <Pencil className="h-4 w-4" />
                     </Button>
                 </div>
-                 <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
+                <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
                     {currentLead.source && <div className="flex items-center gap-1.5"><FileUp className="h-3 w-3" />{currentLead.source}</div>}
                     {currentLead.assignedAt && <div className="flex items-center gap-1.5"><CircleUser className="h-3 w-3" /> Assigned on {format(parseISO(currentLead.assignedAt), "MMM d, yyyy")}</div>}
                 </div>
-                 <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
+                <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
                     {currentLead.email && <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground"><Mail className="h-3 w-3" /> {currentLead.email}</a>}
                     {(currentLead.phones || []).map((phone, index) => {
                         const cleanNumber = phone.number.replace(/\D/g, '');
