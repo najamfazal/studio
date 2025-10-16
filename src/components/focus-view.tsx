@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check, ListTodo } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -192,14 +192,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             toast({ title: 'Task Updated' });
             if (field === 'completed' && value === true) {
                 if (onInteractionLogged) {
-                    onInteractionLogged(); // This effectively marks it done in the parent queue UI
+                    onInteractionLogged();
                 }
             }
         } catch (error) {
             console.error("Error updating task:", error);
             toast({ variant: 'destructive', title: 'Failed to update task' });
             if (task) {
-                setCurrentTask(task); // revert
+                setCurrentTask(task);
             }
         }
     };
@@ -422,11 +422,12 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         return (
              <div className="space-y-4 max-w-md mx-auto">
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="text-center">
+                        <ListTodo className="h-12 w-12 text-muted-foreground mx-auto mb-4"/>
                         <CardTitle>Personal Task</CardTitle>
                         <CardDescription>This is a personal task not linked to a contact.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 text-center">
                         <EditableField
                             label="Task Description"
                             value={currentTask?.description || ''}
