@@ -382,7 +382,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     </Button>
                 </div>
                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
-                    {currentLead.source && <div className="flex items-center gap-1.5"><FileUp className="h-3 w-3" /><Badge variant="outline" className="text-xs">{currentLead.source}</Badge></div>}
+                    {currentLead.source && <div className="flex items-center gap-1.5"><FileUp className="h-3 w-3" />{currentLead.source}</div>}
                     {currentLead.assignedAt && <div className="flex items-center gap-1.5"><CircleUser className="h-3 w-3" /> Assigned on {format(parseISO(currentLead.assignedAt), "MMM d, yyyy")}</div>}
                 </div>
                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
@@ -626,8 +626,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         </CardContent>
                     </Card>
                 </TabsContent>
-
-                <TabsContent value="history" className="mt-3">
+                
+                 <TabsContent value="history" className="mt-3">
                     <Card>
                         <CardHeader className="p-2">
                             <CardTitle className="text-sm font-medium">Log History</CardTitle>
