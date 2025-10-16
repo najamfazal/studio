@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -357,7 +357,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                             </div>
                         )
                     })}
+                </div>
+                 <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
                     {currentLead.source && <div className="flex items-center gap-1.5"><FileUp className="h-3 w-3" /><Badge variant="outline" className="text-xs">{currentLead.source}</Badge></div>}
+                    {currentLead.assignedAt && <div className="flex items-center gap-1.5"><CircleUser className="h-3 w-3" /> Assigned on {format(parseISO(currentLead.assignedAt), "MMM d, yyyy")}</div>}
                 </div>
             </div>
             
