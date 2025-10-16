@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { collection, query, where, getDocs, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Users } from 'lucide-react';
 import Link from 'next/link';
 
@@ -48,21 +48,19 @@ export default function ContactsFocusPage() {
         }
         setIsLoading(true);
         try {
-            const leadsData: Lead[] = [];
-            const BATCH_SIZE = 30; // Firestore 'in' query limit
-
-            for (let i = 0; i < queueIds.length; i += BATCH_SIZE) {
-                const batchIds = queueIds.slice(i, i + BATCH_SIZE);
-                if (batchIds.length > 0) {
-                    const q = query(collection(db, "leads"), where('__name__', 'in', batchIds));
-                    const snapshot = await getDocs(q);
-                    const batchLeads = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Lead));
-                    leadsData.push(...batchLeads);
-                }
-            }
+            const leadPromises = queueIds.map(id => getDoc(doc(db, "leads", id)));
+            const leadDocs = await Promise.all(leadPromises);
             
-            const orderedLeads = queueIds.map(id => leadsData.find(l => l.id === id)).filter(Boolean) as Lead[];
-            setLeads(orderedLeads);
+            const leadsData = leadDocs
+                .map(docSnapshot => {
+                    if (docSnapshot.exists()) {
+                        return { id: docSnapshot.id, ...docSnapshot.data() } as Lead;
+                    }
+                    return null;
+                })
+                .filter((lead): lead is Lead => lead !== null);
+
+            setLeads(leadsData);
         } catch (error) {
             console.error("Error fetching leads:", error);
             toast({ variant: 'destructive', title: 'Failed to load leads.' });
@@ -70,6 +68,7 @@ export default function ContactsFocusPage() {
             setIsLoading(false);
         }
     }, [queueIds, toast]);
+
 
     useEffect(() => {
         fetchLeads();
