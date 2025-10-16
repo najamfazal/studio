@@ -31,12 +31,12 @@ import { LeadFormValues } from '@/lib/schemas';
 import { Input } from './ui/input';
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
-  { value: "Followup", label: "Followup", multistep: null },
-  { value: "Initiated", label: "Initiated", multistep: null },
-  { value: "Unresponsive", label: "Unresponsive", multistep: null },
-  { value: "Unchanged", label: "Unchanged", multistep: null },
-  { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
-  { value: "Enrolled", label: "Enrolled", multistep: null },
+    { value: "Followup", label: "Followup", multistep: null },
+    { value: "Initiated", label: "Initiated", multistep: null },
+    { value: "Unresponsive", label: "Unresponsive", multistep: null },
+    { value: "Unchanged", label: "Unchanged", multistep: null },
+    { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
+    { value: "Enrolled", label: "Enrolled", multistep: null },
 ];
 
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
@@ -52,10 +52,10 @@ interface FocusViewProps {
 }
 
 const toDate = (dateValue: any): Date | null => {
-  if (!dateValue) return null;
-  if (typeof dateValue === "string") return parseISO(dateValue);
-  if (dateValue.toDate) return dateValue.toDate(); // Firestore Timestamp
-  return null;
+    if (!dateValue) return null;
+    if (typeof dateValue === "string") return parseISO(dateValue);
+    if (dateValue.toDate) return dateValue.toDate(); // Firestore Timestamp
+    return null;
 };
 
 const formatRelativeTime = (date: Date) => {
@@ -76,33 +76,20 @@ const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
         }).filter(Boolean).join('; ');
 };
 
-
 export function FocusView({ lead, task, appSettings, onInteractionLogged, onLeadUpdate }: FocusViewProps) {
     const { toast } = useToast();
-    
+
     const [currentLead, setCurrentLead] = useState(lead);
     const [currentTask, setCurrentTask] = useState(task);
 
-    useEffect(() => {
-        if (lead) setCurrentLead(lead);
-    }, [lead]);
-    
-    useEffect(() => {
-        if (task) {
-            setCurrentTask(task);
-        }
-    }, [task]);
-
-    // Deal management
     const [isDealModalOpen, setIsDealModalOpen] = useState(false);
     const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
     const [dealToDelete, setDealToDelete] = useState<string | null>(null);
-    
-    // Logging states
+
     const [feedback, setFeedback] = useState<InteractionFeedback>({});
     const [isLoggingFeedback, setIsLoggingFeedback] = useState(false);
     const [activeChipCategory, setActiveChipCategory] = useState<FeedbackCategory | null>(null);
-    
+
     const [quickLogStep, setQuickLogStep] = useState<QuickLogStep>('initial');
     const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
     const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'submitted'>('idle');
@@ -118,13 +105,19 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
     const [isLoggingInfo, setIsLoggingInfo] = useState(false);
 
-    // Edit Lead state
     const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
-    // Insights and Traits state
     const [newInsight, setNewInsight] = useState("");
     const [isTraitPopoverOpen, setIsTraitPopoverOpen] = useState(false);
+
+    useEffect(() => {
+        if (lead) setCurrentLead(lead);
+    }, [lead]);
+    
+    useEffect(() => {
+        if (task) setCurrentTask(task);
+    }, [task]);
 
     const sortedInteractions = useMemo(() => {
         return (currentLead?.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
@@ -394,7 +387,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     if (!currentLead || !appSettings) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
-
+    
     if (currentTask?.nature === 'Procedural') {
         return (
             <div className="space-y-4">
@@ -427,7 +420,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     </CardFooter>
                 </Card>
             </div>
-        )
+        );
     }
 
     return (
@@ -686,7 +679,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     </Card>
                 </TabsContent>
                 <TabsContent value="history" className="mt-3">
-                    <Card>
+                     <Card>
                         <CardHeader className="p-2">
                             <CardTitle className="text-sm font-medium">Log History</CardTitle>
                         </CardHeader>
@@ -774,3 +767,5 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
+
+    
