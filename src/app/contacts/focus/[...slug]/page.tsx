@@ -25,7 +25,12 @@ export default function ContactsFocusPage() {
     const isMobile = useIsMobile();
     
     const slug = params.slug as string[];
-    const queueIds = useMemo(() => slug, [slug]);
+    const queueIds = useMemo(() => {
+        if (slug && slug.length > 0) {
+            return slug[0].split(',');
+        }
+        return [];
+    }, [slug]);
 
     const [leads, setLeads] = useState<Lead[]>([]);
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
