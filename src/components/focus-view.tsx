@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { DateTimePicker } from '@/components/date-time-picker';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
@@ -55,6 +55,7 @@ const toDate = (dateValue: any): Date | null => {
     if (!dateValue) return null;
     if (typeof dateValue === "string") return parseISO(dateValue);
     if (dateValue.toDate) return dateValue.toDate(); // Firestore Timestamp
+    if (dateValue.seconds) return new Date(dateValue.seconds * 1000);
     return null;
 };
 
@@ -101,9 +102,9 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
     const [dateTimePickerValue, setDateTimePickerValue] = useState<Date | undefined>(undefined);
     const [dateTimePickerCallback, setDateTimePickerCallback] = useState<(date: Date) => void>(() => {});
+    const [isLoggingInfo, setIsLoggingInfo] = useState(false);
 
     const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
-    const [isLoggingInfo, setIsLoggingInfo] = useState(false);
 
     const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -118,9 +119,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     }, [lead]);
     
     useEffect(() => {
-        if (task) {
-            setCurrentTask(task);
-        }
+       if (task) setCurrentTask(task);
     }, [task]);
 
 
@@ -392,21 +391,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     if (!appSettings) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
-
-    if (currentTask?.nature === 'Procedural') {
+    
+    if (currentTask && !currentLead) {
         return (
-            <div className="space-y-4">
-                <div>
-                    <h2 className="text-xl font-bold">{currentLead.name}</h2>
-                     <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
-                        {currentLead.email && <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground"><Mail className="h-3 w-3" /> {currentLead.email}</a>}
-                        {(currentLead.phones || []).length > 0 && <a href={`tel:${currentLead.phones[0].number}`} className="flex items-center gap-1.5 hover:text-foreground"><Phone className="h-3 w-3" /> {currentLead.phones[0].number}</a>}
-                    </div>
-                </div>
-
+             <div className="space-y-4 max-w-md mx-auto">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Administrative Task</CardTitle>
+                        <CardTitle>Personal Task</CardTitle>
+                        <CardDescription>This is a personal task not linked to a contact.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <EditableField
@@ -417,15 +409,33 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         />
                         {currentTask?.dueDate && <p className="text-sm text-muted-foreground">Due: {format(toDate(currentTask.dueDate)!, 'PP')}</p>}
                     </CardContent>
-                    <CardFooter>
-                        <Button className="w-full" onClick={() => handleTaskUpdate('completed', true)}>
+                    <CardFooter className="grid grid-cols-2 gap-2">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline">Defer</Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                mode="single"
+                                selected={currentTask.dueDate ? toDate(currentTask.dueDate)! : undefined}
+                                onSelect={(date) => {
+                                    if(date) handleTaskUpdate('dueDate', date.toISOString());
+                                }}
+                                />
+                            </PopoverContent>
+                        </Popover>
+                        <Button onClick={() => handleTaskUpdate('completed', true)}>
                             <Check className="mr-2 h-4 w-4" />
                             Mark as Complete
                         </Button>
                     </CardFooter>
                 </Card>
             </div>
-        );
+        )
+    }
+
+    if (!currentLead) {
+         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
     
     return (
