@@ -14,7 +14,7 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, ArrowRight } from "lucide-react";
+import { Loader2, ArrowLeft, ArrowRight, AlertTriangle } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { importContactsAction } from "@/app/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -52,6 +52,7 @@ type PreviewData = {
     updated: number;
     skipped: number;
     previewData: any[];
+    skippedData?: any[];
 }
 
 
@@ -220,6 +221,21 @@ export function ImportDialog({
                                   {data.autoLogInitiated && <Badge variant="outline" className="mt-1">Will create AFC task</Badge>}
                               </CardContent>
                           </Card>
+                        ))}
+                        </div>
+                    </ScrollArea>
+                </div>
+            )}
+            {preview && preview.skippedData && preview.skippedData.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive"/> Skipped Contacts</p>
+                    <ScrollArea className="h-32">
+                        <div className="space-y-2 pr-4">
+                        {preview.skippedData.map((data, index) => (
+                           <div key={index} className="p-2 border rounded-md text-xs">
+                               <p className="font-semibold truncate">{data.Name || data.name || 'Unknown Name'}</p>
+                               <p className="text-destructive">{data.reason}</p>
+                           </div>
                         ))}
                         </div>
                     </ScrollArea>

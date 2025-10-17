@@ -116,6 +116,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
         updated_count = 0
         skipped_count = 0
         preview_data = []
+        skipped_data = []
 
         if not is_dry_run:
             batch = db.batch()
@@ -130,6 +131,10 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
 
             if not name:
                 skipped_count += 1
+                if is_dry_run:
+                    skipped_record = row.copy()
+                    skipped_record['reason'] = 'Missing name'
+                    skipped_data.append(skipped_record)
                 continue
 
             # --- PHONE & EMAIL PARSING (MANDATORY) ---
@@ -275,12 +280,15 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             if is_dry_run:
                 if existing_doc_ref and is_new_mode:
                     skipped_count += 1
+                    skipped_record = row.copy()
+                    skipped_record['reason'] = 'Contact already exists'
+                    skipped_data.append(skipped_record)
                 elif existing_doc_ref:
                     updated_count += 1
                 else:
                     created_count += 1
 
-                if len(preview_data) < 3:
+                if len(preview_data) < 3 and not (existing_doc_ref and is_new_mode):
                     preview_lead_data = lead_data.copy()
                     preview_lead_data.pop("createdAt", None)
                     preview_lead_data.pop("search_keywords", None) 
@@ -318,7 +326,8 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "created": created_count,
                 "updated": updated_count,
                 "skipped": skipped_count,
-                "previewData": preview_data
+                "previewData": preview_data,
+                "skippedData": skipped_data
             }
         else:
             if batch_count > 0:
@@ -419,14 +428,14 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
     quick_log_type = interaction_data.get("quickLogType")
     feedback_log = interaction_data.get("feedback")
     outcome = interaction_data.get("outcome")
+    info_logs = interaction_data.get("infoLogs")
 
-    # --- 1. Feedback Log Processing (AFC Reset) ---
-    if feedback_log:
-        print(f"Processing feedback log for lead {lead_id}.")
+    # --- 1. Informational Log Processing (No AFC Change) ---
+    if feedback_log or info_logs:
+        print(f"Processing informational log for lead {lead_id}.")
         if not data_after.get("hasEngaged"):
             lead_ref.update({"hasEngaged": True})
-        # This interaction implies engagement, so reset AFC
-        reset_afc_for_engagement(lead_id, lead_name, lead_ref)
+        # This type of interaction is purely for insight, it does not reset the AFC.
         return
 
     # --- 2. Outcome Log Processing ---
@@ -1166,6 +1175,8 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
 
