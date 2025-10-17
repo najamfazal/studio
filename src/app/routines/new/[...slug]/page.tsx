@@ -1,11 +1,13 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { onSnapshot, collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2, Pencil } from 'lucide-react';
+import { onSnapshot, collection, query, where, getDocs, getDoc, doc, updateDoc } from 'firebase/firestore';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2, Clock, Check } from 'lucide-react';
 import Link from 'next/link';
+import { add, endOfDay, format } from 'date-fns';
 
 import { db } from '@/lib/firebase';
 import type { Lead, Task, AppSettings } from '@/lib/types';
@@ -16,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FocusView } from '@/components/focus-view';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export default function NewLeadFocusPage() {
     const params = useParams();
@@ -112,17 +115,48 @@ export default function NewLeadFocusPage() {
         }
     }
 
-    const handleInteractionLogged = () => {
-        // Mark the task as completed in the local state, but don't navigate.
+    const handleTaskUpdate = (updatedTask: Task) => {
+        if (onInteractionLogged && updatedTask.completed) {
+            onInteractionLogged();
+        }
+        setTaskQueue(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    };
+
+    const handleBackendTaskUpdate = async (taskId: string, update: Partial<Task>) => {
+        const taskRef = doc(db, "tasks", taskId);
+        await updateDoc(taskRef, update);
+    }
+    
+    const onInteractionLogged = () => {
         setTaskQueue(prevQueue =>
             prevQueue.map(t =>
                 t.id === currentTaskId ? { ...t, completed: true } : t
             )
         );
+        if (currentTaskId) {
+            handleBackendTaskUpdate(currentTaskId, { completed: true });
+        }
     };
 
     const handleLeadUpdate = (updatedLead: Lead) => {
         setLeadsCache(prev => ({...prev, [updatedLead.id]: updatedLead}));
+    }
+    
+    const handleDefer = async (duration: Duration) => {
+        if (!currentTask) return;
+        const newDueDate = add(new Date(), duration);
+        const updatedTask = { ...currentTask, dueDate: newDueDate.toISOString() };
+        handleTaskUpdate(updatedTask);
+        await handleBackendTaskUpdate(currentTask.id, { dueDate: newDueDate });
+        toast({ title: "Task Deferred", description: `New due date: ${format(newDueDate, 'PP p')}`});
+    }
+
+    const handleToggleComplete = async () => {
+        if (!currentTask) return;
+        const newCompletedStatus = !currentTask.completed;
+        const updatedTask = { ...currentTask, completed: newCompletedStatus };
+        handleTaskUpdate(updatedTask);
+        await handleBackendTaskUpdate(currentTask.id, { completed: newCompletedStatus });
     }
     
     if (isLoading || currentIndex === -1) {
@@ -141,7 +175,27 @@ export default function NewLeadFocusPage() {
                         <p className="text-xs text-muted-foreground">{currentIndex + 1} / {queueIds.length}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                     {currentTask && (
+                        <>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentTask.completed}>
+                                        <Clock className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleDefer({ hours: 2 })}>2 hours</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDefer({ hours: endOfDay(new Date()).getHours() - new Date().getHours() })}>End of day</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDefer({ days: 1 })}>Tomorrow</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDefer({ days: 3 })}>3 days</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleToggleComplete}>
+                                <Check className="h-4 w-4" />
+                            </Button>
+                        </>
+                    )}
                      {!isMobile && (
                         <Button variant="ghost" size="icon" onClick={() => setIsQueueVisible(!isQueueVisible)}>
                             {isQueueVisible ? <ChevronsLeft/> : <ChevronsRight/>}
@@ -178,24 +232,19 @@ export default function NewLeadFocusPage() {
                 {/* Main Content */}
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <main className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-                         {(isLoadingLead || (currentTask && !currentLead)) ? (
+                         {(isLoadingLead || (currentTask && currentTask.leadId && !currentLead)) ? (
                             <div className="flex h-full items-center justify-center">
                                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
                             </div>
-                        ) : currentLead && currentTask && appSettings ? (
+                        ) : currentTask && appSettings ? (
                             <FocusView 
                                 lead={currentLead}
                                 task={currentTask}
                                 appSettings={appSettings}
-                                onInteractionLogged={handleInteractionLogged}
+                                onInteractionLogged={onInteractionLogged}
                                 onLeadUpdate={handleLeadUpdate}
+                                onTaskUpdate={handleTaskUpdate}
                             />
-                        ) : currentTask ? ( // Task exists but maybe no lead
-                            <div className="flex flex-col h-full items-center justify-center text-center">
-                                <ListTodo className="h-12 w-12 text-muted-foreground mb-4"/>
-                                <h2 className="text-xl font-semibold">{currentTask.description}</h2>
-                                <p className="text-muted-foreground mt-1">This is a personal task not linked to a contact.</p>
-                            </div>
                         ) : (
                              <div className="flex h-full items-center justify-center">
                                 <p>Loading task...</p>

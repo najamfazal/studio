@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check, ListTodo } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check, ListTodo, Clock } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -46,10 +47,11 @@ type FeedbackCategory = keyof InteractionFeedback;
 
 interface FocusViewProps {
     lead: Lead | null;
-    task?: Task;
+    task: Task;
     appSettings: AppSettings | null;
     onInteractionLogged: () => void;
     onLeadUpdate: (updatedLead: Lead) => void;
+    onTaskUpdate: (updatedTask: Task) => void;
 }
 
 const toDate = (dateValue: any): Date | null => {
@@ -78,7 +80,7 @@ const formatFeedbackLog = (feedbackData: InteractionFeedback) => {
         }).filter(Boolean).join('; ');
 };
 
-export function FocusView({ lead, task, appSettings, onInteractionLogged, onLeadUpdate }: FocusViewProps) {
+export function FocusView({ lead, task, appSettings, onInteractionLogged, onLeadUpdate, onTaskUpdate }: FocusViewProps) {
     const { toast } = useToast();
 
     const [currentLead, setCurrentLead] = useState(lead);
@@ -114,15 +116,11 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [isTraitPopoverOpen, setIsTraitPopoverOpen] = useState(false);
 
     useEffect(() => {
-        if (lead) {
-            setCurrentLead(lead);
-        }
+        setCurrentLead(lead);
     }, [lead]);
     
     useEffect(() => {
-        if (task) {
-            setCurrentTask(task);
-        }
+        setCurrentTask(task);
     }, [task]);
 
     const sortedInteractions = useMemo(() => {
@@ -178,29 +176,6 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 onLeadUpdate(lead);
             }
           }
-        }
-    };
-
-    const handleTaskUpdate = async (field: keyof Task, value: any) => {
-        if (!currentTask) return;
-        const updatedTask = { ...currentTask, [field]: value };
-        setCurrentTask(updatedTask);
-
-        try {
-            const taskRef = doc(db, 'tasks', currentTask.id);
-            await updateDoc(taskRef, { [field]: value });
-            toast({ title: 'Task Updated' });
-            if (field === 'completed' && value === true) {
-                if (onInteractionLogged) {
-                    onInteractionLogged();
-                }
-            }
-        } catch (error) {
-            console.error("Error updating task:", error);
-            toast({ variant: 'destructive', title: 'Failed to update task' });
-            if (task) {
-                setCurrentTask(task);
-            }
         }
     };
     
@@ -412,63 +387,30 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         if (!appSettings?.commonTraits || !currentLead?.traits) return [];
         return appSettings.commonTraits.filter(trait => !currentLead.traits.includes(trait));
     }, [appSettings?.commonTraits, currentLead?.traits]);
-
+    
     if (!appSettings) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
     
-    if (currentTask && !currentLead) {
-        return (
-            <div className="space-y-4 max-w-md mx-auto">
-                <Card>
-                    <CardHeader className="text-center">
-                        <ListTodo className="h-12 w-12 text-muted-foreground mx-auto mb-4"/>
-                        <CardTitle>Personal Task</CardTitle>
-                        <CardDescription>This is a personal task not linked to a contact.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-center">
-                        <EditableField
-                            label="Task Description"
-                            value={currentTask.description}
-                            onSave={async (newDesc) => handleTaskUpdate('description', newDesc)}
-                            type="textarea"
-                        />
-                        {currentTask.dueDate && <p className="text-sm text-muted-foreground">Due: {format(toDate(currentTask.dueDate)!, 'PP')}</p>}
-                    </CardContent>
-                    <CardFooter className="grid grid-cols-2 gap-2">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline">Defer</Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                mode="single"
-                                selected={currentTask.dueDate ? toDate(currentTask.dueDate)! : undefined}
-                                onSelect={(date) => {
-                                    if(date) handleTaskUpdate('dueDate', date.toISOString());
-                                }}
-                                />
-                            </PopoverContent>
-                        </Popover>
-                        <Button onClick={() => handleTaskUpdate('completed', true)}>
-                            <Check className="mr-2 h-4 w-4" />
-                            Mark as Complete
-                        </Button>
-                    </CardFooter>
-                </Card>
-            </div>
-        )
+    if (!currentLead) {
+        if (task && task.leadId === null) {
+             return (
+                <div className="flex flex-col h-full items-center justify-center text-center max-w-md mx-auto">
+                    <ListTodo className="h-12 w-12 text-muted-foreground mb-4"/>
+                    <h2 className={cn("text-xl font-semibold", task.completed && "line-through")}>{task.description}</h2>
+                    <p className="text-muted-foreground mt-1">This is a personal task not linked to a contact.</p>
+                    {task.dueDate && <p className="text-sm mt-2">Due: {format(toDate(task.dueDate)!, 'PP')}</p>}
+                </div>
+            )
+        }
+        return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
 
-    if (!currentLead) {
-         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
-    }
-    
     return (
         <div className="space-y-3">
              <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-xl font-bold">{currentLead.name}</h2>
+                    <h2 className={cn("text-xl font-bold", task.completed && "line-through")}>{currentLead.name}</h2>
                     <Badge variant="secondary" className="text-xs">{currentLead.relationship}</Badge>
                     <Badge className="text-xs">{currentLead.status}</Badge>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsLeadDialogOpen(true)}>
@@ -501,7 +443,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             {task && (
                  <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-baseline gap-2 text-primary text-sm">
                     <p className="text-xs font-semibold uppercase shrink-0">Task:</p>
-                    <p className="font-medium">{task.description}</p>
+                    <p className={cn("font-medium", task.completed && "line-through")}>{task.description}</p>
                 </div>
             )}
             
@@ -681,7 +623,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                                 <Separator className="my-2" />
                                 <div className="flex flex-wrap gap-1 justify-center">
                                 {(appSettings.feedbackChips[activeChipCategory] || []).map(objection => (
-                                    <Badge key={objection} variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"} onClick={() => setFeedback(p => produce(p, d => { if(!d[activeChipCategory]!.objections) d[activeChipCategory]!.objections = []; const idx = d[activeChipCategory]!.objections!.indexOf(objection); if(idx > -1) d[activeChipCategory]!.objections!.splice(idx,1); else d[activeChipCategory]!.objections!.push(objection); }))} className="cursor-pointer text-xs">{objection}</Badge>
+                                    <Badge key={objection} variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"} onClick={() => setFeedback(p => produce(p, d => { if(!d[activeChipCategory]!.objections) d[activeChipCategory]!.objections = []; const idx = d[activeChipCategory]!.objections!.indexOf(objection); if(idx > -1) d[activeChip-category]!.objections!.splice(idx,1); else d[activeChipCategory]!.objections!.push(objection); }))} className="cursor-pointer text-xs">{objection}</Badge>
                                 ))}
                                 </div>
                             </div>
@@ -809,5 +751,3 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
-
-    

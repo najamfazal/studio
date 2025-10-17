@@ -1,11 +1,13 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { collection, query, where, getDocs, doc, onSnapshot, getDoc } from 'firebase/firestore';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Sparkles } from 'lucide-react';
+import { collection, query, where, getDocs, doc, onSnapshot, getDoc, updateDoc } from 'firebase/firestore';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Sparkles, Check, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { add, endOfDay } from 'date-fns';
 
 import { db } from '@/lib/firebase';
 import type { Lead, Task, AppSettings } from '@/lib/types';
@@ -13,22 +15,18 @@ import { Logo } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { FocusView } from '@/components/focus-view';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Carousel,
   CarouselContent,
   CarouselItem,
   type CarouselApi,
 } from "@/components/ui/carousel"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export default function HotFollowupFocusPage() {
     const params = useParams();
-    const router = useRouter();
-    const searchParams = useSearchParams();
     const { toast } = useToast();
-    const isMobile = useIsMobile();
     
     const slug = params.slug as string[];
     const queueIds = useMemo(() => slug, [slug]);
@@ -39,6 +37,25 @@ export default function HotFollowupFocusPage() {
 
     const [carouselApi, setCarouselApi] = useState<CarouselApi>()
     const [currentIndex, setCurrentIndex] = useState(0);
+
+    const currentLead = useMemo(() => leads[currentIndex], [leads, currentIndex]);
+    const [task, setTask] = useState<Task | null>(null);
+    
+    useEffect(() => {
+        if (currentLead) {
+            const dummyTask: Task = {
+                id: `hot-${currentLead.id}`,
+                description: 'Hot Follow-up',
+                completed: false,
+                leadId: currentLead.id,
+                leadName: currentLead.name,
+                nature: 'Interactive',
+                createdAt: new Date().toISOString(),
+            };
+            setTask(dummyTask);
+        }
+    }, [currentLead]);
+
 
     const fetchLeads = useCallback(async () => {
         if (queueIds.length === 0) {
@@ -115,6 +132,18 @@ export default function HotFollowupFocusPage() {
     const handleLeadUpdate = (updatedLead: Lead) => {
         setLeads(prevLeads => prevLeads.map(l => l.id === updatedLead.id ? updatedLead : l));
     }
+    
+    const handleTaskUpdate = (updatedTask: Task) => {
+        setTask(updatedTask);
+    }
+    
+    const handleDefer = async (duration: Duration) => {
+        if (!task) return;
+        const newDueDate = add(new Date(), duration);
+        const updatedTask = { ...task, dueDate: newDueDate.toISOString() };
+        handleTaskUpdate(updatedTask);
+        toast({ title: "Task Deferred", description: `New due date: ${format(newDueDate, 'PP p')}`});
+    }
 
     if (isLoading || !appSettings) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -147,6 +176,26 @@ export default function HotFollowupFocusPage() {
                         <p className="text-xs text-muted-foreground">{currentIndex + 1} / {leads.length}</p>
                     </div>
                 </div>
+                 {task && (
+                    <div className="flex items-center gap-1">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={task.completed}>
+                                    <Clock className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleDefer({ hours: 2 })}>2 hours</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDefer({ hours: endOfDay(new Date()).getHours() - new Date().getHours() })}>End of day</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDefer({ days: 1 })}>Tomorrow</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDefer({ days: 3 })}>3 days</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleTaskUpdate({...task, completed: !task.completed })}>
+                            <Check className="h-4 w-4" />
+                        </Button>
+                    </div>
+                )}
             </header>
 
             <Carousel setApi={setCarouselApi} className="flex-1 flex flex-col overflow-hidden">
@@ -178,13 +227,16 @@ export default function HotFollowupFocusPage() {
                             };
                             return (
                                 <CarouselItem key={lead.id}>
-                                    <FocusView 
-                                        lead={lead}
-                                        task={dummyTask}
-                                        appSettings={appSettings}
-                                        onLeadUpdate={handleLeadUpdate}
-                                        onInteractionLogged={() => {}}
-                                    />
+                                    {task && (
+                                        <FocusView 
+                                            lead={lead}
+                                            task={task}
+                                            appSettings={appSettings}
+                                            onLeadUpdate={handleLeadUpdate}
+                                            onInteractionLogged={() => handleTaskUpdate({...task, completed: true})}
+                                            onTaskUpdate={handleTaskUpdate}
+                                        />
+                                    )}
                                 </CarouselItem>
                             );
                         })}
