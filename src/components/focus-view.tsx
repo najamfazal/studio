@@ -418,9 +418,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     }
     
     if (currentTask && !currentLead) {
-        // This is a personal/admin task not linked to a contact
         return (
-             <div className="space-y-4 max-w-md mx-auto">
+            <div className="space-y-4 max-w-md mx-auto">
                 <Card>
                     <CardHeader className="text-center">
                         <ListTodo className="h-12 w-12 text-muted-foreground mx-auto mb-4"/>
@@ -430,13 +429,13 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     <CardContent className="space-y-4 text-center">
                         <EditableField
                             label="Task Description"
-                            value={currentTask?.description || ''}
+                            value={currentTask.description}
                             onSave={async (newDesc) => handleTaskUpdate('description', newDesc)}
                             type="textarea"
                         />
-                        {currentTask?.dueDate && <p className="text-sm text-muted-foreground">Due: {format(toDate(currentTask.dueDate)!, 'PP')}</p>}
+                        {currentTask.dueDate && <p className="text-sm text-muted-foreground">Due: {format(toDate(currentTask.dueDate)!, 'PP')}</p>}
                     </CardContent>
-                     <CardFooter className="grid grid-cols-2 gap-2">
+                    <CardFooter className="grid grid-cols-2 gap-2">
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button variant="outline">Defer</Button>
@@ -810,3 +809,5 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
+
+    
