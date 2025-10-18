@@ -69,16 +69,14 @@ async function getDashboardData(userId: string) {
   const hotFollowupsQuery = query(
       collection(db, "leads"),
       where("onFollowList", "==", true),
-      orderBy("name", "asc"),
-      limit(ROUTINE_PAGE_SIZE)
+      orderBy("name", "asc")
   );
   
   const newLeadsTasksQuery = query(
       collection(db, "tasks"),
       where("completed", "==", false),
       where("description", "==", "Send initial contact"),
-      orderBy("createdAt", "desc"),
-      limit(ROUTINE_PAGE_SIZE)
+      orderBy("createdAt", "desc")
   );
 
   const regularFollowupsTasksQuery = query(
@@ -86,16 +84,14 @@ async function getDashboardData(userId: string) {
       where("completed", "==", false),
       where("nature", "==", "Interactive"),
       where("description", "!=", "Send initial contact"),
-      orderBy("createdAt", "desc"),
-      limit(ROUTINE_PAGE_SIZE)
+      orderBy("createdAt", "desc")
   );
 
   const adminTasksQuery = query(
       collection(db, "tasks"),
       where("completed", "==", false),
       where("nature", "==", "Procedural"),
-      orderBy("createdAt", "desc"),
-      limit(ROUTINE_PAGE_SIZE)
+      orderBy("createdAt", "desc")
   );
 
   const overdueTasksQuery = query(
@@ -195,7 +191,8 @@ export default function RoutinesPage() {
   
   const { hotFollowups, newLeadsTasks, regularFollowupsTasks, adminTasks, overdueTasks } = dashboardData;
 
-  const getTaskQueueParams = (tasks: Task[]) => tasks.map(task => task.id).join(',');
+  const getTaskQueueParams = (tasks: Task[]) => tasks.slice(0, ROUTINE_PAGE_SIZE).map(task => task.id).join(',');
+  const getHotQueueParams = (leads: Lead[]) => leads.slice(0, ROUTINE_PAGE_SIZE).map(l => l.id).join(',');
 
   return (
      <div className="flex flex-col min-h-screen bg-background">
@@ -235,7 +232,7 @@ export default function RoutinesPage() {
           <>
             {hotFollowups.length > 0 && (
               <section>
-                 <Link href={`/routines/hot/${hotFollowups.map(l => l.id).join(',')}`}>
+                 <Link href={`/routines/hot/${getHotQueueParams(hotFollowups)}`}>
                   <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
@@ -326,5 +323,3 @@ export default function RoutinesPage() {
     </div>
   )
 }
-
-    
