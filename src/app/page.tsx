@@ -83,7 +83,6 @@ async function getDashboardData(userId: string) {
       collection(db, "tasks"),
       where("completed", "==", false),
       where("nature", "==", "Interactive"),
-      where("description", "!=", "Send initial contact"),
       orderBy("createdAt", "desc")
   );
 
@@ -148,7 +147,7 @@ async function getDashboardData(userId: string) {
 
   const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
   const newLeadsTasks = newLeadsTasksSnapshot.docs.map(toTask);
-  const regularFollowupsTasks = regularFollowupsTasksSnapshot.docs.map(toTask);
+  const regularFollowupsTasks = regularFollowupsTasksSnapshot.docs.map(toTask).filter(task => task.description !== 'Send initial contact');
   const adminTasks = adminTasksSnapshot.docs.map(toTask);
   const overdueTasks = overdueTasksSnapshot.docs.map(toTask);
 
@@ -191,8 +190,8 @@ export default function RoutinesPage() {
   
   const { hotFollowups, newLeadsTasks, regularFollowupsTasks, adminTasks, overdueTasks } = dashboardData;
 
-  const getTaskQueueParams = (tasks: Task[]) => tasks.slice(0, ROUTINE_PAGE_SIZE).map(task => task.id).join(',');
-  const getHotQueueParams = (leads: Lead[]) => leads.slice(0, ROUTINE_PAGE_SIZE).map(l => l.id).join(',');
+  const getTaskQueueParams = (tasks: Task[]) => tasks.map(task => task.id).join(',');
+  const getHotQueueParams = (leads: Lead[]) => leads.map(l => l.id).join(',');
 
   return (
      <div className="flex flex-col min-h-screen bg-background">
