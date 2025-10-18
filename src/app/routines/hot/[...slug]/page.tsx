@@ -5,9 +5,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { collection, query, where, getDocs, doc, onSnapshot, getDoc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Sparkles, Check, Clock } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Sparkles, Check, Clock, Book } from 'lucide-react';
 import Link from 'next/link';
-import { add, endOfDay } from 'date-fns';
+import { add, endOfDay, format } from 'date-fns';
 
 import { db } from '@/lib/firebase';
 import type { Lead, Task, AppSettings } from '@/lib/types';
@@ -22,7 +22,7 @@ import {
   CarouselItem,
   type CarouselApi,
 } from "@/components/ui/carousel"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 export default function HotFollowupFocusPage() {
     const params = useParams();
@@ -37,8 +37,10 @@ export default function HotFollowupFocusPage() {
 
     const [carouselApi, setCarouselApi] = useState<CarouselApi>()
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
+    const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
 
-    const currentLead = useMemo(() => leads[currentIndex], [leads, currentIndex]);
+    const currentLead = useMemo(() => filteredLeads[currentIndex], [filteredLeads, currentIndex]);
     const [task, setTask] = useState<Task | null>(null);
     
     useEffect(() => {
@@ -53,6 +55,8 @@ export default function HotFollowupFocusPage() {
                 createdAt: new Date().toISOString(),
             };
             setTask(dummyTask);
+        } else {
+            setTask(null);
         }
     }, [currentLead]);
 
@@ -98,6 +102,30 @@ export default function HotFollowupFocusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [queueIds, toast]);
 
+    const availableCourses = useMemo(() => {
+        const allCourses = new Set<string>();
+        leads.forEach(lead => {
+            lead.commitmentSnapshot?.deals?.forEach(deal => {
+                deal.courses.forEach(course => allCourses.add(course));
+            });
+        });
+        return Array.from(allCourses).sort();
+    }, [leads]);
+
+    useEffect(() => {
+        if (selectedCourse) {
+            const newFilteredLeads = leads.filter(lead => 
+                lead.commitmentSnapshot?.deals?.some(deal => deal.courses.includes(selectedCourse))
+            );
+            setFilteredLeads(newFilteredLeads);
+        } else {
+            setFilteredLeads(leads);
+        }
+        setCurrentIndex(0);
+        if(carouselApi) carouselApi.scrollTo(0);
+    }, [selectedCourse, leads, carouselApi]);
+
+
      useEffect(() => {
         fetchLeads();
         
@@ -124,7 +152,7 @@ export default function HotFollowupFocusPage() {
     }, [carouselApi]);
 
     const navigate = (index: number) => {
-        if (carouselApi && index >= 0 && index < leads.length) {
+        if (carouselApi && index >= 0 && index < filteredLeads.length) {
             carouselApi.scrollTo(index);
         }
     };
@@ -173,36 +201,56 @@ export default function HotFollowupFocusPage() {
                     </Button>
                     <div className="flex items-baseline gap-2">
                         <h1 className="text-base font-bold tracking-tight">Hot Follow-ups</h1>
-                        <p className="text-xs text-muted-foreground">{currentIndex + 1} / {leads.length}</p>
+                        <p className="text-xs text-muted-foreground">{filteredLeads.length > 0 ? currentIndex + 1 : 0} / {filteredLeads.length}</p>
                     </div>
                 </div>
-                 {task && (
-                    <div className="flex items-center gap-1">
-                        <DropdownMenu>
+                <div className="flex items-center gap-1">
+                    {availableCourses.length > 0 && (
+                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={task.completed}>
-                                    <Clock className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <Book className="h-4 w-4" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleDefer({ hours: 2 })}>2 hours</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDefer({ hours: endOfDay(new Date()).getHours() - new Date().getHours() })}>End of day</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDefer({ days: 1 })}>Tomorrow</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDefer({ days: 3 })}>3 days</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setSelectedCourse(null)}>All Courses</DropdownMenuItem>
+                                <DropdownMenuSeparator/>
+                                {availableCourses.map(course => (
+                                    <DropdownMenuItem key={course} onClick={() => setSelectedCourse(course)}>
+                                        {course}
+                                    </DropdownMenuItem>
+                                ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleTaskUpdate({...task, completed: !task.completed })}>
-                            <Check className="h-4 w-4" />
-                        </Button>
-                    </div>
-                )}
+                    )}
+                    {task && (
+                        <>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={task.completed}>
+                                        <Clock className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleDefer({ hours: 2 })}>2 hours</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDefer({ hours: endOfDay(new Date()).getHours() - new Date().getHours() })}>End of day</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDefer({ days: 1 })}>Tomorrow</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDefer({ days: 3 })}>3 days</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleTaskUpdate({...task, completed: !task.completed })}>
+                                <Check className="h-4 w-4" />
+                            </Button>
+                        </>
+                    )}
+                </div>
             </header>
 
             <Carousel setApi={setCarouselApi} className="flex-1 flex flex-col overflow-hidden">
                 <div className="p-2 border-b">
                     <div className="flex items-center justify-center">
                          <CarouselContent>
-                            {leads.map((lead, index) => (
+                            {filteredLeads.map((lead, index) => (
                                 <CarouselItem key={lead.id} onClick={() => navigate(index)} className="basis-auto">
                                     <div className={cn("text-center p-1 cursor-pointer", index === currentIndex ? "text-primary font-bold" : "text-muted-foreground")}>
                                         {lead.name.split(' ')[0].substring(0, 8)}
@@ -214,33 +262,39 @@ export default function HotFollowupFocusPage() {
                 </div>
                 
                 <main className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-                    <CarouselContent>
-                        {leads.map((lead) => {
-                            const dummyTask: Task = {
-                                id: `hot-${lead.id}`,
-                                description: 'Hot Follow-up',
-                                completed: false,
-                                leadId: lead.id,
-                                leadName: lead.name,
-                                nature: 'Interactive',
-                                createdAt: new Date().toISOString(),
-                            };
-                            return (
-                                <CarouselItem key={lead.id}>
-                                    {task && (
-                                        <FocusView 
-                                            lead={lead}
-                                            task={task}
-                                            appSettings={appSettings}
-                                            onLeadUpdate={handleLeadUpdate}
-                                            onInteractionLogged={() => handleTaskUpdate({...task, completed: true})}
-                                            onTaskUpdate={handleTaskUpdate}
-                                        />
-                                    )}
-                                </CarouselItem>
-                            );
-                        })}
-                    </CarouselContent>
+                    {filteredLeads.length > 0 ? (
+                        <CarouselContent>
+                            {filteredLeads.map((lead) => {
+                                const dummyTask: Task = {
+                                    id: `hot-${lead.id}`,
+                                    description: 'Hot Follow-up',
+                                    completed: false,
+                                    leadId: lead.id,
+                                    leadName: lead.name,
+                                    nature: 'Interactive',
+                                    createdAt: new Date().toISOString(),
+                                };
+                                return (
+                                    <CarouselItem key={lead.id}>
+                                        {task && currentLead?.id === lead.id && (
+                                            <FocusView 
+                                                lead={lead}
+                                                task={task}
+                                                appSettings={appSettings}
+                                                onLeadUpdate={handleLeadUpdate}
+                                                onInteractionLogged={() => handleTaskUpdate({...task, completed: true})}
+                                                onTaskUpdate={handleTaskUpdate}
+                                            />
+                                        )}
+                                    </CarouselItem>
+                                );
+                            })}
+                        </CarouselContent>
+                     ) : (
+                         <div className="flex items-center justify-center h-full text-center">
+                            <p className="text-muted-foreground">No leads match the selected course.</p>
+                        </div>
+                    )}
                 </main>
             </Carousel>
              <footer className="bg-card/80 backdrop-blur-sm border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
@@ -254,7 +308,7 @@ export default function HotFollowupFocusPage() {
                     Next
                     <ChevronRight />
                 </Button>
-                <Button variant="outline" size="icon" onClick={() => navigate(leads.length - 1)} disabled={currentIndex >= leads.length - 1}>
+                <Button variant="outline" size="icon" onClick={() => navigate(filteredLeads.length - 1)} disabled={currentIndex >= filteredLeads.length - 1}>
                     <ChevronsRight />
                 </Button>
             </footer>

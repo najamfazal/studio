@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { onSnapshot, collection, query, where, getDocs, getDoc, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2, Clock, Check } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2, Clock, Check, Book } from 'lucide-react';
 import Link from 'next/link';
 import { add, endOfDay, format } from 'date-fns';
 
@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FocusView } from '@/components/focus-view';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 export default function NewLeadFocusPage() {
     const params = useParams();
@@ -39,17 +39,23 @@ export default function NewLeadFocusPage() {
     const [isQueueVisible, setIsQueueVisible] = useState(true);
 
     const [currentIndex, setCurrentIndex] = useState(-1);
-    
-    const [isLoadingLead, setIsLoadingLead] = useState(false);
-    
+    const [filteredQueueIds, setFilteredQueueIds] = useState<string[]>([]);
+    const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+
     useEffect(() => {
-        const index = queueIds.findIndex(id => id === initialTaskId);
-        setCurrentIndex(index);
+        const index = filteredQueueIds.findIndex(id => id === initialTaskId);
+        if (index !== -1) {
+            setCurrentIndex(index);
+        } else if (filteredQueueIds.length > 0) {
+            setCurrentIndex(0);
+        } else {
+            setCurrentIndex(-1);
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialTaskId]);
+    }, [initialTaskId, filteredQueueIds]);
 
 
-    const currentTaskId = useMemo(() => queueIds[currentIndex], [queueIds, currentIndex]);
+    const currentTaskId = useMemo(() => filteredQueueIds[currentIndex], [filteredQueueIds, currentIndex]);
     const currentTask = useMemo(() => taskQueue.find(t => t.id === currentTaskId), [taskQueue, currentTaskId]);
     const currentLead = useMemo(() => currentTask?.leadId ? leadsCache[currentTask.leadId] : null, [leadsCache, currentTask]);
     
@@ -60,7 +66,6 @@ export default function NewLeadFocusPage() {
         }
         setIsLoading(true);
         try {
-            // Fetch all tasks in the queue
             const tasksData: Task[] = [];
             const BATCH_SIZE = 30;
             for (let i = 0; i < queueIds.length; i += BATCH_SIZE) {
@@ -74,7 +79,6 @@ export default function NewLeadFocusPage() {
             const orderedTasks = queueIds.map(id => tasksData.find(t => t.id === id)).filter(Boolean) as Task[];
             setTaskQueue(orderedTasks);
 
-            // Fetch all associated leads
             const leadIdsToFetch = [...new Set(orderedTasks.map(t => t.leadId).filter(Boolean))];
             const leadsData: Record<string, Lead> = {};
             for (let i = 0; i < leadIdsToFetch.length; i += BATCH_SIZE) {
@@ -97,6 +101,31 @@ export default function NewLeadFocusPage() {
         }
     }, [queueIds, toast]);
 
+    const availableCourses = useMemo(() => {
+        const allCourses = new Set<string>();
+        taskQueue.forEach(task => {
+            const lead = task.leadId ? leadsCache[task.leadId] : null;
+            lead?.commitmentSnapshot?.deals?.forEach(deal => {
+                deal.courses.forEach(course => allCourses.add(course));
+            });
+        });
+        return Array.from(allCourses).sort();
+    }, [taskQueue, leadsCache]);
+
+    useEffect(() => {
+        if (selectedCourse) {
+            const newFilteredIds = taskQueue
+                .filter(task => {
+                    const lead = task.leadId ? leadsCache[task.leadId] : null;
+                    return lead?.commitmentSnapshot?.deals?.some(deal => deal.courses.includes(selectedCourse));
+                })
+                .map(task => task.id);
+            setFilteredQueueIds(newFilteredIds);
+        } else {
+            setFilteredQueueIds(taskQueue.map(t => t.id));
+        }
+    }, [selectedCourse, taskQueue, leadsCache]);
+
     useEffect(() => {
         fetchFullQueueData();
         
@@ -110,7 +139,7 @@ export default function NewLeadFocusPage() {
 
 
     const navigateToTask = (index: number) => {
-        if (index >= 0 && index < queueIds.length) {
+        if (index >= 0 && index < filteredQueueIds.length) {
             setCurrentIndex(index);
         }
     }
@@ -159,7 +188,7 @@ export default function NewLeadFocusPage() {
         await handleBackendTaskUpdate(currentTask.id, { completed: newCompletedStatus });
     }
     
-    if (isLoading || currentIndex === -1) {
+    if (isLoading) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
@@ -172,10 +201,28 @@ export default function NewLeadFocusPage() {
                     </Button>
                     <div className="flex items-baseline gap-2">
                         <h1 className="text-base font-bold tracking-tight">Focus Mode</h1>
-                        <p className="text-xs text-muted-foreground">{currentIndex + 1} / {queueIds.length}</p>
+                        <p className="text-xs text-muted-foreground">{filteredQueueIds.length > 0 ? currentIndex + 1 : 0} / {filteredQueueIds.length}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
+                    {availableCourses.length > 0 && (
+                         <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <Book className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setSelectedCourse(null)}>All Courses</DropdownMenuItem>
+                                <DropdownMenuSeparator/>
+                                {availableCourses.map(course => (
+                                    <DropdownMenuItem key={course} onClick={() => setSelectedCourse(course)}>
+                                        {course}
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                      {currentTask && (
                         <>
                             <DropdownMenu>
@@ -210,7 +257,7 @@ export default function NewLeadFocusPage() {
                     <aside className="w-80 border-r bg-card overflow-y-auto">
                         <ScrollArea className="h-full">
                             <div className="p-4 space-y-2">
-                                {taskQueue.map((task, index) => (
+                                {taskQueue.filter(t => filteredQueueIds.includes(t.id)).map((task, index) => (
                                      <button 
                                         key={task.id} 
                                         onClick={() => navigateToTask(index)}
@@ -232,11 +279,7 @@ export default function NewLeadFocusPage() {
                 {/* Main Content */}
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <main className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-                         {(isLoadingLead || (currentTask && currentTask.leadId && !currentLead)) ? (
-                            <div className="flex h-full items-center justify-center">
-                                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                            </div>
-                        ) : currentTask && appSettings ? (
+                         {currentTask && appSettings ? (
                             <FocusView 
                                 lead={currentLead}
                                 task={currentTask}
@@ -255,17 +298,17 @@ export default function NewLeadFocusPage() {
                      {/* Desktop Navigation */}
                     {!isMobile && (
                         <footer className="bg-card/80 backdrop-blur-sm border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
-                             <Button variant="outline" size="icon" onClick={() => navigateToTask(0)} disabled={currentIndex === 0}>
+                             <Button variant="outline" size="icon" onClick={() => navigateToTask(0)} disabled={currentIndex <= 0}>
                                 <ChevronsLeft />
                             </Button>
-                            <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex === 0}>
+                            <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex <= 0}>
                                 <ChevronLeft />
                             </Button>
-                            <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= queueIds.length - 1}>
+                            <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
                                 Next Task
                                 <ChevronRight />
                             </Button>
-                            <Button variant="outline" size="icon" onClick={() => navigateToTask(queueIds.length - 1)} disabled={currentIndex >= queueIds.length - 1}>
+                            <Button variant="outline" size="icon" onClick={() => navigateToTask(filteredQueueIds.length - 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
                                 <ChevronsRight />
                             </Button>
                         </footer>
@@ -276,17 +319,17 @@ export default function NewLeadFocusPage() {
             {/* Mobile Navigation */}
             {isMobile && (
                 <footer className="bg-card border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
-                     <Button variant="outline" size="icon" onClick={() => navigateToTask(0)} disabled={currentIndex === 0}>
+                     <Button variant="outline" size="icon" onClick={() => navigateToTask(0)} disabled={currentIndex <= 0}>
                         <ChevronsLeft />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex === 0}>
+                    <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex <= 0}>
                         <ChevronLeft />
                     </Button>
-                    <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= queueIds.length - 1}>
+                    <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
                         Next
                         <ChevronRight />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigateToTask(queueIds.length - 1)} disabled={currentIndex >= queueIds.length - 1}>
+                    <Button variant="outline" size="icon" onClick={() => navigateToTask(filteredQueueIds.length - 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
                         <ChevronsRight />
                     </Button>
                 </footer>
