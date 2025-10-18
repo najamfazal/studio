@@ -212,7 +212,7 @@ export default function RoutinesPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ManualTaskDialog allTasks={[...newLeadsTasks, ...regularFollowupsTasks, ...adminTasks]} />
+            <ManualTaskDialog />
           </div>
         </div>
       </header>
