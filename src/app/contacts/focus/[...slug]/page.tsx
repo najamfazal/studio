@@ -60,7 +60,7 @@ export default function ContactsFocusPage() {
             const leadsRef = collection(db, "leads");
 
             if (routineType === 'new') {
-                leadsQuery = query(leadsRef, where("afc_step", "==", 0), orderBy("assignedAt", "desc"));
+                leadsQuery = query(leadsRef, where("afc_step", "==", 0), orderBy("createdAt", "desc"));
             } else if (routineType === 'followup') {
                 leadsQuery = query(leadsRef, where("afc_step", ">", 0), orderBy("afc_step", "asc"));
             } else if (routineType === 'admin' || routineType === 'overdue') {
@@ -260,3 +260,5 @@ export default function ContactsFocusPage() {
         </div>
     );
 }
+
+    
