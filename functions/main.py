@@ -64,8 +64,8 @@ def normalize_phone(phone_number: str) -> str:
         return ""
     return re.sub(r'\D', '', str(phone_number))
 
-def generate_search_keywords(name, phones):
-    """Generates a map of n-grams for a lead's name and phones."""
+def generate_search_keywords(name, phones, deals):
+    """Generates a map of n-grams for a lead's name, phones, and courses."""
     keywords = set()
     
     # Add name n-grams
@@ -78,12 +78,22 @@ def generate_search_keywords(name, phones):
     # Add phone n-grams
     for phone in phones:
         if phone.get('number'):
-            # The number is already normalized at this point
             num_str = phone['number']
             for i in range(len(num_str)):
                 for j in range(i + 1, len(num_str) + 1):
                     keywords.add(num_str[i:j])
     
+    # Add course n-grams
+    for deal in deals:
+        for course in deal.get('courses', []):
+            if course:
+                course_lower = course.lower()
+                # Add full course name and n-grams
+                keywords.add(course_lower)
+                for i in range(len(course_lower)):
+                    for j in range(i + 1, len(course_lower) + 1):
+                        keywords.add(course_lower[i:j])
+
     return {kw: True for kw in keywords}
 
 @https_fn.on_call(region="us-central1")
@@ -219,7 +229,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 else:
                     status = "Active"
 
-            search_keywords = generate_search_keywords(name, phones)
+            search_keywords = generate_search_keywords(name, phones, deals)
             
             lead_data = {
                 "name": name, "email": email, "phones": phones,
@@ -1079,20 +1089,20 @@ def reindexLeads(req: https_fn.CallableRequest) -> dict:
             lead_data = lead_doc.to_dict()
             name = lead_data.get("name", "")
             phones = lead_data.get("phones", [])
+            deals = lead_data.get("commitmentSnapshot", {}).get("deals", [])
             
-            # Generate keywords only if they don't exist, to be safe
-            if "search_keywords" not in lead_data:
-                search_keywords = generate_search_keywords(name, phones)
-                batch.update(lead_doc.reference, {"search_keywords": search_keywords})
-                processed_count += 1
-                
-                if processed_count % BATCH_LIMIT == 0:
-                    batch.commit()
-                    batch = db.batch()
-                    print(f"Committed batch of {BATCH_LIMIT} updates.")
+            # Generate keywords
+            search_keywords = generate_search_keywords(name, phones, deals)
+            batch.update(lead_doc.reference, {"search_keywords": search_keywords})
+            processed_count += 1
+            
+            if processed_count % BATCH_LIMIT == 0:
+                batch.commit()
+                batch = db.batch()
+                print(f"Committed batch of {BATCH_LIMIT} updates.")
         
         # Commit any remaining updates
-        if processed_count % BATCH_LIMIT != 0:
+        if processed_count > 0 and (processed_count % BATCH_LIMIT != 0):
             batch.commit()
 
         print(f"Re-indexing complete. Processed {processed_count} leads.")
@@ -1178,10 +1188,6 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
-
-    
-
-    
 
     
 
