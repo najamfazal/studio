@@ -63,7 +63,7 @@ async function getDashboardData(userId: string) {
       orderBy("createdAt", "desc")
   );
 
-  const overdueTasksQuery = query(
+  const allIncompleteTasksQuery = query(
       collection(db, "tasks"),
       where("completed", "==", false)
   );
@@ -79,7 +79,7 @@ async function getDashboardData(userId: string) {
         getDocs(newLeadsQuery),
         getDocs(followupLeadsQuery),
         getDocs(adminTasksQuery),
-        getDocs(overdueTasksQuery)
+        getDocs(allIncompleteTasksQuery)
     ]).catch(serverError => {
         if (serverError.code === 'permission-denied') {
             throw new FirestorePermissionError({ path: 'leads or tasks', operation: 'list' });
@@ -93,8 +93,8 @@ async function getDashboardData(userId: string) {
     }
     console.error("Error fetching dashboard data:", e);
     return {
-      newLeads: [],
-      followupLeads: [],
+      newLeadsCount: 0,
+      followupLeadsCount: 0,
       adminTasks: [],
       overdueTasks: [],
     };
@@ -110,8 +110,8 @@ async function getDashboardData(userId: string) {
       } as Task;
   }
 
-  const newLeads = newLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
-  const followupLeads = followupLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+  const newLeadsCount = newLeadsSnapshot.size;
+  const followupLeadsCount = followupLeadsSnapshot.size;
   const adminTasks = adminTasksSnapshot.docs.map(toTask);
   
   const allOverdueTasks = overdueTasksSnapshot.docs.map(toTask);
@@ -120,16 +120,16 @@ async function getDashboardData(userId: string) {
     .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
 
   return {
-    newLeads,
-    followupLeads,
+    newLeadsCount,
+    followupLeadsCount,
     adminTasks,
     overdueTasks,
   };
 }
 
 interface DashboardData {
-    newLeads: Lead[];
-    followupLeads: Lead[];
+    newLeadsCount: number;
+    followupLeadsCount: number;
     adminTasks: Task[];
     overdueTasks: Task[];
 }
@@ -162,9 +162,8 @@ export default function RoutinesPage() {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  const { newLeads, followupLeads, adminTasks, overdueTasks } = dashboardData;
+  const { newLeadsCount, followupLeadsCount, adminTasks, overdueTasks } = dashboardData;
 
-  const getLeadsQueueParams = (leads: Lead[]) => leads.map(l => l.id).join(',');
   const getTasksQueueParams = (tasks: Task[]) => tasks.map(t => t.id).join(',');
 
   return (
@@ -177,7 +176,7 @@ export default function RoutinesPage() {
               <div className="flex items-center gap-2">
                  <h1 className="text-xl font-bold tracking-tight leading-none">My Tasks</h1>
                  {overdueTasks.length > 0 && (
-                   <Link href={`/contacts/focus/${getTasksQueueParams(overdueTasks)}`}>
+                   <Link href={`/contacts/focus/overdue/${getTasksQueueParams(overdueTasks)}`}>
                     <Badge variant="destructive" className="blinking-badge">{overdueTasks.length} due</Badge>
                    </Link>
                  )}
@@ -191,7 +190,7 @@ export default function RoutinesPage() {
       </header>
 
        <main className="flex-1 p-4 space-y-4">
-        {newLeads.length === 0 && followupLeads.length === 0 && adminTasks.length === 0 ? (
+        {newLeadsCount === 0 && followupLeadsCount === 0 && adminTasks.length === 0 ? (
            <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
@@ -203,16 +202,16 @@ export default function RoutinesPage() {
           </div>
         ) : (
           <>
-            {newLeads.length > 0 && (
+            {newLeadsCount > 0 && (
                <section>
-                <Link href={`/contacts/focus/${getLeadsQueueParams(newLeads)}`}>
+                <Link href={`/contacts/focus/new`}>
                   <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
                         <Sparkles className="h-5 w-5 text-blue-600"/>
                         <div>
                           <CardTitle className="text-base">New Leads</CardTitle>
-                          <CardDescription className="text-xs">{newLeads.length} new leads to contact</CardDescription>
+                          <CardDescription className="text-xs">{newLeadsCount} new leads to contact</CardDescription>
                         </div>
                       </div>
                       <Button size="xs" variant="default" className="bg-blue-600 hover:bg-blue-700">
@@ -225,16 +224,16 @@ export default function RoutinesPage() {
               </section>
             )}
             
-            {followupLeads.length > 0 && (
+            {followupLeadsCount > 0 && (
               <section>
-                 <Link href={`/contacts/focus/${getLeadsQueueParams(followupLeads)}`}>
+                 <Link href={`/contacts/focus/followup`}>
                   <Card className="bg-card hover:bg-muted/50 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
                         <ListTodo className="h-5 w-5 text-muted-foreground"/>
                         <div>
                           <CardTitle className="text-base">Follow-ups</CardTitle>
-                          <CardDescription className="text-xs">{followupLeads.length} scheduled follow-ups</CardDescription>
+                          <CardDescription className="text-xs">{followupLeadsCount} scheduled follow-ups</CardDescription>
                         </div>
                       </div>
                        <Button size="xs" variant="secondary">
@@ -249,7 +248,7 @@ export default function RoutinesPage() {
 
             {adminTasks.length > 0 && (
               <section>
-                 <Link href={`/contacts/focus/${getTasksQueueParams(adminTasks)}`}>
+                 <Link href={`/contacts/focus/admin/${getTasksQueueParams(adminTasks)}`}>
                   <Card className="bg-card hover:bg-muted/50 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">

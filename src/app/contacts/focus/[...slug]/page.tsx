@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { collection, query, where, getDocs, doc, onSnapshot, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Users } from 'lucide-react';
 import Link from 'next/link';
 
@@ -18,6 +18,8 @@ import { FocusView } from '@/components/focus-view';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 
+const PAGE_SIZE = 20;
+
 export default function ContactsFocusPage() {
     const params = useParams();
     const router = useRouter();
@@ -25,64 +27,91 @@ export default function ContactsFocusPage() {
     const isMobile = useIsMobile();
     
     const slug = params.slug as string[];
-    const queueIds = useMemo(() => {
-        if (slug && slug.length > 0) {
-            // The slug is an array like ['id1,id2,id3'], so we access the first element and split it.
-            return slug[0].split(',');
-        }
-        return [];
-    }, [slug]);
+    const routineType = slug?.[0]; // e.g., 'new', 'followup', 'admin', 'overdue'
+    const taskIds = useMemo(() => slug?.[1]?.split(',') || [], [slug]);
 
     const [leads, setLeads] = useState<Lead[]>([]);
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isQueueVisible, setIsQueueVisible] = useState(true);
+    const [lastVisible, setLastVisible] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+    const [hasMore, setHasMore] = useState(true);
 
     const [currentIndex, setCurrentIndex] = useState(0);
 
     const currentLead = useMemo(() => leads[currentIndex], [leads, currentIndex]);
 
-    const fetchLeads = useCallback(async () => {
-        if (queueIds.length === 0) {
+    const fetchFocusData = useCallback(async (loadMore = false) => {
+        if (!routineType) {
             setIsLoading(false);
             return;
         }
-        setIsLoading(true);
+
+        if (loadMore) {
+            if (!hasMore) return;
+        } else {
+            setIsLoading(true);
+            setLeads([]);
+            setCurrentIndex(0);
+        }
+
         try {
-            const BATCH_SIZE = 30; // Firestore 'in' query limit
-            const leadsData: Lead[] = [];
-            for (let i = 0; i < queueIds.length; i += BATCH_SIZE) {
-                const batchIds = queueIds.slice(i, i + BATCH_SIZE);
-                if (batchIds.length > 0) {
-                    const q = query(collection(db, "leads"), where('__name__', 'in', batchIds));
-                    const snapshot = await getDocs(q);
-                    snapshot.forEach(d => leadsData.push({ id: d.id, ...d.data() } as Lead));
-                }
-            }
+            let leadsQuery;
+            const leadsRef = collection(db, "leads");
 
-            // The routine type is determined by the slug's first part
-            const routineType = slug[1] || 'new';
-
-            let orderedLeads = queueIds.map(id => leadsData.find(lead => lead.id === id)).filter((l): l is Lead => !!l);
-            
             if (routineType === 'new') {
-                orderedLeads.sort((a,b) => new Date(b.assignedAt || b.createdAt || 0).getTime() - new Date(a.assignedAt || a.createdAt || 0).getTime());
+                leadsQuery = query(leadsRef, where("afc_step", "==", 0), orderBy("assignedAt", "desc"));
             } else if (routineType === 'followup') {
-                orderedLeads.sort((a,b) => a.afc_step - b.afc_step);
+                leadsQuery = query(leadsRef, where("afc_step", ">", 0), orderBy("afc_step", "asc"));
+            } else if (routineType === 'admin' || routineType === 'overdue') {
+                // Task-based routines are not paginated for now, they receive all IDs.
+                if (taskIds.length === 0) {
+                  setLeads([]);
+                  setHasMore(false);
+                  return;
+                }
+                const BATCH_SIZE = 30; // Firestore 'in' query limit
+                const leadsData: Lead[] = [];
+                for (let i = 0; i < taskIds.length; i += BATCH_SIZE) {
+                    const batchIds = taskIds.slice(i, i + BATCH_SIZE);
+                    if (batchIds.length > 0) {
+                        const q = query(collection(db, "leads"), where('__name__', 'in', batchIds));
+                        const snapshot = await getDocs(q);
+                        snapshot.forEach(d => leadsData.push({ id: d.id, ...d.data() } as Lead));
+                    }
+                }
+                 setLeads(leadsData);
+                 setHasMore(false);
+                 return;
+            } else {
+                toast({ variant: 'destructive', title: 'Unknown routine type.' });
+                return;
             }
 
-            setLeads(orderedLeads);
+            const queryConstraints: any[] = [limit(PAGE_SIZE)];
+            if (loadMore && lastVisible) {
+                queryConstraints.push(startAfter(lastVisible));
+            }
+            
+            const finalQuery = query(leadsQuery, ...queryConstraints);
+            const snapshot = await getDocs(finalQuery);
+            const newLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+
+            setLeads(prev => loadMore ? [...prev, ...newLeads] : newLeads);
+            setLastVisible(snapshot.docs[snapshot.docs.length - 1] || null);
+            setHasMore(snapshot.docs.length === PAGE_SIZE);
+
         } catch (error) {
-            console.error("Error fetching leads:", error);
-            toast({ variant: 'destructive', title: 'Failed to load leads.' });
+            console.error("Error fetching focus data:", error);
+            toast({ variant: 'destructive', title: 'Failed to load focus queue.' });
         } finally {
             setIsLoading(false);
         }
-    }, [queueIds, toast, slug]);
+    }, [routineType, taskIds, toast, hasMore, lastVisible]);
 
 
     useEffect(() => {
-        fetchLeads();
+        fetchFocusData();
         
         const settingsRef = doc(db, 'settings', 'appConfig');
         const unsubSettings = onSnapshot(settingsRef, (doc) => {
@@ -90,11 +119,16 @@ export default function ContactsFocusPage() {
         });
 
         return () => unsubSettings();
-    }, [fetchLeads]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [routineType]);
 
     const navigateToLead = (index: number) => {
         if (index >= 0 && index < leads.length) {
             setCurrentIndex(index);
+        } else if (index >= leads.length && hasMore) {
+            fetchFocusData(true).then(() => {
+                setCurrentIndex(index);
+            });
         }
     };
     
@@ -102,19 +136,19 @@ export default function ContactsFocusPage() {
         setLeads(prevLeads => prevLeads.map(l => l.id === updatedLead.id ? updatedLead : l));
     }
 
-    if (isLoading || !appSettings) {
+    if (isLoading && leads.length === 0) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
-    if (leads.length === 0) {
+    if (leads.length === 0 && !isLoading) {
         return (
              <div className="flex h-screen items-center justify-center text-center">
                 <div>
                     <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <h2 className="mt-4 text-xl font-semibold">No Leads in Focus Queue</h2>
-                    <p className="mt-2 text-sm text-muted-foreground">The list of contacts is empty.</p>
+                    <h2 className="mt-4 text-xl font-semibold">No Leads in this Queue</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">This routine is currently empty.</p>
                     <Button asChild className="mt-4">
-                        <Link href="/contacts">Back to Contacts</Link>
+                        <Link href="/">Back to Dashboard</Link>
                     </Button>
                 </div>
             </div>
@@ -129,8 +163,8 @@ export default function ContactsFocusPage() {
                         <Link href="/"><ArrowLeft/></Link>
                     </Button>
                     <div className="flex items-baseline gap-2">
-                        <h1 className="text-base font-bold tracking-tight">Contact Focus</h1>
-                        <p className="text-xs text-muted-foreground">{currentIndex + 1} / {leads.length}</p>
+                        <h1 className="text-base font-bold tracking-tight capitalize">{routineType}</h1>
+                        <p className="text-xs text-muted-foreground">{currentIndex + 1} / {leads.length}{hasMore ? '+' : ''}</p>
                     </div>
                 </div>
                  <div className="flex items-center gap-2">
@@ -160,6 +194,9 @@ export default function ContactsFocusPage() {
                                         <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'} className="text-xs mt-1">{lead.status || 'Active'}</Badge>
                                     </button>
                                 ))}
+                                 {hasMore && (
+                                    <Button variant="link" className="w-full" onClick={() => fetchFocusData(true)}>Load More</Button>
+                                )}
                             </div>
                         </ScrollArea>
                     </aside>
@@ -167,7 +204,7 @@ export default function ContactsFocusPage() {
 
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-                        {currentLead ? (
+                        {currentLead && appSettings ? (
                             <FocusView 
                                 lead={currentLead}
                                 task={{id: `focus-${currentLead.id}`, leadId: currentLead.id, leadName: currentLead.name, description: `Focus on ${currentLead.name}`, completed: false, createdAt: new Date().toISOString(), nature: 'Interactive'}}
@@ -191,7 +228,7 @@ export default function ContactsFocusPage() {
                             <Button variant="outline" size="icon" onClick={() => navigateToLead(currentIndex - 1)} disabled={currentIndex === 0}>
                                 <ChevronLeft />
                             </Button>
-                            <Button variant="default" size="lg" onClick={() => navigateToLead(currentIndex + 1)} disabled={currentIndex >= leads.length - 1}>
+                            <Button variant="default" size="lg" onClick={() => navigateToLead(currentIndex + 1)} disabled={currentIndex >= leads.length - 1 && !hasMore}>
                                 Next
                                 <ChevronRight />
                             </Button>
@@ -211,7 +248,7 @@ export default function ContactsFocusPage() {
                     <Button variant="outline" size="icon" onClick={() => navigateToLead(currentIndex - 1)} disabled={currentIndex === 0}>
                         <ChevronLeft />
                     </Button>
-                    <Button variant="default" size="lg" onClick={() => navigateToLead(currentIndex + 1)} disabled={currentIndex >= leads.length - 1}>
+                    <Button variant="default" size="lg" onClick={() => navigateToLead(currentIndex + 1)} disabled={currentIndex >= leads.length - 1 && !hasMore}>
                         Next
                         <ChevronRight />
                     </Button>
