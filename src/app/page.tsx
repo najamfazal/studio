@@ -3,14 +3,13 @@
 
 import {
   collection,
-  getDocs,
   query,
   where,
   orderBy,
-  limit,
   Timestamp,
   type DocumentData,
-  type QuerySnapshot,
+  getCountFromServer,
+  getDocs,
 } from "firebase/firestore";
 import Link from 'next/link';
 import { unstable_noStore as noStore } from 'next/cache';
@@ -39,53 +38,45 @@ import { FirestorePermissionError } from "@/lib/errors";
 async function getDashboardData(userId: string) {
   noStore();
   
-  let newLeadsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-  let followupLeadsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-  let adminTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-  let overdueTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-
-  const leadsRef = collection(db, "leads");
-  
-  const newLeadsQuery = query(
-      leadsRef,
-      where("afc_step", "==", 0)
-  );
-  
-  const followupLeadsQuery = query(
-      leadsRef,
-      where("afc_step", ">", 0)
-  );
-
-  const adminTasksQuery = query(
-      collection(db, "tasks"),
-      where("completed", "==", false),
-      where("nature", "==", "Procedural"),
-      orderBy("createdAt", "desc")
-  );
-
-  const allIncompleteTasksQuery = query(
-      collection(db, "tasks"),
-      where("completed", "==", false)
-  );
-
-
   try {
-    [
+    const leadsRef = collection(db, "leads");
+    const tasksRef = collection(db, "tasks");
+
+    // Queries for counts
+    const newLeadsQuery = query(leadsRef, where("afc_step", "==", 0));
+    const followupLeadsQuery = query(leadsRef, where("afc_step", ">", 0));
+    const adminTasksQuery = query(tasksRef, where("completed", "==", false), where("nature", "==", "Procedural"));
+    const overdueTasksQuery = query(tasksRef, where("completed", "==", false), where("dueDate", "<", new Date()));
+
+    // Fetch counts using aggregation
+    const [
         newLeadsSnapshot,
         followupLeadsSnapshot,
         adminTasksSnapshot,
         overdueTasksSnapshot
     ] = await Promise.all([
-        getDocs(newLeadsQuery),
-        getDocs(followupLeadsQuery),
-        getDocs(adminTasksQuery),
-        getDocs(allIncompleteTasksQuery)
+        getCountFromServer(newLeadsQuery),
+        getCountFromServer(followupLeadsQuery),
+        getCountFromServer(adminTasksQuery),
+        getCountFromServer(overdueTasksQuery)
     ]).catch(serverError => {
         if (serverError.code === 'permission-denied') {
             throw new FirestorePermissionError({ path: 'leads or tasks', operation: 'list' });
         }
         throw serverError;
     });
+
+    const newLeadsCount = newLeadsSnapshot.data().count;
+    const followupLeadsCount = followupLeadsSnapshot.data().count;
+    const adminTasksCount = adminTasksSnapshot.data().count;
+    const overdueTasksCount = overdueTasksSnapshot.data().count;
+
+    return {
+      newLeadsCount,
+      followupLeadsCount,
+      adminTasksCount,
+      overdueTasksCount,
+    };
 
   } catch (e) {
     if (e instanceof FirestorePermissionError) {
@@ -95,43 +86,18 @@ async function getDashboardData(userId: string) {
     return {
       newLeadsCount: 0,
       followupLeadsCount: 0,
-      adminTasks: [],
-      overdueTasks: [],
+      adminTasksCount: 0,
+      overdueTasksCount: 0,
     };
   }
-  
-  const toTask = (doc: DocumentData) => {
-       const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        dueDate: data.dueDate ? toDate(data.dueDate).toISOString() : null,
-        createdAt: data.createdAt ? toDate(data.createdAt).toISOString() : null,
-      } as Task;
-  }
-
-  const newLeadsCount = newLeadsSnapshot.size;
-  const followupLeadsCount = followupLeadsSnapshot.size;
-  const adminTasks = adminTasksSnapshot.docs.map(toTask);
-  
-  const allOverdueTasks = overdueTasksSnapshot.docs.map(toTask);
-  const overdueTasks = allOverdueTasks
-    .filter(task => task.dueDate && isPast(toDate(task.dueDate)))
-    .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
-
-  return {
-    newLeadsCount,
-    followupLeadsCount,
-    adminTasks,
-    overdueTasks,
-  };
 }
+
 
 interface DashboardData {
     newLeadsCount: number;
     followupLeadsCount: number;
-    adminTasks: Task[];
-    overdueTasks: Task[];
+    adminTasksCount: number;
+    overdueTasksCount: number;
 }
 
 
@@ -162,9 +128,7 @@ export default function RoutinesPage() {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  const { newLeadsCount, followupLeadsCount, adminTasks, overdueTasks } = dashboardData;
-
-  const getTasksQueueParams = (tasks: Task[]) => tasks.map(t => t.id).join(',');
+  const { newLeadsCount, followupLeadsCount, adminTasksCount, overdueTasksCount } = dashboardData;
 
   return (
      <div className="flex flex-col min-h-screen bg-background">
@@ -175,9 +139,9 @@ export default function RoutinesPage() {
             <div className="grid gap-0.5">
               <div className="flex items-center gap-2">
                  <h1 className="text-xl font-bold tracking-tight leading-none">My Tasks</h1>
-                 {overdueTasks.length > 0 && (
-                   <Link href={`/contacts/focus/overdue/${getTasksQueueParams(overdueTasks)}`}>
-                    <Badge variant="destructive" className="blinking-badge">{overdueTasks.length} due</Badge>
+                 {overdueTasksCount > 0 && (
+                   <Link href={`/contacts/focus/overdue`}>
+                    <Badge variant="destructive" className="blinking-badge">{overdueTasksCount} due</Badge>
                    </Link>
                  )}
               </div>
@@ -190,7 +154,7 @@ export default function RoutinesPage() {
       </header>
 
        <main className="flex-1 p-4 space-y-4">
-        {newLeadsCount === 0 && followupLeadsCount === 0 && adminTasks.length === 0 ? (
+        {newLeadsCount === 0 && followupLeadsCount === 0 && adminTasksCount === 0 ? (
            <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
@@ -246,16 +210,16 @@ export default function RoutinesPage() {
               </section>
             )}
 
-            {adminTasks.length > 0 && (
+            {adminTasksCount > 0 && (
               <section>
-                 <Link href={`/contacts/focus/admin/${getTasksQueueParams(adminTasks)}`}>
+                 <Link href={`/contacts/focus/admin`}>
                   <Card className="bg-card hover:bg-muted/50 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
                         <NotebookPen className="h-5 w-5 text-muted-foreground"/>
                         <div>
                           <CardTitle className="text-base">Administrative</CardTitle>
-                          <CardDescription className="text-xs">{adminTasks.length} procedural tasks</CardDescription>
+                          <CardDescription className="text-xs">{adminTasksCount} procedural tasks</CardDescription>
                         </div>
                       </div>
                        <Button size="xs" variant="secondary">
