@@ -48,13 +48,11 @@ async function getDashboardData(userId: string) {
   
   const newLeadsQuery = query(
       leadsRef,
-      where("status", "==", "Active"),
       where("afc_step", "==", 0)
   );
   
   const followupLeadsQuery = query(
       leadsRef,
-      where("status", "==", "Active"),
       where("afc_step", ">", 0)
   );
 
@@ -68,8 +66,7 @@ async function getDashboardData(userId: string) {
   const overdueTasksQuery = query(
       collection(db, "tasks"),
       where("completed", "==", false),
-      where("dueDate", "<", new Date()),
-      orderBy("dueDate", "asc")
+      where("dueDate", "<", new Date())
   );
 
 
@@ -117,7 +114,7 @@ async function getDashboardData(userId: string) {
   const newLeads = newLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
   const followupLeads = followupLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
   const adminTasks = adminTasksSnapshot.docs.map(toTask);
-  const overdueTasks = overdueTasksSnapshot.docs.map(toTask);
+  const overdueTasks = overdueTasksSnapshot.docs.map(toTask).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
   return {
     newLeads,
