@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { collection, query, where, getDocs, doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, getDoc, orderBy } from 'firebase/firestore';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Users } from 'lucide-react';
 import Link from 'next/link';
 
@@ -60,8 +60,17 @@ export default function ContactsFocusPage() {
                 }
             }
 
-            // Re-order based on original queueIds array
-            const orderedLeads = queueIds.map(id => leadsData.find(lead => lead.id === id)).filter((l): l is Lead => !!l);
+            // The routine type is determined by the slug's first part
+            const routineType = slug[1] || 'new';
+
+            let orderedLeads = queueIds.map(id => leadsData.find(lead => lead.id === id)).filter((l): l is Lead => !!l);
+            
+            if (routineType === 'new') {
+                orderedLeads.sort((a,b) => new Date(b.assignedAt || b.createdAt || 0).getTime() - new Date(a.assignedAt || a.createdAt || 0).getTime());
+            } else if (routineType === 'followup') {
+                orderedLeads.sort((a,b) => a.afc_step - b.afc_step);
+            }
+
             setLeads(orderedLeads);
         } catch (error) {
             console.error("Error fetching leads:", error);
@@ -69,7 +78,7 @@ export default function ContactsFocusPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [queueIds, toast]);
+    }, [queueIds, toast, slug]);
 
 
     useEffect(() => {
