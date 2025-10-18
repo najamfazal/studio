@@ -28,8 +28,7 @@ export default function ContactsFocusPage() {
     
     const slug = params.slug as string[];
     const routineType = slug?.[0]; // e.g., 'new', 'followup', 'admin', 'overdue'
-    const taskIds = useMemo(() => slug?.[1]?.split(',') || [], [slug]);
-
+    
     const [leads, setLeads] = useState<Lead[]>([]);
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -60,29 +59,13 @@ export default function ContactsFocusPage() {
             const leadsRef = collection(db, "leads");
 
             if (routineType === 'new') {
-                leadsQuery = query(leadsRef, where("afc_step", "==", 0), orderBy("createdAt", "desc"));
+                leadsQuery = query(leadsRef, where("afc_step", "==", 0), orderBy("assignedAt", "desc"));
             } else if (routineType === 'followup') {
                 leadsQuery = query(leadsRef, where("afc_step", ">", 0), orderBy("afc_step", "asc"));
-            } else if (routineType === 'admin' || routineType === 'overdue') {
-                // Task-based routines are not paginated for now, they receive all IDs.
-                if (taskIds.length === 0) {
-                  setLeads([]);
-                  setHasMore(false);
-                  return;
-                }
-                const BATCH_SIZE = 30; // Firestore 'in' query limit
-                const leadsData: Lead[] = [];
-                for (let i = 0; i < taskIds.length; i += BATCH_SIZE) {
-                    const batchIds = taskIds.slice(i, i + BATCH_SIZE);
-                    if (batchIds.length > 0) {
-                        const q = query(collection(db, "leads"), where('__name__', 'in', batchIds));
-                        const snapshot = await getDocs(q);
-                        snapshot.forEach(d => leadsData.push({ id: d.id, ...d.data() } as Lead));
-                    }
-                }
-                 setLeads(leadsData);
-                 setHasMore(false);
-                 return;
+            } else if (routineType === 'admin') {
+                leadsQuery = query(collection(db, "tasks"), where("completed", "==", false), where("nature", "==", "Procedural"), orderBy("createdAt", "desc"));
+            } else if (routineType === 'overdue') {
+                 leadsQuery = query(collection(db, "tasks"), where("completed", "==", false), where("dueDate", "<", new Date()), orderBy("dueDate", "asc"));
             } else {
                 toast({ variant: 'destructive', title: 'Unknown routine type.' });
                 return;
@@ -95,7 +78,25 @@ export default function ContactsFocusPage() {
             
             const finalQuery = query(leadsQuery, ...queryConstraints);
             const snapshot = await getDocs(finalQuery);
-            const newLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+
+            let newLeads: Lead[] = [];
+            if(routineType === 'admin' || routineType === 'overdue') {
+                const taskDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const leadIds = [...new Set(taskDocs.map(t => t.leadId).filter(Boolean))];
+                if (leadIds.length > 0) {
+                    const BATCH_SIZE = 30;
+                    for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
+                        const batchIds = leadIds.slice(i, i + BATCH_SIZE);
+                        if(batchIds.length > 0){
+                           const leadsQ = query(collection(db, "leads"), where('__name__', 'in', batchIds));
+                            const leadsSnapshot = await getDocs(leadsQ);
+                            newLeads.push(...leadsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Lead)));
+                        }
+                    }
+                }
+            } else {
+                 newLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+            }
 
             setLeads(prev => loadMore ? [...prev, ...newLeads] : newLeads);
             setLastVisible(snapshot.docs[snapshot.docs.length - 1] || null);
@@ -107,7 +108,7 @@ export default function ContactsFocusPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [routineType, taskIds, toast, hasMore, lastVisible]);
+    }, [routineType, toast, hasMore, lastVisible]);
 
 
     useEffect(() => {
@@ -260,5 +261,7 @@ export default function ContactsFocusPage() {
         </div>
     );
 }
+
+    
 
     
