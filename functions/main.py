@@ -67,21 +67,24 @@ def normalize_phone(phone_number: str) -> str:
 def generate_search_keywords(name, phones, deals):
     """Generates a map of n-grams for a lead's name, phones, and courses."""
     keywords = set()
-    
+    MAX_KEYWORD_LENGTH = 100  # Prevent Firestore field path errors
+
+    def add_ngrams(text):
+        lower_text = text.lower()
+        for i in range(len(lower_text)):
+            for j in range(i + 1, len(lower_text) + 1):
+                ngram = lower_text[i:j]
+                if len(ngram) <= MAX_KEYWORD_LENGTH:
+                    keywords.add(ngram)
+
     # Add name n-grams
     if name:
-        name_lower = name.lower()
-        for i in range(len(name_lower)):
-            for j in range(i + 1, len(name_lower) + 1):
-                keywords.add(name_lower[i:j])
+        add_ngrams(name)
     
     # Add phone n-grams
     for phone in phones:
         if phone.get('number'):
-            num_str = phone['number']
-            for i in range(len(num_str)):
-                for j in range(i + 1, len(num_str) + 1):
-                    keywords.add(num_str[i:j])
+            add_ngrams(phone['number'])
     
     # Add course n-grams
     for deal in deals:
@@ -89,10 +92,9 @@ def generate_search_keywords(name, phones, deals):
             if course:
                 course_lower = course.lower()
                 # Add full course name and n-grams
-                keywords.add(course_lower)
-                for i in range(len(course_lower)):
-                    for j in range(i + 1, len(course_lower) + 1):
-                        keywords.add(course_lower[i:j])
+                if len(course_lower) <= MAX_KEYWORD_LENGTH:
+                    keywords.add(course_lower)
+                add_ngrams(course)
 
     return {kw: True for kw in keywords}
 
@@ -1099,7 +1101,7 @@ def reindexLeads(req: https_fn.CallableRequest) -> dict:
             if processed_count % BATCH_LIMIT == 0:
                 batch.commit()
                 batch = db.batch()
-                print(f"Committed batch of {BATCH_LIMIT} updates.")
+                print(f"Committed batch of {processed_count} updates.")
         
         # Commit any remaining updates
         if processed_count > 0 and (processed_count % BATCH_LIMIT != 0):
@@ -1190,5 +1192,8 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
 
     
+
+    
+
 
     
