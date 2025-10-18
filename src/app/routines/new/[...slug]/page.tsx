@@ -4,8 +4,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { onSnapshot, collection, query, where, getDocs, getDoc, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ListTodo, Loader2, Clock, Check, Book } from 'lucide-react';
+import { onSnapshot, collection, query, where, getDocs, getDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Clock, Check, Book } from 'lucide-react';
 import Link from 'next/link';
 import { add, endOfDay, format } from 'date-fns';
 
@@ -20,6 +20,8 @@ import { FocusView } from '@/components/focus-view';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
+const PAGE_SIZE = 20;
+
 export default function NewLeadFocusPage() {
     const params = useParams();
     const router = useRouter();
@@ -27,71 +29,46 @@ export default function NewLeadFocusPage() {
     const { toast } = useToast();
     const isMobile = useIsMobile();
     
-    const slug = params.slug as string[];
-    const initialTaskId = slug[0];
     const queueIds = useMemo(() => searchParams.get('queue')?.split(',') || [], [searchParams]);
 
-    const [taskQueue, setTaskQueue] = useState<Task[]>([]);
-    const [leadsCache, setLeadsCache] = useState<Record<string, Lead>>({});
+    const [allLeads, setAllLeads] = useState<Lead[]>([]);
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isQueueVisible, setIsQueueVisible] = useState(true);
 
-    const [currentIndex, setCurrentIndex] = useState(-1);
-    const [filteredQueueIds, setFilteredQueueIds] = useState<string[]>([]);
+    const [currentPage, setCurrentPage] = useState(0);
+    const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
     const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
-
-    useEffect(() => {
-        const index = filteredQueueIds.findIndex(id => id === initialTaskId);
-        if (index !== -1) {
-            setCurrentIndex(index);
-        } else if (filteredQueueIds.length > 0) {
-            setCurrentIndex(0);
-        } else {
-            setCurrentIndex(-1);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialTaskId, filteredQueueIds]);
-
-
-    const currentTaskId = useMemo(() => filteredQueueIds[currentIndex], [filteredQueueIds, currentIndex]);
-    const currentTask = useMemo(() => taskQueue.find(t => t.id === currentTaskId), [taskQueue, currentTaskId]);
-    const currentLead = useMemo(() => currentTask?.leadId ? leadsCache[currentTask.leadId] : null, [leadsCache, currentTask]);
     
-    const fetchFullQueueData = useCallback(async () => {
+    const currentLead = useMemo(() => filteredLeads[currentPage * PAGE_SIZE], [filteredLeads, currentPage]);
+    
+    const paginatedLeads = useMemo(() => {
+        const start = currentPage * PAGE_SIZE;
+        const end = start + PAGE_SIZE;
+        return filteredLeads.slice(start, end);
+    }, [filteredLeads, currentPage]);
+
+    const fetchQueueData = useCallback(async () => {
         if (queueIds.length === 0) {
             setIsLoading(false);
             return;
         }
         setIsLoading(true);
         try {
-            const tasksData: Task[] = [];
-            const BATCH_SIZE = 30;
+            const leadsData: Lead[] = [];
+            const BATCH_SIZE = 30; // Firestore 'in' query limit
             for (let i = 0; i < queueIds.length; i += BATCH_SIZE) {
                 const batchIds = queueIds.slice(i, i + BATCH_SIZE);
                 if (batchIds.length > 0) {
-                    const q = query(collection(db, "tasks"), where('__name__', 'in', batchIds));
-                    const snapshot = await getDocs(q);
-                    tasksData.push(...snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
-                }
-            }
-            const orderedTasks = queueIds.map(id => tasksData.find(t => t.id === id)).filter(Boolean) as Task[];
-            setTaskQueue(orderedTasks);
-
-            const leadIdsToFetch = [...new Set(orderedTasks.map(t => t.leadId).filter(Boolean))];
-            const leadsData: Record<string, Lead> = {};
-            for (let i = 0; i < leadIdsToFetch.length; i += BATCH_SIZE) {
-                const batchIds = leadIdsToFetch.slice(i, i + BATCH_SIZE);
-                if (batchIds.length > 0) {
                     const q = query(collection(db, "leads"), where('__name__', 'in', batchIds));
                     const snapshot = await getDocs(q);
-                    snapshot.forEach(doc => {
-                        leadsData[doc.id] = { id: doc.id, ...doc.data() } as Lead;
-                    });
+                    snapshot.forEach(d => leadsData.push({ id: d.id, ...d.data() } as Lead));
                 }
             }
-            setLeadsCache(leadsData);
+            // Sort by assignedAt descending
+            leadsData.sort((a, b) => new Date(b.assignedAt || 0).getTime() - new Date(a.assignedAt || 0).getTime());
+            setAllLeads(leadsData);
 
         } catch (error) {
             console.error("Error fetching queue data:", error);
@@ -103,94 +80,74 @@ export default function NewLeadFocusPage() {
 
     const availableCourses = useMemo(() => {
         const allCourses = new Set<string>();
-        taskQueue.forEach(task => {
-            const lead = task.leadId ? leadsCache[task.leadId] : null;
-            lead?.commitmentSnapshot?.deals?.forEach(deal => {
+        allLeads.forEach(lead => {
+            lead.commitmentSnapshot?.deals?.forEach(deal => {
                 deal.courses.forEach(course => allCourses.add(course));
             });
         });
         return Array.from(allCourses).sort();
-    }, [taskQueue, leadsCache]);
+    }, [allLeads]);
 
     useEffect(() => {
+        let leads = [...allLeads];
         if (selectedCourse) {
-            const newFilteredIds = taskQueue
-                .filter(task => {
-                    const lead = task.leadId ? leadsCache[task.leadId] : null;
-                    return lead?.commitmentSnapshot?.deals?.some(deal => deal.courses.includes(selectedCourse));
-                })
-                .map(task => task.id);
-            setFilteredQueueIds(newFilteredIds);
-        } else {
-            setFilteredQueueIds(taskQueue.map(t => t.id));
+            leads = allLeads.filter(lead => 
+                lead.commitmentSnapshot?.deals?.some(deal => deal.courses.includes(selectedCourse))
+            );
         }
-    }, [selectedCourse, taskQueue, leadsCache]);
+        setFilteredLeads(leads);
+        setCurrentPage(0);
+    }, [selectedCourse, allLeads]);
 
     useEffect(() => {
-        fetchFullQueueData();
-        
+        fetchQueueData();
         const settingsRef = doc(db, 'settings', 'appConfig');
         const unsubSettings = onSnapshot(settingsRef, (doc) => {
             if (doc.exists()) setAppSettings(doc.data() as AppSettings);
         });
-
         return () => unsubSettings();
-    }, [fetchFullQueueData]);
+    }, [fetchQueueData]);
 
 
-    const navigateToTask = (index: number) => {
-        if (index >= 0 && index < filteredQueueIds.length) {
-            setCurrentIndex(index);
+    const navigateToLead = (index: number) => {
+        if (index >= 0 && index < paginatedLeads.length) {
+            setCurrentPage(Math.floor((currentPage * PAGE_SIZE + index) / PAGE_SIZE));
         }
     }
 
-    const handleTaskUpdate = (updatedTask: Task) => {
-        if (onInteractionLogged && updatedTask.completed) {
-            onInteractionLogged();
-        }
-        setTaskQueue(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-    };
-
-    const handleBackendTaskUpdate = async (taskId: string, update: Partial<Task>) => {
-        const taskRef = doc(db, "tasks", taskId);
-        await updateDoc(taskRef, update);
-    }
-    
-    const onInteractionLogged = () => {
-        setTaskQueue(prevQueue =>
-            prevQueue.map(t =>
-                t.id === currentTaskId ? { ...t, completed: true } : t
-            )
-        );
-        if (currentTaskId) {
-            handleBackendTaskUpdate(currentTaskId, { completed: true });
+    const onInteractionLogged = async () => {
+        if (!currentLead) return;
+         // Optimistically update UI
+        setAllLeads(prev => prev.filter(l => l.id !== currentLead.id));
+        
+        // Asynchronously update Firestore
+        const leadRef = doc(db, "leads", currentLead.id);
+        const newInteraction: Interaction = {
+          id: `new-${Date.now()}`,
+          quickLogType: 'Initiated',
+          createdAt: new Date().toISOString(),
+        } as Interaction;
+        try {
+            await updateDoc(leadRef, { 
+              interactions: arrayUnion(newInteraction),
+              hasEngaged: true, // Mark as engaged
+            });
+            toast({ title: 'Lead Engaged', description: `${currentLead.name} has been marked as engaged.`});
+        } catch (error) {
+            console.error("Failed to update lead engagement status", error);
+            // Optionally revert UI state here if needed
         }
     };
 
     const handleLeadUpdate = (updatedLead: Lead) => {
-        setLeadsCache(prev => ({...prev, [updatedLead.id]: updatedLead}));
-    }
-    
-    const handleDefer = async (duration: Duration) => {
-        if (!currentTask) return;
-        const newDueDate = add(new Date(), duration);
-        const updatedTask = { ...currentTask, dueDate: newDueDate.toISOString() };
-        handleTaskUpdate(updatedTask);
-        await handleBackendTaskUpdate(currentTask.id, { dueDate: newDueDate });
-        toast({ title: "Task Deferred", description: `New due date: ${format(newDueDate, 'PP p')}`});
-    }
-
-    const handleToggleComplete = async () => {
-        if (!currentTask) return;
-        const newCompletedStatus = !currentTask.completed;
-        const updatedTask = { ...currentTask, completed: newCompletedStatus };
-        handleTaskUpdate(updatedTask);
-        await handleBackendTaskUpdate(currentTask.id, { completed: newCompletedStatus });
+        setAllLeads(prev => prev.map(l => l.id === updatedLead.id ? updatedLead : l));
     }
     
     if (isLoading) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
+    
+    const totalPages = Math.ceil(filteredLeads.length / PAGE_SIZE);
 
     return (
         <div className="flex flex-col h-screen bg-background">
@@ -200,8 +157,8 @@ export default function NewLeadFocusPage() {
                         <Link href="/"><ArrowLeft/></Link>
                     </Button>
                     <div className="flex items-baseline gap-2">
-                        <h1 className="text-base font-bold tracking-tight">Focus Mode</h1>
-                        <p className="text-xs text-muted-foreground">{filteredQueueIds.length > 0 ? currentIndex + 1 : 0} / {filteredQueueIds.length}</p>
+                        <h1 className="text-base font-bold tracking-tight">New Leads</h1>
+                        <p className="text-xs text-muted-foreground">{filteredLeads.length > 0 ? (currentPage * PAGE_SIZE) + 1 : 0} / {filteredLeads.length}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
@@ -223,26 +180,6 @@ export default function NewLeadFocusPage() {
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )}
-                     {currentTask && (
-                        <>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentTask.completed}>
-                                        <Clock className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => handleDefer({ hours: 2 })}>2 hours</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDefer({ hours: endOfDay(new Date()).getHours() - new Date().getHours() })}>End of day</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDefer({ days: 1 })}>Tomorrow</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDefer({ days: 3 })}>3 days</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleToggleComplete}>
-                                <Check className="h-4 w-4" />
-                            </Button>
-                        </>
-                    )}
                      {!isMobile && (
                         <Button variant="ghost" size="icon" onClick={() => setIsQueueVisible(!isQueueVisible)}>
                             {isQueueVisible ? <ChevronsLeft/> : <ChevronsRight/>}
@@ -252,23 +189,21 @@ export default function NewLeadFocusPage() {
             </header>
 
             <div className="flex-1 flex overflow-hidden">
-                {/* Task Queue Sidebar */}
                 { !isMobile && isQueueVisible && (
                     <aside className="w-80 border-r bg-card overflow-y-auto">
                         <ScrollArea className="h-full">
                             <div className="p-4 space-y-2">
-                                {taskQueue.filter(t => filteredQueueIds.includes(t.id)).map((task, index) => (
+                                {paginatedLeads.map((lead, index) => (
                                      <button 
-                                        key={task.id} 
-                                        onClick={() => navigateToTask(index)}
+                                        key={lead.id} 
+                                        onClick={() => navigateToLead(index)}
                                         className={cn(
                                             "block w-full text-left p-3 rounded-lg border",
-                                            task.id === currentTaskId ? "bg-primary/10 border-primary" : "hover:bg-muted/50",
-                                            task.completed && "opacity-50 line-through"
+                                            lead.id === currentLead?.id ? "bg-primary/10 border-primary" : "hover:bg-muted/50"
                                         )}
                                       >
-                                        <p className="font-semibold text-sm truncate">{task.description}</p>
-                                        <p className="text-xs text-muted-foreground truncate">{task.leadName}</p>
+                                        <p className="font-semibold text-sm truncate">{lead.name}</p>
+                                        <p className="text-xs text-muted-foreground truncate">{lead.email || (lead.phones && lead.phones[0]?.number) || 'No contact info'}</p>
                                     </button>
                                 ))}
                             </div>
@@ -276,60 +211,57 @@ export default function NewLeadFocusPage() {
                     </aside>
                 )}
 
-                {/* Main Content */}
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <main className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-                         {currentTask && appSettings ? (
+                <main className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
+                         {currentLead && appSettings ? (
                             <FocusView 
                                 lead={currentLead}
-                                task={currentTask}
+                                task={{id: `new-${currentLead.id}`, leadId: currentLead.id, leadName: currentLead.name, description: "Initiate contact with this new lead.", completed: false, createdAt: currentLead.createdAt!, nature: 'Interactive'}}
                                 appSettings={appSettings}
                                 onInteractionLogged={onInteractionLogged}
                                 onLeadUpdate={handleLeadUpdate}
-                                onTaskUpdate={handleTaskUpdate}
+                                onTaskUpdate={() => {}}
                             />
                         ) : (
-                             <div className="flex h-full items-center justify-center">
-                                <p>Loading task...</p>
+                            <div className="flex h-full items-center justify-center text-center">
+                                <p className="text-muted-foreground">No new leads in the queue{selectedCourse ? ' for this course' : ''}.</p>
                              </div>
                         )}
-                    </main>
+                    </div>
 
-                     {/* Desktop Navigation */}
                     {!isMobile && (
                         <footer className="bg-card/80 backdrop-blur-sm border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
-                             <Button variant="outline" size="icon" onClick={() => navigateToTask(0)} disabled={currentIndex <= 0}>
+                             <Button variant="outline" size="icon" onClick={() => setCurrentPage(0)} disabled={currentPage <= 0}>
                                 <ChevronsLeft />
                             </Button>
-                            <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex <= 0}>
+                            <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage <= 0}>
                                 <ChevronLeft />
                             </Button>
-                            <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
-                                Next Task
+                            <Button variant="default" size="lg" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages - 1}>
+                                Next Page
                                 <ChevronRight />
                             </Button>
-                            <Button variant="outline" size="icon" onClick={() => navigateToTask(filteredQueueIds.length - 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
+                            <Button variant="outline" size="icon" onClick={() => setCurrentPage(totalPages - 1)} disabled={currentPage >= totalPages - 1}>
                                 <ChevronsRight />
                             </Button>
                         </footer>
                     )}
-                </div>
+                </main>
             </div>
 
-            {/* Mobile Navigation */}
             {isMobile && (
                 <footer className="bg-card border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
-                     <Button variant="outline" size="icon" onClick={() => navigateToTask(0)} disabled={currentIndex <= 0}>
+                     <Button variant="outline" size="icon" onClick={() => setCurrentPage(0)} disabled={currentPage <= 0}>
                         <ChevronsLeft />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigateToTask(currentIndex - 1)} disabled={currentIndex <= 0}>
+                    <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage <= 0}>
                         <ChevronLeft />
                     </Button>
-                    <Button variant="default" size="lg" onClick={() => navigateToTask(currentIndex + 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
+                    <Button variant="default" size="lg" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages - 1}>
                         Next
                         <ChevronRight />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigateToTask(filteredQueueIds.length - 1)} disabled={currentIndex >= filteredQueueIds.length - 1}>
+                    <Button variant="outline" size="icon" onClick={() => setCurrentPage(totalPages - 1)} disabled={currentPage >= totalPages - 1}>
                         <ChevronsRight />
                     </Button>
                 </footer>
@@ -337,3 +269,4 @@ export default function NewLeadFocusPage() {
         </div>
     );
 }
+
