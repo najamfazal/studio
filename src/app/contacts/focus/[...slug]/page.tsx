@@ -49,19 +49,20 @@ export default function ContactsFocusPage() {
         }
         setIsLoading(true);
         try {
-            const leadPromises = queueIds.map(id => getDoc(doc(db, "leads", id)));
-            const leadDocs = await Promise.all(leadPromises);
-            
-            const leadsData = leadDocs
-                .map(docSnapshot => {
-                    if (docSnapshot.exists()) {
-                        return { id: docSnapshot.id, ...docSnapshot.data() } as Lead;
-                    }
-                    return null;
-                })
-                .filter((lead): lead is Lead => lead !== null);
+            const BATCH_SIZE = 30; // Firestore 'in' query limit
+            const leadsData: Lead[] = [];
+            for (let i = 0; i < queueIds.length; i += BATCH_SIZE) {
+                const batchIds = queueIds.slice(i, i + BATCH_SIZE);
+                if (batchIds.length > 0) {
+                    const q = query(collection(db, "leads"), where('__name__', 'in', batchIds));
+                    const snapshot = await getDocs(q);
+                    snapshot.forEach(d => leadsData.push({ id: d.id, ...d.data() } as Lead));
+                }
+            }
 
-            setLeads(leadsData);
+            // Re-order based on original queueIds array
+            const orderedLeads = queueIds.map(id => leadsData.find(lead => lead.id === id)).filter((l): l is Lead => !!l);
+            setLeads(orderedLeads);
         } catch (error) {
             console.error("Error fetching leads:", error);
             toast({ variant: 'destructive', title: 'Failed to load leads.' });
@@ -116,7 +117,7 @@ export default function ContactsFocusPage() {
             <header className="bg-card border-b p-3 flex items-center justify-between sticky top-0 z-20 h-14">
                 <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon" asChild className="h-8 w-8">
-                        <Link href="/contacts"><ArrowLeft/></Link>
+                        <Link href="/"><ArrowLeft/></Link>
                     </Button>
                     <div className="flex items-baseline gap-2">
                         <h1 className="text-base font-bold tracking-tight">Contact Focus</h1>
@@ -160,9 +161,11 @@ export default function ContactsFocusPage() {
                         {currentLead ? (
                             <FocusView 
                                 lead={currentLead}
+                                task={{id: `focus-${currentLead.id}`, leadId: currentLead.id, leadName: currentLead.name, description: `Focus on ${currentLead.name}`, completed: false, createdAt: new Date().toISOString(), nature: 'Interactive'}}
                                 appSettings={appSettings}
                                 onLeadUpdate={handleLeadUpdate}
                                 onInteractionLogged={() => {}}
+                                onTaskUpdate={() => {}}
                             />
                         ) : (
                              <div className="flex h-full items-center justify-center">

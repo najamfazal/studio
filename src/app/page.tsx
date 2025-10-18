@@ -65,8 +65,7 @@ async function getDashboardData(userId: string) {
 
   const overdueTasksQuery = query(
       collection(db, "tasks"),
-      where("completed", "==", false),
-      where("dueDate", "<", new Date())
+      where("completed", "==", false)
   );
 
 
@@ -114,7 +113,11 @@ async function getDashboardData(userId: string) {
   const newLeads = newLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
   const followupLeads = followupLeadsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
   const adminTasks = adminTasksSnapshot.docs.map(toTask);
-  const overdueTasks = overdueTasksSnapshot.docs.map(toTask).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  
+  const allOverdueTasks = overdueTasksSnapshot.docs.map(toTask);
+  const overdueTasks = allOverdueTasks
+    .filter(task => task.dueDate && isPast(toDate(task.dueDate)))
+    .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
 
   return {
     newLeads,
@@ -174,7 +177,7 @@ export default function RoutinesPage() {
               <div className="flex items-center gap-2">
                  <h1 className="text-xl font-bold tracking-tight leading-none">My Tasks</h1>
                  {overdueTasks.length > 0 && (
-                   <Link href={`/routines/regular/?queue=${getTasksQueueParams(overdueTasks)}`}>
+                   <Link href={`/contacts/focus/${getTasksQueueParams(overdueTasks)}`}>
                     <Badge variant="destructive" className="blinking-badge">{overdueTasks.length} due</Badge>
                    </Link>
                  )}
@@ -202,7 +205,7 @@ export default function RoutinesPage() {
           <>
             {newLeads.length > 0 && (
                <section>
-                <Link href={`/routines/new/?queue=${getLeadsQueueParams(newLeads)}`}>
+                <Link href={`/contacts/focus/${getLeadsQueueParams(newLeads)}`}>
                   <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
@@ -224,7 +227,7 @@ export default function RoutinesPage() {
             
             {followupLeads.length > 0 && (
               <section>
-                 <Link href={{ pathname: `/routines/regular`, query: { queue: getLeadsQueueParams(followupLeads) } }}>
+                 <Link href={`/contacts/focus/${getLeadsQueueParams(followupLeads)}`}>
                   <Card className="bg-card hover:bg-muted/50 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
@@ -246,7 +249,7 @@ export default function RoutinesPage() {
 
             {adminTasks.length > 0 && (
               <section>
-                 <Link href={{ pathname: `/routines/regular`, query: { queue: getTasksQueueParams(adminTasks) } }}>
+                 <Link href={`/contacts/focus/${getTasksQueueParams(adminTasks)}`}>
                   <Card className="bg-card hover:bg-muted/50 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
