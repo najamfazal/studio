@@ -36,6 +36,8 @@ import { Logo } from "@/components/icons";
 import { errorEmitter } from "@/lib/error-emitter";
 import { FirestorePermissionError } from "@/lib/errors";
 
+const ROUTINE_PAGE_SIZE = 20;
+
 const getInteractionSnippet = (lead: Lead): string => {
     if (!lead.interactions || lead.interactions.length === 0) {
         return "No interactions yet";
@@ -59,30 +61,67 @@ async function getDashboardData(userId: string) {
   noStore();
   
   let hotFollowupsSnapshot: QuerySnapshot<DocumentData, DocumentData>;
-  let allIncompleteTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let newLeadsTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let regularFollowupsTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let adminTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
+  let overdueTasksSnapshot: QuerySnapshot<DocumentData, DocumentData>;
 
   const hotFollowupsQuery = query(
       collection(db, "leads"),
       where("onFollowList", "==", true),
-      limit(5)
+      orderBy("name", "asc"),
+      limit(ROUTINE_PAGE_SIZE)
+  );
+  
+  const newLeadsTasksQuery = query(
+      collection(db, "tasks"),
+      where("completed", "==", false),
+      where("description", "==", "Send initial contact"),
+      orderBy("createdAt", "desc"),
+      limit(ROUTINE_PAGE_SIZE)
   );
 
-  const allIncompleteTasksQuery = query(
+  const regularFollowupsTasksQuery = query(
       collection(db, "tasks"),
-      where("completed", "==", false)
+      where("completed", "==", false),
+      where("nature", "==", "Interactive"),
+      where("description", "!=", "Send initial contact"),
+      orderBy("createdAt", "desc"),
+      limit(ROUTINE_PAGE_SIZE)
   );
+
+  const adminTasksQuery = query(
+      collection(db, "tasks"),
+      where("completed", "==", false),
+      where("nature", "==", "Procedural"),
+      orderBy("createdAt", "desc"),
+      limit(ROUTINE_PAGE_SIZE)
+  );
+
+  const overdueTasksQuery = query(
+      collection(db, "tasks"),
+      where("completed", "==", false),
+      where("dueDate", "<", new Date()),
+      orderBy("dueDate", "asc")
+  );
+
 
   try {
-    hotFollowupsSnapshot = await getDocs(hotFollowupsQuery).catch(serverError => {
+    [
+        hotFollowupsSnapshot,
+        newLeadsTasksSnapshot,
+        regularFollowupsTasksSnapshot,
+        adminTasksSnapshot,
+        overdueTasksSnapshot
+    ] = await Promise.all([
+        getDocs(hotFollowupsQuery),
+        getDocs(newLeadsTasksQuery),
+        getDocs(regularFollowupsTasksQuery),
+        getDocs(adminTasksQuery),
+        getDocs(overdueTasksQuery)
+    ]).catch(serverError => {
         if (serverError.code === 'permission-denied') {
-            throw new FirestorePermissionError({ path: 'leads', operation: 'list' });
-        }
-        throw serverError;
-    });
-
-    allIncompleteTasksSnapshot = await getDocs(allIncompleteTasksQuery).catch(serverError => {
-        if (serverError.code === 'permission-denied') {
-            throw new FirestorePermissionError({ path: 'tasks', operation: 'list' });
+            throw new FirestorePermissionError({ path: 'leads or tasks', operation: 'list' });
         }
         throw serverError;
     });
@@ -100,24 +139,22 @@ async function getDashboardData(userId: string) {
       overdueTasks: [],
     };
   }
-
-  const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
-  const allIncompleteTasks = allIncompleteTasksSnapshot.docs.map(doc => {
-      const data = doc.data();
+  
+  const toTask = (doc: DocumentData) => {
+       const data = doc.data();
       return {
         id: doc.id,
         ...data,
         dueDate: data.dueDate ? toDate(data.dueDate).toISOString() : null,
         createdAt: data.createdAt ? toDate(data.createdAt).toISOString() : null,
       } as Task;
-  });
+  }
 
-  const today = startOfToday();
-
-  const newLeadsTasks = allIncompleteTasks.filter(task => task.description === "Send initial contact");
-  const regularFollowupsTasks = allIncompleteTasks.filter(task => task.nature === "Interactive" && task.description !== "Send initial contact");
-  const adminTasks = allIncompleteTasks.filter(task => task.nature === "Procedural");
-  const overdueTasks = allIncompleteTasks.filter(task => task.dueDate && isPast(toDate(task.dueDate)) && !isToday(toDate(task.dueDate)));
+  const hotFollowups = hotFollowupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+  const newLeadsTasks = newLeadsTasksSnapshot.docs.map(toTask);
+  const regularFollowupsTasks = regularFollowupsTasksSnapshot.docs.map(toTask);
+  const adminTasks = adminTasksSnapshot.docs.map(toTask);
+  const overdueTasks = overdueTasksSnapshot.docs.map(toTask);
 
   return {
     hotFollowups,
