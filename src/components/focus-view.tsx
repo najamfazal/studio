@@ -114,6 +114,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     
     const [newInsight, setNewInsight] = useState("");
     const [isTraitPopoverOpen, setIsTraitPopoverOpen] = useState(false);
+    
+    const [isUpdatingTask, setIsUpdatingTask] = useState(false);
 
     useEffect(() => {
         setCurrentLead(lead);
@@ -382,6 +384,21 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         const newList = (currentLead[type] || []).filter(item => item !== value);
         handleUpdate(type, newList);
     };
+    
+    const handleTaskCompletion = async () => {
+        setIsUpdatingTask(true);
+        try {
+            const updatedTask = { ...currentTask, completed: true };
+            await updateDoc(doc(db, 'tasks', currentTask.id), { completed: true });
+            setCurrentTask(updatedTask);
+            onTaskUpdate(updatedTask);
+            toast({ title: 'Task Completed' });
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Failed to complete task' });
+        } finally {
+            setIsUpdatingTask(false);
+        }
+    }
 
     const availableTraits = useMemo(() => {
         if (!appSettings?.commonTraits || !currentLead?.traits) return [];
@@ -393,13 +410,24 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     }
     
     if (!currentLead) {
-        if (task && task.leadId === null) {
+         if (task && task.leadId === null) {
              return (
                 <div className="flex flex-col h-full items-center justify-center text-center max-w-md mx-auto">
-                    <ListTodo className="h-12 w-12 text-muted-foreground mb-4"/>
-                    <h2 className={cn("text-xl font-semibold", task.completed && "line-through")}>{task.description}</h2>
-                    <p className="text-muted-foreground mt-1">This is a personal task not linked to a contact.</p>
-                    {task.dueDate && <p className="text-sm mt-2">Due: {format(toDate(task.dueDate)!, 'PP')}</p>}
+                    <Card className="w-full">
+                        <CardHeader>
+                            <CardTitle className="flex items-start gap-2">
+                                <NotebookPen className="h-5 w-5 mt-1 text-muted-foreground" /> 
+                                <span>{task.description}</span>
+                            </CardTitle>
+                            {task.dueDate && <CardDescription>Due: {format(toDate(task.dueDate)!, 'PP')}</CardDescription>}
+                        </CardHeader>
+                        <CardFooter>
+                            <Button className="w-full" onClick={handleTaskCompletion} disabled={isUpdatingTask}>
+                                {isUpdatingTask && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                Mark as Complete
+                            </Button>
+                        </CardFooter>
+                    </Card>
                 </div>
             )
         }
@@ -623,7 +651,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                                 <Separator className="my-2" />
                                 <div className="flex flex-wrap gap-1 justify-center">
                                 {(appSettings.feedbackChips[activeChipCategory] || []).map(objection => (
-                                    <Badge key={objection} variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"} onClick={() => setFeedback(p => produce(p, d => { if(!d[activeChipCategory]!.objections) d[activeChipCategory]!.objections = []; const idx = d[activeChipCategory]!.objections!.indexOf(objection); if(idx > -1) d[activeChip-category]!.objections!.splice(idx,1); else d[activeChipCategory]!.objections!.push(objection); }))} className="cursor-pointer text-xs">{objection}</Badge>
+                                    <Badge key={objection} variant={feedback[activeChipCategory]?.objections?.includes(objection) ? "default" : "secondary"} onClick={() => setFeedback(p => produce(p, d => { if(!d[activeChipCategory]!.objections) d[activeChipCategory]!.objections = []; const idx = d[activeChipCategory]!.objections!.indexOf(objection); if(idx > -1) d[activeChipCategory]!.objections!.splice(idx,1); else d[activeChipCategory]!.objections!.push(objection); }))} className="cursor-pointer text-xs">{objection}</Badge>
                                 ))}
                                 </div>
                             </div>

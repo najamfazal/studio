@@ -8,7 +8,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Load
 import Link from 'next/link';
 
 import { db } from '@/lib/firebase';
-import type { Lead, AppSettings } from '@/lib/types';
+import type { Lead, AppSettings, Task } from '@/lib/types';
 import { Logo } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,11 @@ import { Badge } from '@/components/ui/badge';
 
 const PAGE_SIZE = 20;
 
+type QueueItem = {
+    task: Task;
+    lead: Lead | null;
+};
+
 export default function ContactsFocusPage() {
     const params = useParams();
     const router = useRouter();
@@ -29,7 +34,7 @@ export default function ContactsFocusPage() {
     const slug = params.slug as string[];
     const routineType = slug?.[0]; // e.g., 'new', 'followup', 'admin', 'overdue'
     
-    const [leads, setLeads] = useState<Lead[]>([]);
+    const [queue, setQueue] = useState<QueueItem[]>([]);
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isQueueVisible, setIsQueueVisible] = useState(true);
@@ -38,7 +43,7 @@ export default function ContactsFocusPage() {
 
     const [currentIndex, setCurrentIndex] = useState(0);
 
-    const currentLead = useMemo(() => leads[currentIndex], [leads, currentIndex]);
+    const currentItem = useMemo(() => queue[currentIndex], [queue, currentIndex]);
 
     const fetchFocusData = useCallback(async (loadMore = false) => {
         if (!routineType) {
@@ -50,55 +55,60 @@ export default function ContactsFocusPage() {
             if (!hasMore) return;
         } else {
             setIsLoading(true);
-            setLeads([]);
+            setQueue([]);
             setCurrentIndex(0);
         }
 
         try {
-            let leadsQuery;
-            const leadsRef = collection(db, "leads");
-
-            if (routineType === 'new') {
-                leadsQuery = query(leadsRef, where("afc_step", "==", 0), orderBy("assignedAt", "desc"));
-            } else if (routineType === 'followup') {
-                leadsQuery = query(leadsRef, where("afc_step", ">", 0), orderBy("afc_step", "asc"));
-            } else if (routineType === 'admin') {
-                leadsQuery = query(collection(db, "tasks"), where("completed", "==", false), where("nature", "==", "Procedural"), orderBy("createdAt", "desc"));
-            } else if (routineType === 'overdue') {
-                 leadsQuery = query(collection(db, "tasks"), where("completed", "==", false), where("dueDate", "<", new Date()), orderBy("dueDate", "asc"));
-            } else {
-                toast({ variant: 'destructive', title: 'Unknown routine type.' });
-                return;
-            }
-
+            let baseQuery;
             const queryConstraints: any[] = [limit(PAGE_SIZE)];
             if (loadMore && lastVisible) {
                 queryConstraints.push(startAfter(lastVisible));
             }
+
+            if (routineType === 'new') {
+                baseQuery = query(collection(db, "leads"), where("afc_step", "==", 0), orderBy("assignedAt", "desc"));
+            } else if (routineType === 'followup') {
+                baseQuery = query(collection(db, "leads"), where("afc_step", ">", 0), orderBy("afc_step", "asc"));
+            } else if (routineType === 'admin') {
+                baseQuery = query(collection(db, "tasks"), where("completed", "==", false), where("nature", "==", "Procedural"), orderBy("createdAt", "desc"));
+            } else if (routineType === 'overdue') {
+                 baseQuery = query(collection(db, "tasks"), where("completed", "==", false), where("dueDate", "<", new Date()), orderBy("dueDate", "asc"));
+            } else {
+                toast({ variant: 'destructive', title: 'Unknown routine type.' });
+                return;
+            }
             
-            const finalQuery = query(leadsQuery, ...queryConstraints);
+            const finalQuery = query(baseQuery, ...queryConstraints);
             const snapshot = await getDocs(finalQuery);
 
-            let newLeads: Lead[] = [];
+            let newQueueItems: QueueItem[] = [];
+
             if(routineType === 'admin' || routineType === 'overdue') {
-                const taskDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const leadIds = [...new Set(taskDocs.map(t => t.leadId).filter(Boolean))];
+                const tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+                const leadIds = [...new Set(tasks.map(t => t.leadId).filter(Boolean))];
+                
+                let leadsMap: Map<string, Lead> = new Map();
                 if (leadIds.length > 0) {
-                    const BATCH_SIZE = 30;
-                    for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
-                        const batchIds = leadIds.slice(i, i + BATCH_SIZE);
-                        if(batchIds.length > 0){
-                           const leadsQ = query(collection(db, "leads"), where('__name__', 'in', batchIds));
-                            const leadsSnapshot = await getDocs(leadsQ);
-                            newLeads.push(...leadsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Lead)));
-                        }
-                    }
+                     const leadsQuery = query(collection(db, "leads"), where('__name__', 'in', leadIds));
+                     const leadsSnapshot = await getDocs(leadsQuery);
+                     leadsSnapshot.docs.forEach(doc => leadsMap.set(doc.id, { id: doc.id, ...doc.data() } as Lead));
                 }
-            } else {
-                 newLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+                
+                newQueueItems = tasks.map(task => ({
+                    task,
+                    lead: task.leadId ? leadsMap.get(task.leadId) || null : null
+                }));
+
+            } else { // 'new' or 'followup'
+                 const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+                 newQueueItems = leads.map(lead => ({
+                    lead,
+                    task: { id: `task-${lead.id}`, leadId: lead.id, leadName: lead.name, description: `Routine for ${lead.name}`, completed: false, nature: "Interactive", createdAt: new Date().toISOString() }
+                 }));
             }
 
-            setLeads(prev => loadMore ? [...prev, ...newLeads] : newLeads);
+            setQueue(prev => loadMore ? [...prev, ...newQueueItems] : newQueueItems);
             setLastVisible(snapshot.docs[snapshot.docs.length - 1] || null);
             setHasMore(snapshot.docs.length === PAGE_SIZE);
 
@@ -123,10 +133,10 @@ export default function ContactsFocusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [routineType]);
 
-    const navigateToLead = (index: number) => {
-        if (index >= 0 && index < leads.length) {
+    const navigateToItem = (index: number) => {
+        if (index >= 0 && index < queue.length) {
             setCurrentIndex(index);
-        } else if (index >= leads.length && hasMore) {
+        } else if (index >= queue.length && hasMore) {
             fetchFocusData(true).then(() => {
                 setCurrentIndex(index);
             });
@@ -134,19 +144,23 @@ export default function ContactsFocusPage() {
     };
     
     const handleLeadUpdate = (updatedLead: Lead) => {
-        setLeads(prevLeads => prevLeads.map(l => l.id === updatedLead.id ? updatedLead : l));
+        setQueue(prevQueue => prevQueue.map(item => item.lead?.id === updatedLead.id ? { ...item, lead: updatedLead } : item));
     }
 
-    if (isLoading && leads.length === 0) {
+    const handleTaskUpdate = (updatedTask: Task) => {
+        setQueue(prevQueue => prevQueue.map(item => item.task.id === updatedTask.id ? { ...item, task: updatedTask } : item));
+    }
+
+    if (isLoading && queue.length === 0) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
-    if (leads.length === 0 && !isLoading) {
+    if (queue.length === 0 && !isLoading) {
         return (
              <div className="flex h-screen items-center justify-center text-center">
                 <div>
                     <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <h2 className="mt-4 text-xl font-semibold">No Leads in this Queue</h2>
+                    <h2 className="mt-4 text-xl font-semibold">No items in this Queue</h2>
                     <p className="mt-2 text-sm text-muted-foreground">This routine is currently empty.</p>
                     <Button asChild className="mt-4">
                         <Link href="/">Back to Dashboard</Link>
@@ -165,7 +179,7 @@ export default function ContactsFocusPage() {
                     </Button>
                     <div className="flex items-baseline gap-2">
                         <h1 className="text-base font-bold tracking-tight capitalize">{routineType}</h1>
-                        <p className="text-xs text-muted-foreground">{currentIndex + 1} / {leads.length}{hasMore ? '+' : ''}</p>
+                        <p className="text-xs text-muted-foreground">{currentIndex + 1} / {queue.length}{hasMore ? '+' : ''}</p>
                     </div>
                 </div>
                  <div className="flex items-center gap-2">
@@ -182,17 +196,17 @@ export default function ContactsFocusPage() {
                     <aside className="w-80 border-r bg-card overflow-y-auto">
                         <ScrollArea className="h-full">
                             <div className="p-4 space-y-2">
-                                {leads.map((lead, index) => (
+                                {queue.map((item, index) => (
                                      <button 
-                                        key={lead.id} 
-                                        onClick={() => navigateToLead(index)}
+                                        key={item.task.id} 
+                                        onClick={() => navigateToItem(index)}
                                         className={cn(
                                             "block w-full text-left p-3 rounded-lg border",
-                                            lead.id === currentLead.id ? "bg-primary/10 border-primary" : "hover:bg-muted/50"
+                                            item.task.id === currentItem.task.id ? "bg-primary/10 border-primary" : "hover:bg-muted/50"
                                         )}
                                       >
-                                        <p className="font-semibold text-sm truncate">{lead.name}</p>
-                                        <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'} className="text-xs mt-1">{lead.status || 'Active'}</Badge>
+                                        <p className="font-semibold text-sm truncate">{item.lead?.name || item.task.description}</p>
+                                        {item.lead && <Badge variant={item.lead.status === 'Active' ? 'default' : 'secondary'} className="text-xs mt-1">{item.lead.status || 'Active'}</Badge>}
                                     </button>
                                 ))}
                                  {hasMore && (
@@ -205,14 +219,14 @@ export default function ContactsFocusPage() {
 
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
-                        {currentLead && appSettings ? (
+                        {currentItem && appSettings ? (
                             <FocusView 
-                                lead={currentLead}
-                                task={{id: `focus-${currentLead.id}`, leadId: currentLead.id, leadName: currentLead.name, description: `Focus on ${currentLead.name}`, completed: false, createdAt: new Date().toISOString(), nature: 'Interactive'}}
+                                lead={currentItem.lead}
+                                task={currentItem.task}
                                 appSettings={appSettings}
                                 onLeadUpdate={handleLeadUpdate}
                                 onInteractionLogged={() => {}}
-                                onTaskUpdate={() => {}}
+                                onTaskUpdate={handleTaskUpdate}
                             />
                         ) : (
                              <div className="flex h-full items-center justify-center">
@@ -223,17 +237,17 @@ export default function ContactsFocusPage() {
 
                     {!isMobile && (
                         <footer className="bg-card/80 backdrop-blur-sm border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
-                             <Button variant="outline" size="icon" onClick={() => navigateToLead(0)} disabled={currentIndex === 0}>
+                             <Button variant="outline" size="icon" onClick={() => navigateToItem(0)} disabled={currentIndex === 0}>
                                 <ChevronsLeft />
                             </Button>
-                            <Button variant="outline" size="icon" onClick={() => navigateToLead(currentIndex - 1)} disabled={currentIndex === 0}>
+                            <Button variant="outline" size="icon" onClick={() => navigateToItem(currentIndex - 1)} disabled={currentIndex === 0}>
                                 <ChevronLeft />
                             </Button>
-                            <Button variant="default" size="lg" onClick={() => navigateToLead(currentIndex + 1)} disabled={currentIndex >= leads.length - 1 && !hasMore}>
+                            <Button variant="default" size="lg" onClick={() => navigateToItem(currentIndex + 1)} disabled={currentIndex >= queue.length - 1 && !hasMore}>
                                 Next
                                 <ChevronRight />
                             </Button>
-                            <Button variant="outline" size="icon" onClick={() => navigateToLead(leads.length - 1)} disabled={currentIndex >= leads.length - 1}>
+                            <Button variant="outline" size="icon" onClick={() => navigateToItem(queue.length - 1)} disabled={currentIndex >= queue.length - 1}>
                                 <ChevronsRight />
                             </Button>
                         </footer>
@@ -243,17 +257,17 @@ export default function ContactsFocusPage() {
 
             {isMobile && (
                 <footer className="bg-card border-t p-2 flex items-center justify-center gap-4 sticky bottom-0 z-20">
-                     <Button variant="outline" size="icon" onClick={() => navigateToLead(0)} disabled={currentIndex === 0}>
+                     <Button variant="outline" size="icon" onClick={() => navigateToItem(0)} disabled={currentIndex === 0}>
                         <ChevronsLeft />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigateToLead(currentIndex - 1)} disabled={currentIndex === 0}>
+                    <Button variant="outline" size="icon" onClick={() => navigateToItem(currentIndex - 1)} disabled={currentIndex === 0}>
                         <ChevronLeft />
                     </Button>
-                    <Button variant="default" size="lg" onClick={() => navigateToLead(currentIndex + 1)} disabled={currentIndex >= leads.length - 1 && !hasMore}>
+                    <Button variant="default" size="lg" onClick={() => navigateToItem(currentIndex + 1)} disabled={currentIndex >= queue.length - 1 && !hasMore}>
                         Next
                         <ChevronRight />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigateToLead(leads.length - 1)} disabled={currentIndex >= leads.length - 1}>
+                    <Button variant="outline" size="icon" onClick={() => navigateToItem(queue.length - 1)} disabled={currentIndex >= queue.length - 1}>
                         <ChevronsRight />
                     </Button>
                 </footer>
