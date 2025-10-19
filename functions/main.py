@@ -58,10 +58,11 @@ def create_task(lead_id, lead_name, description, nature, due_date=None):
     db.collection("tasks").add(task)
     print(f"Task created for lead {lead_name} ({lead_id}): {description}")
 
-def normalize_phone(phone_number: str) -> str:
+def normalize_phone(phone_number) -> str:
     """Strips all non-digit characters from a phone number string."""
     if not phone_number:
         return ""
+    # Explicitly cast to string first to handle integer inputs from JSON
     return re.sub(r'\D', '', str(phone_number))
 
 def generate_search_keywords(name, phones, deals):
@@ -1188,9 +1189,6 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
 
     
-
-    
-
 
     
 
