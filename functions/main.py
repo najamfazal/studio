@@ -270,30 +270,32 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
 
             # --- DATABASE OPERATIONS ---
             existing_doc_ref = None
-            if name and phones:
-                query = leads_ref.where("name", "==", name).limit(1)
-                for phone in phones:
-                    phone_number = phone.get("number")
-                    if phone_number:
-                        # Use search_keywords for efficient phone number check. Ensure phone number is a string for the field path.
-                        query = query.where(f"search_keywords.{str(phone_number)}", "==", True)
-                
-                existing_docs_query = query.stream()
+            
+            # Prioritize email check as it's more likely to be unique
+            if email:
+                existing_docs_query = leads_ref.where("email", "==", email).limit(1).stream()
                 for doc in existing_docs_query:
                     existing_doc_ref = doc.reference
                     break
             
-            if not existing_doc_ref and email:
-                existing_docs_query = leads_ref.where("email", "==", email).limit(1).stream()
-                for doc in existing_docs_query:
-                    existing_doc_ref = doc.reference
+            # If not found by email, check by phone number
+            if not existing_doc_ref and phones:
+                first_phone_number = phones[0]['number']
+                for phone_type in ["both", "calling", "chat"]:
+                    query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": phone_type}).limit(1)
+                    existing_docs_stream = query.stream()
+                    for doc in existing_docs_stream:
+                        existing_doc_ref = doc.reference
+                        break
+                    if existing_doc_ref:
+                        break
 
 
             if is_dry_run:
                 if existing_doc_ref and is_new_mode:
                     skipped_count += 1
                     skipped_record = row.copy()
-                    skipped_record['reason'] = 'Contact with same name and phone already exists'
+                    skipped_record['reason'] = 'Contact with same email or phone already exists'
                     skipped_data.append(skipped_record)
                 elif existing_doc_ref:
                     updated_count += 1
@@ -1187,6 +1189,8 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
 
