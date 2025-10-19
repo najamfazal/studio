@@ -70,9 +70,9 @@ def generate_search_keywords(name, phones, deals):
     MAX_KEYWORD_LENGTH = 100  # Prevent Firestore field path errors
 
     def add_ngrams(text):
-        lower_text = text.lower()
+        lower_text = str(text).lower() # Ensure text is a string
         for i in range(len(lower_text)):
-            for j in range(i + 1, len(lower_text) + 1):
+            for j in range(i + 1, min(i + MAX_KEYWORD_LENGTH, len(lower_text)) + 1):
                 ngram = lower_text[i:j]
                 if len(ngram) <= MAX_KEYWORD_LENGTH:
                     keywords.add(ngram)
@@ -90,10 +90,6 @@ def generate_search_keywords(name, phones, deals):
     for deal in deals:
         for course in deal.get('courses', []):
             if course:
-                course_lower = course.lower()
-                # Add full course name and n-grams
-                if len(course_lower) <= MAX_KEYWORD_LENGTH:
-                    keywords.add(course_lower)
                 add_ngrams(course)
 
     return {kw: True for kw in keywords}
@@ -1195,5 +1191,7 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
