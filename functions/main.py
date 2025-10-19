@@ -84,7 +84,7 @@ def generate_search_keywords(name, phones, deals):
     # Add phone n-grams
     for phone in phones:
         if phone.get('number'):
-            add_ngrams(phone['number'])
+            add_ngrams(str(phone['number']))
     
     # Add course n-grams
     for deal in deals:
@@ -275,7 +275,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     phone_number = phone.get("number")
                     if phone_number:
                         # Use search_keywords for efficient phone number check
-                        query = query.where(f"search_keywords.{phone_number}", "==", True)
+                        query = query.where(f"search_keywords.{str(phone_number)}", "==", True)
                 
                 existing_docs_query = query.stream()
                 for doc in existing_docs_query:
