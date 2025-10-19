@@ -275,7 +275,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 for phone in phones:
                     phone_number = phone.get("number")
                     if phone_number:
-                        # Use search_keywords for efficient phone number check
+                        # Use search_keywords for efficient phone number check. Ensure phone number is a string for the field path.
                         query = query.where(f"search_keywords.{str(phone_number)}", "==", True)
                 
                 existing_docs_query = query.stream()
@@ -1187,6 +1187,10 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
+
+    
 
     
 
