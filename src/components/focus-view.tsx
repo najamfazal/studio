@@ -538,7 +538,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         <div className="space-y-3">
              <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className={cn("text-xl font-bold", task.completed && "line-through")}>{currentLead.name}</h2>
+                    <h2 className={cn("text-xl font-bold", currentTask.completed && "line-through")}>{currentLead.name}</h2>
                     <Badge variant="secondary" className="text-xs">{currentLead.relationship}</Badge>
                     <Badge className="text-xs">{currentLead.status}</Badge>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsLeadDialogOpen(true)}>
@@ -571,7 +571,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             {task && (
                  <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-baseline gap-2 text-primary text-sm">
                     <p className="text-xs font-semibold uppercase shrink-0">Task:</p>
-                    <p className={cn("font-medium", task.completed && "line-through")}>{task.description}</p>
+                    <p className={cn("font-medium", currentTask.completed && "line-through")}>{task.description}</p>
                 </div>
             )}
             

@@ -70,7 +70,7 @@ export default function ContactsFocusPage() {
             if (routineType === 'new') {
                 baseQuery = query(collection(db, "leads"), where("afc_step", "==", 0), where("status", "==", "Active"), orderBy("assignedAt", "desc"));
             } else if (routineType === 'followup') {
-                baseQuery = query(collection(db, "leads"), where("afc_step", ">", 0), where("status", "==", "Active"), orderBy("afc_step", "asc"));
+                baseQuery = query(collection(db, "leads"), where("status", "==", "Active"), where("afc_step", ">", 0), orderBy("afc_step", "asc"));
             } else if (routineType === 'admin') {
                  baseQuery = query(collection(db, "tasks"), where("completed", "==", false), where("nature", "==", "Procedural"), orderBy("createdAt", "desc"));
             } else if (routineType === 'overdue') {
@@ -157,6 +157,12 @@ export default function ContactsFocusPage() {
     const handleTaskUpdate = (updatedTask: Task) => {
         setQueue(prevQueue => prevQueue.map(item => item.task.id === updatedTask.id ? { ...item, task: updatedTask } : item));
     }
+    
+    const handleInteractionLogged = () => {
+        if (currentItem) {
+            handleTaskUpdate({ ...currentItem.task, completed: true });
+        }
+    };
 
     if (isLoading && queue.length === 0) {
         return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -208,11 +214,14 @@ export default function ContactsFocusPage() {
                                         key={item.task.id} 
                                         onClick={() => navigateToItem(index)}
                                         className={cn(
-                                            "block w-full text-left p-3 rounded-lg border",
-                                            item.task.id === currentItem.task.id ? "bg-primary/10 border-primary" : "hover:bg-muted/50"
+                                            "block w-full text-left p-3 rounded-lg border transition-opacity",
+                                            item.task.id === currentItem.task.id ? "bg-primary/10 border-primary" : "hover:bg-muted/50",
+                                            item.task.completed && "opacity-50"
                                         )}
                                       >
-                                        <p className="font-semibold text-sm truncate">{item.lead?.name || item.task.description}</p>
+                                        <p className={cn("font-semibold text-sm truncate", item.task.completed && "line-through")}>
+                                            {item.lead?.name || item.task.description}
+                                        </p>
                                         {item.lead && <Badge variant={item.lead.status === 'Active' ? 'default' : 'secondary'} className="text-xs mt-1">{item.lead.status || 'Active'}</Badge>}
                                     </button>
                                 ))}
@@ -232,7 +241,7 @@ export default function ContactsFocusPage() {
                                 task={currentItem.task}
                                 appSettings={appSettings}
                                 onLeadUpdate={handleLeadUpdate}
-                                onInteractionLogged={() => {}}
+                                onInteractionLogged={handleInteractionLogged}
                                 onTaskUpdate={handleTaskUpdate}
                             />
                         ) : (
