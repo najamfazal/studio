@@ -68,9 +68,9 @@ export default function ContactsFocusPage() {
             }
 
             if (routineType === 'new') {
-                baseQuery = query(collection(db, "leads"), where("afc_step", "==", 0), where("status", "==", "Active"), orderBy("assignedAt", "desc"));
+                baseQuery = query(collection(db, "leads"), where("status", "==", "Active"), where("afc_step", "==", 0), orderBy("assignedAt", "desc"));
             } else if (routineType === 'followup') {
-                baseQuery = query(collection(db, "leads"), where("status", "==", "Active"), where("afc_step", ">", 0), orderBy("afc_step", "asc"));
+                baseQuery = query(collection(db, "tasks"), where("completed", "==", false), where("nature", "==", "Interactive"), where("dueDate", ">=", new Date()), orderBy("dueDate", "asc"));
             } else if (routineType === 'admin') {
                  baseQuery = query(collection(db, "tasks"), where("completed", "==", false), where("nature", "==", "Procedural"), orderBy("createdAt", "desc"));
             } else if (routineType === 'overdue') {
@@ -91,7 +91,7 @@ export default function ContactsFocusPage() {
 
             let newQueueItems: QueueItem[] = [];
 
-            if(routineType === 'admin' || routineType === 'overdue') {
+            if(routineType === 'admin' || routineType === 'overdue' || routineType === 'followup') {
                 const tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
                 const leadIds = [...new Set(tasks.map(t => t.leadId).filter(Boolean))];
                 
@@ -107,7 +107,7 @@ export default function ContactsFocusPage() {
                     lead: task.leadId ? leadsMap.get(task.leadId) || null : null
                 }));
 
-            } else { // 'new', 'followup', 'archived', 'enrolled', 'paused'
+            } else { // 'new', 'archived', 'enrolled', 'paused'
                  const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
                  newQueueItems = leads.map(lead => ({
                     lead,
@@ -121,7 +121,7 @@ export default function ContactsFocusPage() {
 
         } catch (error) {
             console.error("Error fetching focus data:", error);
-            toast({ variant: 'destructive', title: 'Failed to load focus queue.' });
+            toast({ variant: 'destructive', title: 'Failed to load focus queue. You may be missing a Firestore index.' });
         } finally {
             setIsLoading(false);
         }
@@ -159,7 +159,7 @@ export default function ContactsFocusPage() {
     }
     
     const handleInteractionLogged = () => {
-        if (currentItem) {
+        if (currentItem && !currentItem.task.completed) {
             handleTaskUpdate({ ...currentItem.task, completed: true });
         }
     };
