@@ -281,14 +281,15 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             # If not found by email, check by phone number
             if not existing_doc_ref and phones:
                 first_phone_number = phones[0]['number']
-                for phone_type in ["both", "calling", "chat"]:
-                    query = leads_ref.where("phones", "array_contains", {"number": first_phone_number, "type": phone_type}).limit(1)
-                    existing_docs_stream = query.stream()
-                    for doc in existing_docs_stream:
-                        existing_doc_ref = doc.reference
-                        break
-                    if existing_doc_ref:
-                        break
+                phone_query = leads_ref.where("phones", "array_contains_any", [
+                    {"number": first_phone_number, "type": "both"},
+                    {"number": first_phone_number, "type": "calling"},
+                    {"number": first_phone_number, "type": "chat"},
+                ]).limit(1)
+                existing_docs_stream = phone_query.stream()
+                for doc in existing_docs_stream:
+                    existing_doc_ref = doc.reference
+                    break
 
 
             if is_dry_run:
@@ -540,19 +541,25 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             return
             
         elif quick_log_type == "Unresponsive":
-            # This is triggered by afcDailyAdvancer, advance the step
             current_step = data_after.get("afc_step", 0)
+            has_engaged = data_after.get("hasEngaged", False)
+            
+            # If lead was engaged and unresponsive on Day 3 follow-up, set to Cooling
+            if current_step == 2 and has_engaged:
+                lead_ref.update({"status": "Cooling", "afc_step": 0})
+                print(f"Engaged lead {lead_id} unresponsive on Day 3. Status set to Cooling.")
+                return
+
             next_step = current_step + 1
             if next_step in AFC_SCHEDULE:
                 lead_ref.update({"afc_step": next_step})
                 due_date = datetime.now() + timedelta(days=AFC_SCHEDULE[next_step])
                 create_task(lead_id, lead_name, f"Day {AFC_SCHEDULE[next_step]} Follow-up", "Interactive", due_date)
-            else: # After 5th attempt
-                has_engaged = data_after.get("hasEngaged", False)
+            else: # After final attempt
                 new_status = "Cooling" if has_engaged else "Dormant"
                 lead_ref.update({"status": new_status, "afc_step": 0})
                 print(f"AFC cycle complete for {lead_id}. Status set to {new_status}.")
-            return # End here for unresponsive, don't schedule 1st follow-up
+            return
 
     # --- AFC Reset Logic for "Followup", "Unchanged", or other responsive logs ---
     reset_afc_for_engagement(lead_id, lead_name, lead_ref)
@@ -1189,8 +1196,6 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
-
-    
 
     
 
