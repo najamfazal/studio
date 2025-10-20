@@ -2,8 +2,8 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { doc, updateDoc, arrayUnion, collection, query, where, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
 import { produce } from 'immer';
 import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check, ListTodo, Clock, NotebookPen } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -31,6 +31,8 @@ import { LeadDialog } from './lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
 import { Input } from './ui/input';
 import { Calendar } from './ui/calendar';
+
+const TASK_PAGE_SIZE = 5;
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
     { value: "Followup", label: "Followup", multistep: null },
@@ -116,14 +118,112 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [isTraitPopoverOpen, setIsTraitPopoverOpen] = useState(false);
     
     const [isUpdatingTask, setIsUpdatingTask] = useState(false);
+    
+    // Task Tab State
+    const [tasksTabLoaded, setTasksTabLoaded] = useState(false);
+    const [activeTasks, setActiveTasks] = useState<Task[]>([]);
+    const [pastTasks, setPastTasks] = useState<Task[]>([]);
+    const [isTasksLoading, setIsTasksLoading] = useState(false);
+    const [lastActiveTask, setLastActiveTask] = useState<any | null>(null);
+    const [lastPastTask, setLastPastTask] = useState<any | null>(null);
+    const [hasMoreActiveTasks, setHasMoreActiveTasks] = useState(true);
+    const [hasMorePastTasks, setHasMorePastTasks] = useState(true);
 
     useEffect(() => {
         setCurrentLead(lead);
+        // Reset tasks when lead changes
+        setTasksTabLoaded(false);
+        setActiveTasks([]);
+        setPastTasks([]);
+        setLastActiveTask(null);
+        setLastPastTask(null);
+        setHasMoreActiveTasks(true);
+        setHasMorePastTasks(true);
     }, [lead]);
     
     useEffect(() => {
         setCurrentTask(task);
     }, [task]);
+
+    const fetchTasks = useCallback(async (type: 'active' | 'past', loadMore = false) => {
+        if (!currentLead?.id) return;
+        if (!loadMore) setIsTasksLoading(true);
+        
+        try {
+          const isCompleted = type === 'past';
+          const qConstraints: any[] = [
+            where('leadId', '==', currentLead.id),
+            where('completed', '==', isCompleted),
+            orderBy('createdAt', 'desc'),
+            limit(TASK_PAGE_SIZE)
+          ];
+    
+          if (loadMore) {
+            const lastVisible = type === 'active' ? lastActiveTask : lastPastTask;
+            if (lastVisible) {
+              qConstraints.push(startAfter(lastVisible));
+            }
+          }
+    
+          const q = query(collection(db, 'tasks'), ...qConstraints);
+          const snapshot = await getDocs(q);
+          const newTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+          
+          const newLastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
+    
+          if (type === 'active') {
+            setHasMoreActiveTasks(newTasks.length === TASK_PAGE_SIZE);
+            setLastActiveTask(newLastVisible);
+            setActiveTasks(prev => loadMore ? [...prev, ...newTasks] : newTasks);
+          } else {
+            setHasMorePastTasks(newTasks.length === TASK_PAGE_SIZE);
+            setLastPastTask(newLastVisible);
+            setPastTasks(prev => loadMore ? [...prev, ...newTasks] : newTasks);
+          }
+        } catch (error) {
+          console.error(`Error fetching ${type} tasks:`, error);
+          toast({ variant: "destructive", title: `Failed to load ${type} tasks.` });
+        } finally {
+          setIsTasksLoading(false);
+        }
+      }, [currentLead?.id, toast, lastActiveTask, lastPastTask]);
+    
+    const refreshTasks = useCallback(() => {
+        setLastActiveTask(null);
+        setLastPastTask(null);
+        fetchTasks('active');
+        fetchTasks('past');
+    }, [fetchTasks]);
+
+    useEffect(() => {
+        if (tasksTabLoaded) {
+            refreshTasks();
+        }
+    }, [tasksTabLoaded, refreshTasks]);
+
+    const handleTabChange = (value: string) => {
+        if (value === 'tasks' && !tasksTabLoaded) {
+          setTasksTabLoaded(true);
+        }
+    };
+
+    const handleTaskCompletionInTab = async (task: Task, isCompleted: boolean) => {
+        try {
+          await updateDoc(doc(db, 'tasks', task.id), { completed: isCompleted });
+          
+          if (isCompleted) {
+            setActiveTasks(prev => prev.filter(t => t.id !== task.id));
+            setPastTasks(prev => [{...task, completed: true}, ...prev]);
+          } else {
+            setPastTasks(prev => prev.filter(t => t.id !== task.id));
+            setActiveTasks(prev => [{...task, completed: false}, ...prev]);
+          }
+          toast({title: `Task marked as ${isCompleted ? 'complete' : 'active'}.`});
+        } catch (e) {
+          toast({variant: 'destructive', title: 'Failed to update task status.'});
+        }
+    }
+
 
     const sortedInteractions = useMemo(() => {
         if (!currentLead) return [];
@@ -475,11 +575,12 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </div>
             )}
             
-            <Tabs defaultValue="snapshot" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 h-9">
+            <Tabs defaultValue="snapshot" className="w-full" onValueChange={handleTabChange}>
+                <TabsList className="grid w-full grid-cols-4 h-9">
                     <TabsTrigger value="snapshot" className="h-7 text-xs">Snapshot</TabsTrigger>
                     <TabsTrigger value="log" className="h-7 text-xs">Log</TabsTrigger>
                     <TabsTrigger value="history" className="h-7 text-xs">History</TabsTrigger>
+                    <TabsTrigger value="tasks" className="h-7 text-xs">Tasks</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="snapshot" className="mt-3 space-y-3">
@@ -739,6 +840,54 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                         </CardContent>
                      </Card>
                 </TabsContent>
+                <TabsContent value="tasks" className="mt-3 space-y-3">
+                    <Card>
+                        <CardHeader className="p-2"><CardTitle className="text-sm font-semibold">Active Tasks</CardTitle></CardHeader>
+                        <CardContent className="p-2 pt-0">
+                        {isTasksLoading && activeTasks.length === 0 && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
+                        {activeTasks.length > 0 && (
+                            <div className="space-y-2">
+                            {activeTasks.map(task => (
+                                <div key={task.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                                <button onClick={() => handleTaskCompletionInTab(task, true)} className="flex items-center justify-center h-5 w-5 rounded-full border-2 border-muted-foreground/50 hover:border-primary shrink-0" />
+                                <p className="flex-1 text-sm">{task.description}</p>
+                                {task.dueDate && <p className="text-xs text-muted-foreground">{format(toDate(task.dueDate)!, 'MMM d')}</p>}
+                                </div>
+                            ))}
+                            </div>
+                        )}
+                        {!isTasksLoading && activeTasks.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">No active tasks.</p>}
+                        {hasMoreActiveTasks && !isTasksLoading && (
+                            <div className="flex justify-center mt-4">
+                            <Button variant="outline" size="sm" onClick={() => fetchTasks('active', true)} disabled={isTasksLoading}>Load More</Button>
+                            </div>
+                        )}
+                        </CardContent>
+                    </Card>
+                     <Card>
+                        <CardHeader className="p-2"><CardTitle className="text-sm font-semibold">Past Tasks</CardTitle></CardHeader>
+                        <CardContent className="p-2 pt-0">
+                        {isTasksLoading && pastTasks.length === 0 && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
+                        {pastTasks.length > 0 && (
+                            <div className="space-y-2">
+                            {pastTasks.map(task => (
+                                <div key={task.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                                <button onClick={() => handleTaskCompletionInTab(task, false)} className="flex items-center justify-center h-5 w-5 rounded-full border-2 bg-primary border-primary text-primary-foreground shrink-0"><Check className="h-4 w-4"/></button>
+                                <p className="flex-1 text-sm text-muted-foreground line-through">{task.description}</p>
+                                {task.dueDate && <p className="text-xs text-muted-foreground">{format(toDate(task.dueDate)!, 'MMM d')}</p>}
+                                </div>
+                            ))}
+                            </div>
+                        )}
+                        {!isTasksLoading && pastTasks.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">No past tasks.</p>}
+                        {hasMorePastTasks && !isTasksLoading && (
+                            <div className="flex justify-center mt-4">
+                            <Button variant="outline" size="sm" onClick={() => fetchTasks('past', true)} disabled={isTasksLoading}>Load More</Button>
+                            </div>
+                        )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
             </Tabs>
 
             <DateTimePicker isOpen={isDateTimePickerOpen} onClose={() => setIsDateTimePickerOpen(false)} onSelect={dateTimePickerCallback} initialDate={dateTimePickerValue} />
@@ -779,3 +928,5 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         </div>
     );
 }
+
+    

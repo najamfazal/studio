@@ -67,7 +67,7 @@ export default function ContactsFocusPage() {
             }
 
             if (routineType === 'new') {
-                baseQuery = query(collection(db, "leads"), where("afc_step", "==", 0), orderBy("assignedAt", "desc"));
+                baseQuery = query(collection(db, "leads"), where("afc_step", "==", 0), where("status", "==", "Active"), orderBy("assignedAt", "desc"));
             } else if (routineType === 'followup') {
                 baseQuery = query(collection(db, "leads"), where("afc_step", ">", 0), orderBy("afc_step", "asc"));
             } else if (routineType === 'admin') {
@@ -275,6 +275,8 @@ export default function ContactsFocusPage() {
         </div>
     );
 }
+
+    
 
     
 
