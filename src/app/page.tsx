@@ -14,7 +14,7 @@ import {
 import Link from 'next/link';
 import { unstable_noStore as noStore } from 'next/cache';
 import { addDays, format, isPast, isSameDay, isToday, startOfToday } from "date-fns";
-import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen, Flame, Sparkles, Zap, Loader2 } from "lucide-react";
+import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen, Flame, Sparkles, Zap, Loader2, Archive } from "lucide-react";
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -43,22 +43,25 @@ async function getDashboardData(userId: string) {
     const tasksRef = collection(db, "tasks");
 
     // Queries for counts
-    const newLeadsQuery = query(leadsRef, where("afc_step", "==", 0));
+    const newLeadsQuery = query(leadsRef, where("afc_step", "==", 0), where("status", "==", "Active"));
     const followupLeadsQuery = query(leadsRef, where("afc_step", ">", 0));
     const adminTasksQuery = query(tasksRef, where("completed", "==", false), where("nature", "==", "Procedural"));
     const overdueTasksQuery = query(tasksRef, where("completed", "==", false), where("dueDate", "<", new Date()));
+    const withdrawnLeadsQuery = query(leadsRef, where("status", "==", "Withdrawn"));
 
     // Fetch counts using aggregation
     const [
         newLeadsSnapshot,
         followupLeadsSnapshot,
         adminTasksSnapshot,
-        overdueTasksSnapshot
+        overdueTasksSnapshot,
+        withdrawnLeadsSnapshot,
     ] = await Promise.all([
         getCountFromServer(newLeadsQuery),
         getCountFromServer(followupLeadsQuery),
         getCountFromServer(adminTasksQuery),
-        getCountFromServer(overdueTasksQuery)
+        getCountFromServer(overdueTasksQuery),
+        getCountFromServer(withdrawnLeadsQuery),
     ]).catch(serverError => {
         if (serverError.code === 'permission-denied') {
             throw new FirestorePermissionError({ path: 'leads or tasks', operation: 'list' });
@@ -70,12 +73,14 @@ async function getDashboardData(userId: string) {
     const followupLeadsCount = followupLeadsSnapshot.data().count;
     const adminTasksCount = adminTasksSnapshot.data().count;
     const overdueTasksCount = overdueTasksSnapshot.data().count;
+    const withdrawnLeadsCount = withdrawnLeadsSnapshot.data().count;
 
     return {
       newLeadsCount,
       followupLeadsCount,
       adminTasksCount,
       overdueTasksCount,
+      withdrawnLeadsCount,
     };
 
   } catch (e) {
@@ -88,6 +93,7 @@ async function getDashboardData(userId: string) {
       followupLeadsCount: 0,
       adminTasksCount: 0,
       overdueTasksCount: 0,
+      withdrawnLeadsCount: 0,
     };
   }
 }
@@ -98,6 +104,7 @@ interface DashboardData {
     followupLeadsCount: number;
     adminTasksCount: number;
     overdueTasksCount: number;
+    withdrawnLeadsCount: number;
 }
 
 
@@ -128,7 +135,7 @@ export default function RoutinesPage() {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  const { newLeadsCount, followupLeadsCount, adminTasksCount, overdueTasksCount } = dashboardData;
+  const { newLeadsCount, followupLeadsCount, adminTasksCount, overdueTasksCount, withdrawnLeadsCount } = dashboardData;
 
   return (
      <div className="flex flex-col min-h-screen bg-background">
@@ -154,7 +161,7 @@ export default function RoutinesPage() {
       </header>
 
        <main className="flex-1 p-4 space-y-4">
-        {newLeadsCount === 0 && followupLeadsCount === 0 && adminTasksCount === 0 ? (
+        {newLeadsCount === 0 && followupLeadsCount === 0 && adminTasksCount === 0 && withdrawnLeadsCount === 0 ? (
            <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
@@ -224,6 +231,28 @@ export default function RoutinesPage() {
                       </div>
                        <Button size="xs" variant="secondary">
                         Start
+                        <ArrowRight className="h-4 w-4 ml-1"/>
+                      </Button>
+                    </CardHeader>
+                  </Card>
+                 </Link>
+              </section>
+            )}
+
+            {withdrawnLeadsCount > 0 && (
+              <section>
+                 <Link href={`/contacts/focus/withdrawn`}>
+                  <Card className="bg-card hover:bg-muted/50 transition-colors">
+                    <CardHeader className="flex-row items-center justify-between p-3">
+                      <div className="flex items-center gap-3">
+                        <Archive className="h-5 w-5 text-muted-foreground"/>
+                        <div>
+                          <CardTitle className="text-base">Archived</CardTitle>
+                          <CardDescription className="text-xs">{withdrawnLeadsCount} withdrawn contacts</CardDescription>
+                        </div>
+                      </div>
+                       <Button size="xs" variant="secondary">
+                        View
                         <ArrowRight className="h-4 w-4 ml-1"/>
                       </Button>
                     </CardHeader>
