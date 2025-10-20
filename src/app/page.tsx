@@ -14,7 +14,7 @@ import {
 import Link from 'next/link';
 import { unstable_noStore as noStore } from 'next/cache';
 import { addDays, format, isPast, isSameDay, isToday, startOfToday } from "date-fns";
-import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen, Flame, Sparkles, Zap, Loader2, Archive } from "lucide-react";
+import { AlertTriangle, Plus, ListTodo, ArrowRight, User, Users, Calendar, NotebookPen, Flame, Sparkles, Zap, Loader2, Archive, GraduationCap, PauseCircle } from "lucide-react";
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -44,10 +44,13 @@ async function getDashboardData(userId: string) {
 
     // Queries for counts
     const newLeadsQuery = query(leadsRef, where("afc_step", "==", 0), where("status", "==", "Active"));
-    const followupLeadsQuery = query(leadsRef, where("afc_step", ">", 0));
+    const followupLeadsQuery = query(leadsRef, where("afc_step", ">", 0), where("status", "==", "Active"));
     const adminTasksQuery = query(tasksRef, where("completed", "==", false), where("nature", "==", "Procedural"));
     const overdueTasksQuery = query(tasksRef, where("completed", "==", false), where("dueDate", "<", new Date()));
-    const withdrawnLeadsQuery = query(leadsRef, where("status", "==", "Withdrawn"));
+    
+    const enrolledLeadsQuery = query(leadsRef, where("status", "==", "Enrolled"));
+    const pausedLeadsQuery = query(leadsRef, where("status", "in", ["Cooling", "Snoozed", "Paused"]));
+    const archivedLeadsQuery = query(leadsRef, where("status", "in", ["Withdrawn", "Archived", "Dormant"]));
 
     // Fetch counts using aggregation
     const [
@@ -55,13 +58,17 @@ async function getDashboardData(userId: string) {
         followupLeadsSnapshot,
         adminTasksSnapshot,
         overdueTasksSnapshot,
-        withdrawnLeadsSnapshot,
+        enrolledLeadsSnapshot,
+        pausedLeadsSnapshot,
+        archivedLeadsSnapshot,
     ] = await Promise.all([
         getCountFromServer(newLeadsQuery),
         getCountFromServer(followupLeadsQuery),
         getCountFromServer(adminTasksQuery),
         getCountFromServer(overdueTasksQuery),
-        getCountFromServer(withdrawnLeadsQuery),
+        getCountFromServer(enrolledLeadsQuery),
+        getCountFromServer(pausedLeadsQuery),
+        getCountFromServer(archivedLeadsQuery),
     ]).catch(serverError => {
         if (serverError.code === 'permission-denied') {
             throw new FirestorePermissionError({ path: 'leads or tasks', operation: 'list' });
@@ -69,18 +76,14 @@ async function getDashboardData(userId: string) {
         throw serverError;
     });
 
-    const newLeadsCount = newLeadsSnapshot.data().count;
-    const followupLeadsCount = followupLeadsSnapshot.data().count;
-    const adminTasksCount = adminTasksSnapshot.data().count;
-    const overdueTasksCount = overdueTasksSnapshot.data().count;
-    const withdrawnLeadsCount = withdrawnLeadsSnapshot.data().count;
-
     return {
-      newLeadsCount,
-      followupLeadsCount,
-      adminTasksCount,
-      overdueTasksCount,
-      withdrawnLeadsCount,
+      newLeadsCount: newLeadsSnapshot.data().count,
+      followupLeadsCount: followupLeadsSnapshot.data().count,
+      adminTasksCount: adminTasksSnapshot.data().count,
+      overdueTasksCount: overdueTasksSnapshot.data().count,
+      enrolledLeadsCount: enrolledLeadsSnapshot.data().count,
+      pausedLeadsCount: pausedLeadsSnapshot.data().count,
+      archivedLeadsCount: archivedLeadsSnapshot.data().count,
     };
 
   } catch (e) {
@@ -93,7 +96,9 @@ async function getDashboardData(userId: string) {
       followupLeadsCount: 0,
       adminTasksCount: 0,
       overdueTasksCount: 0,
-      withdrawnLeadsCount: 0,
+      enrolledLeadsCount: 0,
+      pausedLeadsCount: 0,
+      archivedLeadsCount: 0,
     };
   }
 }
@@ -104,7 +109,9 @@ interface DashboardData {
     followupLeadsCount: number;
     adminTasksCount: number;
     overdueTasksCount: number;
-    withdrawnLeadsCount: number;
+    enrolledLeadsCount: number;
+    pausedLeadsCount: number;
+    archivedLeadsCount: number;
 }
 
 
@@ -135,7 +142,17 @@ export default function RoutinesPage() {
     return <div className="flex h-screen items-center justify-center"><Logo className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  const { newLeadsCount, followupLeadsCount, adminTasksCount, overdueTasksCount, withdrawnLeadsCount } = dashboardData;
+  const { 
+    newLeadsCount, 
+    followupLeadsCount, 
+    adminTasksCount, 
+    overdueTasksCount,
+    enrolledLeadsCount,
+    pausedLeadsCount,
+    archivedLeadsCount
+  } = dashboardData;
+
+  const totalTasks = newLeadsCount + followupLeadsCount + adminTasksCount + enrolledLeadsCount + pausedLeadsCount + archivedLeadsCount;
 
   return (
      <div className="flex flex-col min-h-screen bg-background">
@@ -161,7 +178,7 @@ export default function RoutinesPage() {
       </header>
 
        <main className="flex-1 p-4 space-y-4">
-        {newLeadsCount === 0 && followupLeadsCount === 0 && adminTasksCount === 0 && withdrawnLeadsCount === 0 ? (
+        {totalTasks === 0 ? (
            <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
             <h2 className="text-2xl font-semibold text-foreground">
@@ -217,6 +234,28 @@ export default function RoutinesPage() {
               </section>
             )}
 
+            {enrolledLeadsCount > 0 && (
+              <section>
+                 <Link href={`/contacts/focus/enrolled`}>
+                  <Card className="bg-card hover:bg-muted/50 transition-colors">
+                    <CardHeader className="flex-row items-center justify-between p-3">
+                      <div className="flex items-center gap-3">
+                        <GraduationCap className="h-5 w-5 text-muted-foreground"/>
+                        <div>
+                          <CardTitle className="text-base">Enrolled</CardTitle>
+                          <CardDescription className="text-xs">{enrolledLeadsCount} active learners</CardDescription>
+                        </div>
+                      </div>
+                       <Button size="xs" variant="secondary">
+                        View
+                        <ArrowRight className="h-4 w-4 ml-1"/>
+                      </Button>
+                    </CardHeader>
+                  </Card>
+                 </Link>
+              </section>
+            )}
+
             {adminTasksCount > 0 && (
               <section>
                  <Link href={`/contacts/focus/admin`}>
@@ -238,17 +277,39 @@ export default function RoutinesPage() {
                  </Link>
               </section>
             )}
-
-            {withdrawnLeadsCount > 0 && (
+            
+            {pausedLeadsCount > 0 && (
               <section>
-                 <Link href={`/contacts/focus/withdrawn`}>
+                 <Link href={`/contacts/focus/paused`}>
+                  <Card className="bg-card hover:bg-muted/50 transition-colors">
+                    <CardHeader className="flex-row items-center justify-between p-3">
+                      <div className="flex items-center gap-3">
+                        <PauseCircle className="h-5 w-5 text-muted-foreground"/>
+                        <div>
+                          <CardTitle className="text-base">Paused</CardTitle>
+                          <CardDescription className="text-xs">{pausedLeadsCount} cooling or snoozed contacts</CardDescription>
+                        </div>
+                      </div>
+                       <Button size="xs" variant="secondary">
+                        Review
+                        <ArrowRight className="h-4 w-4 ml-1"/>
+                      </Button>
+                    </CardHeader>
+                  </Card>
+                 </Link>
+              </section>
+            )}
+
+            {archivedLeadsCount > 0 && (
+              <section>
+                 <Link href={`/contacts/focus/archived`}>
                   <Card className="bg-card hover:bg-muted/50 transition-colors">
                     <CardHeader className="flex-row items-center justify-between p-3">
                       <div className="flex items-center gap-3">
                         <Archive className="h-5 w-5 text-muted-foreground"/>
                         <div>
                           <CardTitle className="text-base">Archived</CardTitle>
-                          <CardDescription className="text-xs">{withdrawnLeadsCount} withdrawn contacts</CardDescription>
+                          <CardDescription className="text-xs">{archivedLeadsCount} inactive contacts</CardDescription>
                         </div>
                       </div>
                        <Button size="xs" variant="secondary">

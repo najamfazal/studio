@@ -70,13 +70,17 @@ export default function ContactsFocusPage() {
             if (routineType === 'new') {
                 baseQuery = query(collection(db, "leads"), where("afc_step", "==", 0), where("status", "==", "Active"), orderBy("assignedAt", "desc"));
             } else if (routineType === 'followup') {
-                baseQuery = query(collection(db, "leads"), where("afc_step", ">", 0), orderBy("afc_step", "asc"));
+                baseQuery = query(collection(db, "leads"), where("afc_step", ">", 0), where("status", "==", "Active"), orderBy("afc_step", "asc"));
             } else if (routineType === 'admin') {
                  baseQuery = query(collection(db, "tasks"), where("completed", "==", false), where("nature", "==", "Procedural"), orderBy("createdAt", "desc"));
             } else if (routineType === 'overdue') {
                  baseQuery = query(collection(db, "tasks"), where("completed", "==", false), where("dueDate", "<", new Date()), orderBy("dueDate", "asc"));
-            } else if (routineType === 'withdrawn') {
-                baseQuery = query(collection(db, "leads"), where("status", "==", "Withdrawn"), orderBy("last_interaction_date", "desc"));
+            } else if (routineType === 'archived') {
+                baseQuery = query(collection(db, "leads"), where("status", "in", ["Withdrawn", "Archived", "Dormant"]), orderBy("last_interaction_date", "desc"));
+            } else if (routineType === 'enrolled') {
+                baseQuery = query(collection(db, "leads"), where("status", "==", "Enrolled"), orderBy("last_interaction_date", "desc"));
+            } else if (routineType === 'paused') {
+                baseQuery = query(collection(db, "leads"), where("status", "in", ["Cooling", "Snoozed", "Paused"]), orderBy("last_interaction_date", "desc"));
             } else {
                 toast({ variant: 'destructive', title: 'Unknown routine type.' });
                 return;
@@ -103,7 +107,7 @@ export default function ContactsFocusPage() {
                     lead: task.leadId ? leadsMap.get(task.leadId) || null : null
                 }));
 
-            } else { // 'new', 'followup' or 'withdrawn'
+            } else { // 'new', 'followup', 'archived', 'enrolled', 'paused'
                  const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
                  newQueueItems = leads.map(lead => ({
                     lead,
