@@ -84,15 +84,20 @@ export function TodaysAgenda() {
                     }
                 });
 
-                // 3. Fetch lead details for tasks if needed
+                // 3. Fetch lead details for tasks if needed, in batches of 30
                 const leadsMap = new Map<string, Lead>();
-                 if (leadIds.size > 0) {
-                     const leadsDataQuery = query(collection(db, "leads"), where('__name__', 'in', Array.from(leadIds)));
-                     const leadsDataSnapshot = await getDocs(leadsDataQuery);
-                     leadsDataSnapshot.forEach(doc => {
-                         leadsMap.set(doc.id, { id: doc.id, ...doc.data() } as Lead);
-                     });
-                 }
+                const allLeadIds = Array.from(leadIds);
+
+                for (let i = 0; i < allLeadIds.length; i += 30) {
+                    const batchIds = allLeadIds.slice(i, i + 30);
+                    if (batchIds.length > 0) {
+                        const leadsDataQuery = query(collection(db, "leads"), where('__name__', 'in', batchIds));
+                        const leadsDataSnapshot = await getDocs(leadsDataQuery);
+                        leadsDataSnapshot.forEach(doc => {
+                            leadsMap.set(doc.id, { id: doc.id, ...doc.data() } as Lead);
+                        });
+                    }
+                }
                 
                 // 4. Combine and format
                 const taskItems: AgendaItem[] = callbackTasks.map(task => ({
