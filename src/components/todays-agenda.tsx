@@ -49,7 +49,8 @@ export function TodaysAgenda() {
                 const tasksSnapshot = await getDocs(tasksQuery);
                 const callbackTasks = tasksSnapshot.docs
                     .map(doc => doc.data() as Task)
-                    .filter(task => task.description.toLowerCase().includes('callback') || task.description.toLowerCase().includes('follow-up'));
+                    // Only include tasks specifically created as "Scheduled Follow-up"
+                    .filter(task => task.description === 'Scheduled Follow-up');
 
                 const leadIds = new Set<string>();
                 callbackTasks.forEach(task => {
