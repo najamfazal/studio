@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/icons";
 import { errorEmitter } from "@/lib/error-emitter";
 import { FirestorePermissionError } from "@/lib/errors";
+import { TodaysAgenda } from "@/components/todays-agenda";
 
 async function getDashboardData(userId: string) {
   noStore();
@@ -44,7 +45,7 @@ async function getDashboardData(userId: string) {
 
     // Queries for counts
     const newLeadsQuery = query(leadsRef, where("afc_step", "==", 0), where("status", "==", "Active"));
-    const followupLeadsQuery = query(leadsRef, where("afc_step", ">", 0), where("status", "==", "Active"));
+    const followupTasksQuery = query(tasksRef, where("completed", "==", false), where("nature", "==", "Interactive"));
     const adminTasksQuery = query(tasksRef, where("completed", "==", false), where("nature", "==", "Procedural"));
     const overdueTasksQuery = query(tasksRef, where("completed", "==", false), where("dueDate", "<", new Date()));
     
@@ -55,7 +56,7 @@ async function getDashboardData(userId: string) {
     // Fetch counts using aggregation
     const [
         newLeadsSnapshot,
-        followupLeadsSnapshot,
+        followupTasksSnapshot,
         adminTasksSnapshot,
         overdueTasksSnapshot,
         enrolledLeadsSnapshot,
@@ -63,7 +64,7 @@ async function getDashboardData(userId: string) {
         archivedLeadsSnapshot,
     ] = await Promise.all([
         getCountFromServer(newLeadsQuery),
-        getCountFromServer(followupLeadsQuery),
+        getCountFromServer(followupTasksQuery),
         getCountFromServer(adminTasksQuery),
         getCountFromServer(overdueTasksQuery),
         getCountFromServer(enrolledLeadsQuery),
@@ -78,7 +79,7 @@ async function getDashboardData(userId: string) {
 
     return {
       newLeadsCount: newLeadsSnapshot.data().count,
-      followupLeadsCount: followupLeadsSnapshot.data().count,
+      followupLeadsCount: followupTasksSnapshot.data().count,
       adminTasksCount: adminTasksSnapshot.data().count,
       overdueTasksCount: overdueTasksSnapshot.data().count,
       enrolledLeadsCount: enrolledLeadsSnapshot.data().count,
@@ -178,6 +179,8 @@ export default function RoutinesPage() {
       </header>
 
        <main className="flex-1 p-4 space-y-4">
+        <TodaysAgenda />
+        
         {totalTasks === 0 ? (
            <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
             <ListTodo className="h-16 w-16 mb-4" />
