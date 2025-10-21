@@ -154,7 +154,7 @@ export function TodaysAgenda() {
             <h3 className="font-semibold text-sm mb-3">Today&apos;s Agenda</h3>
             <div className="space-y-4">
                 {visibleItems.map((item, index) => (
-                    <div key={item.id} className="flex items-start">
+                    <div key={`${item.id}-${item.time.toISOString()}`} className="flex items-start">
                         <div className="flex flex-col items-center mr-3">
                            <div className="text-xs font-bold text-primary">{format(item.time, 'h:mm')}</div>
                            <div className="text-xs text-primary/80 -mt-1">{format(item.time, 'a')}</div>
