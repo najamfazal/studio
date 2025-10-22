@@ -17,6 +17,31 @@ export type LeadStatus =
   | 'Archived'
   | 'Graduated';
 
+// New, more flexible structure for quotes
+export type PriceVariant = {
+  id: string;
+  mode: 'Online' | 'In-person';
+  format: '1-1' | 'Batch';
+  price: number;
+}
+
+export type QuoteLine = {
+  id: string;
+  courses: string[]; // e.g., ["PowerBI", "SQL"] or just ["Data Analytics"]
+  variants: PriceVariant[];
+}
+
+
+export type CommitmentSnapshot = {
+  // `deals` is deprecated, will be migrated to `quoteLines`
+  deals?: Deal[]; 
+  quoteLines?: QuoteLine[];
+  schedule?: string;
+  keyNotes?: string;
+  paymentPlan?: string;
+};
+
+// Deprecated, will be removed after migration
 export type Deal = {
   id: string;
   courses: string[];
@@ -24,13 +49,6 @@ export type Deal = {
   mode: 'Online' | 'In-person';
   format: '1-1' | 'Batch';
 }
-
-export type CommitmentSnapshot = {
-  deals?: Deal[];
-  schedule?: string;
-  keyNotes?: string;
-  paymentPlan?: string;
-};
 
 export type PhoneNumber = {
   number: string;
@@ -149,10 +167,11 @@ export type Task = {
   nature: TaskNature;
 };
 
+// Main application settings, stored in `settings/appConfig`
 export type AppSettings = {
   id?: string;
   relationshipTypes: string[];
-  courseNames: string[];
+  courseNames: string[]; // Maintained for DealDialog backwards compatibility for a bit, and for new course creation
   commonTraits: string[];
   withdrawalReasons: string[];
   trainers: string[];
@@ -165,6 +184,21 @@ export type AppSettings = {
   };
   theme?: ThemeSettings;
   logAnalysisPrompt?: string;
+}
+
+// New type for the Sales Catalog
+export type CatalogCourse = {
+  id: string;
+  name: string; // e.g. "Data Analytics"
+  isBundle: boolean; // Is this a package of other courses?
+  includedCourses: string[]; // e.g. ["PowerBI", "SQL", "Python"]
+  valueProposition: string;
+  standardPrices: PriceVariant[];
+}
+
+export type SalesCatalog = {
+  id?: string;
+  courses: CatalogCourse[];
 }
 
 export type CourseRevenueData = {

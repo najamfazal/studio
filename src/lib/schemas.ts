@@ -26,6 +26,8 @@ export const leadSchema = z.object({
 
 export type LeadFormValues = z.infer<typeof leadSchema>;
 
+
+// The old "Deal" schema, kept for backwards compatibility in the dialog if needed.
 export const dealSchema = z.object({
   id: z.string(),
   courses: z.array(z.string()).min(1, "At least one course is required."),
@@ -33,7 +35,22 @@ export const dealSchema = z.object({
   mode: z.enum(["Online", "In-person"]),
   format: z.enum(["1-1", "Batch"]),
 });
-
 export type DealFormValues = z.infer<typeof dealSchema>;
 
-    
+
+// New Schemas for the Quoting System
+export const priceVariantSchema = z.object({
+  id: z.string(),
+  mode: z.enum(["Online", "In-person"]),
+  format: z.enum(["1-1", "Batch"]),
+  price: z.number().min(0, "Price must be a non-negative number."),
+});
+
+export const quoteLineSchema = z.object({
+  id: z.string(),
+  courses: z.array(z.string()).min(1, "At least one course must be selected."),
+  variants: z.array(priceVariantSchema).min(1, "At least one price variant is required."),
+});
+
+export type PriceVariantFormValues = z.infer<typeof priceVariantSchema>;
+export type QuoteLineFormValues = z.infer<typeof quoteLineSchema>;

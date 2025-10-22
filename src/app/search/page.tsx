@@ -13,16 +13,18 @@ import {
   GitMerge,
   FilePenLine,
 } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
 
 import { searchLeadsAction, deleteLeadAction, mergeLeadsAction } from '@/app/actions';
-import type { Lead, AppSettings } from '@/lib/types';
+import type { Lead, AppSettings, SalesCatalog } from '@/lib/types';
+import { db } from '@/lib/firebase';
+import { useToast } from '@/hooks/use-toast';
+
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
 import { ContactDetailView } from '@/components/contact-detail-view';
-import { useToast } from '@/hooks/use-toast';
-import { getDoc, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +38,6 @@ import {
 import { LeadDialog } from '@/components/lead-dialog';
 import { MergeDialog } from '@/components/merge-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Card } from '@/components/ui/card';
 
 export default function SearchPage() {
   const router = useRouter();
@@ -52,6 +53,7 @@ export default function SearchPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isLoadingLead, setIsLoadingLead] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [salesCatalog, setSalesCatalog] = useState<SalesCatalog | null>(null);
   
   const [leadToDelete, setLeadToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -85,9 +87,10 @@ export default function SearchPage() {
   useEffect(() => {
     if (!appSettings) {
         getDoc(doc(db, 'settings', 'appConfig')).then(docSnap => {
-            if(docSnap.exists()) {
-                setAppSettings(docSnap.data() as AppSettings)
-            }
+            if(docSnap.exists()) setAppSettings(docSnap.data() as AppSettings)
+        });
+        getDoc(doc(db, 'settings', 'salesCatalog')).then(docSnap => {
+            if(docSnap.exists()) setSalesCatalog(docSnap.data() as SalesCatalog)
         });
     }
   }, [appSettings]);
@@ -223,6 +226,7 @@ export default function SearchPage() {
              <ContactDetailView 
                 lead={selectedLead} 
                 appSettings={appSettings}
+                salesCatalog={salesCatalog}
                 onLeadUpdate={handleLeadUpdate}
             />
         ) : isSearching ? (
