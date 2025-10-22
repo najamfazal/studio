@@ -50,11 +50,6 @@ export function TodaysAgenda() {
 
                 const eventsQuery = query(
                     collection(db, "leads"),
-                    where("interactions", "array-contains-any", [
-                        // This is a workaround as Firestore doesn't support querying nested fields inside arrays effectively.
-                        // This will fetch more than needed, but we'll filter client-side.
-                        // For a large dataset, this should be optimized with a separate 'events' collection.
-                    ])
                 );
                  const leadsSnapshotForEvents = await getDocs(eventsQuery);
                  let eventsCount = 0;
@@ -110,7 +105,7 @@ export function TodaysAgenda() {
                 if (task.leadId) leadIds.add(task.leadId);
             });
 
-            const eventsQuery = query(collection(db, "leads"), where("interactions", "!=", []));
+            const eventsQuery = query(collection(db, "leads"));
             const leadsSnapshot = await getDocs(eventsQuery);
             
             const scheduledEvents: AgendaItem[] = [];
@@ -125,7 +120,7 @@ export function TodaysAgenda() {
                 }).map(i => {
                     if (lead.id) leadIds.add(lead.id);
                     return {
-                        id: `${i.id}-${i.eventDetails!.dateTime}`,
+                        id: `${i.id}-${toDate(i.eventDetails!.dateTime)?.toISOString()}`,
                         time: toDate(i.eventDetails!.dateTime)!,
                         type: i.eventDetails!.type || "Event",
                         leadId: lead.id,
@@ -138,13 +133,15 @@ export function TodaysAgenda() {
             const leadsMap = new Map<string, Lead>();
             const allLeadIds = Array.from(leadIds);
 
-            for (let i = 0; i < allLeadIds.length; i += 30) {
-                const batchIds = allLeadIds.slice(i, i + 30);
-                if (batchIds.length > 0) {
-                    const leadsDataQuery = query(collection(db, "leads"), where('__name__', 'in', batchIds));
-                    const leadsDataSnapshot = await getDocs(leadsDataQuery);
-                    leadsDataSnapshot.forEach(doc => leadsMap.set(doc.id, { id: doc.id, ...doc.data() } as Lead));
-                }
+            if (allLeadIds.length > 0) {
+              for (let i = 0; i < allLeadIds.length; i += 30) {
+                  const batchIds = allLeadIds.slice(i, i + 30);
+                  if (batchIds.length > 0) {
+                      const leadsDataQuery = query(collection(db, "leads"), where('__name__', 'in', batchIds));
+                      const leadsDataSnapshot = await getDocs(leadsDataQuery);
+                      leadsDataSnapshot.forEach(doc => leadsMap.set(doc.id, { id: doc.id, ...doc.data() } as Lead));
+                  }
+              }
             }
             
             const taskItems: AgendaItem[] = callbackTasks.map(task => ({
@@ -188,6 +185,9 @@ export function TodaysAgenda() {
             </div>
         );
     }
+    
+    const initialVisibleItems = isExpanded ? detailedAgendaItems : detailedAgendaItems.filter(item => isAfter(item.time, addHours(new Date(), -1)) && isAfter(item.time, new Date()) && isAfter(addHours(new Date(), 3), item.time));
+    const hasMoreItems = detailedAgendaItems.length > initialVisibleItems.length;
 
     return (
         <div className="p-4 rounded-lg border bg-card">
@@ -196,7 +196,7 @@ export function TodaysAgenda() {
                  <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 text-sm">
                         <span>{counts.events} Events</span>
-                        <Separator orientation="vertical" className="h-4" />
+                        <span className="text-muted-foreground">|</span>
                         <span>{counts.callbacks} Callbacks</span>
                     </div>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
