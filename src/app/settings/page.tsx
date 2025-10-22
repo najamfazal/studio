@@ -4,26 +4,27 @@
 import { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { AppSettings, ThemeSettings } from '@/lib/types';
+import type { AppSettings, ThemeSettings, SalesCatalog } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Plus, Settings, Trash2, X, Pencil, Check } from 'lucide-react';
+import { Loader2, Plus, Settings, Trash2, X, Pencil, Check, DatabaseZap } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { reindexLeadsAction } from '@/app/actions';
+import { reindexLeadsAction, migrateDealsToQuotesAction } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
 import { errorEmitter } from '@/lib/error-emitter';
 import { FirestorePermissionError } from '@/lib/errors';
+import { SalesCatalogManager } from '@/components/sales-catalog-manager';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
-type AppSettingsField = 'courseNames' | 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions';
+type AppSettingsField = 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions';
 
 const colorPalettes: { name: string; colors: ThemeSettings }[] = [
     { name: 'Default', colors: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' } },
@@ -40,7 +41,6 @@ export default function SettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
 
-    const [newCourseName, setNewCourseName] = useState("");
     const [newTrait, setNewTrait] = useState("");
     const [newWithdrawalReason, setNewWithdrawalReason] = useState("");
     const [newRelationshipType, setNewRelationshipType] = useState("");
@@ -51,6 +51,7 @@ export default function SettingsPage() {
 
     const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
     const [isReindexing, setIsReindexing] = useState(false);
+    const [isMigrating, setIsMigrating] = useState(false);
 
 
     const fetchSettings = useCallback(async () => {
@@ -62,7 +63,6 @@ export default function SettingsPage() {
                 const data = settingsDoc.data();
                 const defaultTheme = { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' };
                 const completeSettings: AppSettings = {
-                    courseNames: data.courseNames || [],
                     commonTraits: data.commonTraits || [],
                     withdrawalReasons: data.withdrawalReasons || [],
                     relationshipTypes: data.relationshipTypes || ['Lead', 'Learner'],
@@ -76,7 +76,6 @@ export default function SettingsPage() {
                 setSettings(completeSettings);
             } else {
                 const defaultSettings: AppSettings = {
-                    courseNames: ["Example Course 1", "Example Course 2"],
                     commonTraits: ["Decisive", "Budget-conscious"],
                     withdrawalReasons: ["Not interested", "Found alternative"],
                     relationshipTypes: ["Lead", "Learner", "Archived", "Graduated"],
@@ -190,14 +189,9 @@ export default function SettingsPage() {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' | 'infoLogOptions' = 'courseNames';
+        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' | 'infoLogOptions' = 'commonTraits';
 
-        if (field === 'courseNames') {
-            if (!newCourseName) return;
-            valueToAdd = newCourseName;
-            fieldKey = 'courseNames';
-            setNewCourseName("");
-        } else if (field === 'commonTraits') {
+        if (field === 'commonTraits') {
             if (!newTrait) return;
             valueToAdd = newTrait;
             fieldKey = 'commonTraits';
@@ -310,6 +304,23 @@ export default function SettingsPage() {
             setIsReindexing(false);
         }
     };
+    
+    const handleMigration = async () => {
+        setIsMigrating(true);
+        toast({ title: 'Migration started...', description: 'Upgrading deal data to new quote system.' });
+        try {
+            const result = await migrateDealsToQuotesAction();
+             if (result.success) {
+                toast({ title: 'Migration Complete!', description: `${result.migrated} contacts were successfully updated.` });
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+             toast({ variant: 'destructive', title: 'Migration Failed', description: error instanceof Error ? error.message : "An unknown error occurred." });
+        } finally {
+            setIsMigrating(false);
+        }
+    }
 
     const renderChipList = (
         field: AppSettingsField | `feedbackChips.${FeedbackCategory}`,
@@ -443,8 +454,21 @@ export default function SettingsPage() {
                                     Re-index Contacts
                                 </Button>
                            </div>
+                            <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div>
+                                    <h3 className="font-semibold">Upgrade Quoting System</h3>
+                                    <p className="text-sm text-muted-foreground">One-time migration of old "Deals" to the new "Quotes" system.</p>
+                                </div>
+                                <Button onClick={handleMigration} disabled={isMigrating}>
+                                    {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DatabaseZap className="mr-2 h-4 w-4" />}
+                                    Run Migration
+                                </Button>
+                           </div>
                         </CardContent>
                     </Card>
+                    
+                    <SalesCatalogManager />
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Relationship Types</CardTitle>
@@ -456,24 +480,6 @@ export default function SettingsPage() {
                                 <div className="flex gap-2 pt-2">
                                     <Input value={newRelationshipType} onChange={e => setNewRelationshipType(e.target.value)} placeholder="Add new type..." onKeyDown={e => e.key === 'Enter' && handleAddItem('relationshipTypes')} />
                                     <Button onClick={() => handleAddItem('relationshipTypes')} disabled={isSaving || !newRelationshipType}>
-                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Course Names</CardTitle>
-                            <CardDescription>Manage the list of available courses for the dropdown.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2">
-                                {renderChipList('courseNames', settings.courseNames)}
-                                <div className="flex gap-2 pt-2">
-                                    <Input value={newCourseName} onChange={e => setNewCourseName(e.target.value)} placeholder="Add new course..." onKeyDown={e => e.key === 'Enter' && handleAddItem('courseNames')} />
-                                    <Button onClick={() => handleAddItem('courseNames')} disabled={isSaving || !newCourseName}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>

@@ -98,6 +98,20 @@ export async function reindexLeadsAction() {
 //   }
 // }
 
+export async function migrateDealsToQuotesAction() {
+    try {
+        const functions = getFunctions(app);
+        const migrateDeals = httpsCallable(functions, 'migrateDealsToQuotes');
+        const result = await migrateDeals();
+        return { success: true, ...(result.data as any) };
+    } catch (error) {
+        console.error('Error migrating deals:', error);
+        const httpsError = error as any;
+        const errorMessage = httpsError.message || 'An unknown error occurred during migration.';
+        return { success: false, error: errorMessage };
+    }
+}
+
 export async function bulkDeleteLeadsAction(leadIds: string[]) {
     if (!leadIds || leadIds.length === 0) {
         return { success: false, error: "No lead IDs provided for deletion." };
