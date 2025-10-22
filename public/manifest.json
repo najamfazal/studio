@@ -4,8 +4,8 @@
   "description": "A simple, personal CRM for managing contacts and tasks.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#E9E3F8",
-  "theme_color": "#6D28D9",
+  "background_color": "#ffffff",
+  "theme_color": "#5B21B6",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",

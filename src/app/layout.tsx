@@ -52,6 +52,7 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet" />
         <meta name="theme-color" content="#5B21B6" />
+        <link rel="manifest" href="/manifest.json" />
       </head>
       <body className="font-body antialiased h-full">
         <QuickLogProvider>

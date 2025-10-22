@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { collection, query, where, getDocs, doc, onSnapshot, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, Timestamp, updateDoc } from 'firebase/firestore';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Users } from 'lucide-react';
 import Link from 'next/link';
 
@@ -158,9 +158,20 @@ export default function ContactsFocusPage() {
         setQueue(prevQueue => prevQueue.map(item => item.task.id === updatedTask.id ? { ...item, task: updatedTask } : item));
     }
     
-    const handleInteractionLogged = () => {
+    const handleInteractionLogged = async () => {
         if (currentItem && !currentItem.task.completed) {
-            handleTaskUpdate({ ...currentItem.task, completed: true });
+            const updatedTask = { ...currentItem.task, completed: true };
+            handleTaskUpdate(updatedTask);
+            // Also update in Firestore
+            if (!updatedTask.id.startsWith('task-')) {
+                try {
+                    await updateDoc(doc(db, 'tasks', updatedTask.id), { completed: true });
+                } catch (e) {
+                     toast({ variant: 'destructive', title: 'Failed to update task status.' });
+                     // Revert optimistic update if firestore fails
+                     handleTaskUpdate(currentItem.task);
+                }
+            }
         }
     };
 
