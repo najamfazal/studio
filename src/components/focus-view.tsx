@@ -3,13 +3,13 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { doc, updateDoc, arrayUnion, collection, query, where, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, collection, query, where, orderBy, limit, startAfter, getDocs, getDoc } from 'firebase/firestore';
 import { produce } from 'immer';
 import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check, ListTodo, Clock, NotebookPen } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Lead, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, Deal } from '@/lib/types';
+import type { AppSettings, Lead, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, Deal, SalesCatalog, QuoteLine } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,13 +24,12 @@ import { EditableField } from './editable-field';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DealDialog } from './deal-dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from './ui/alert-dialog';
 import { WhatsAppIcon } from './icons';
 import { LeadDialog } from './lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
 import { Input } from './ui/input';
-import { Calendar } from './ui/calendar';
+import { QuoteManager } from './quote-manager';
 
 const TASK_PAGE_SIZE = 5;
 
@@ -87,10 +86,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
 
     const [currentLead, setCurrentLead] = useState(lead);
     const [currentTask, setCurrentTask] = useState(task);
-
-    const [isDealModalOpen, setIsDealModalOpen] = useState(false);
-    const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
-    const [dealToDelete, setDealToDelete] = useState<string | null>(null);
+    const [salesCatalog, setSalesCatalog] = useState<SalesCatalog | null>(null);
 
     const [feedback, setFeedback] = useState<InteractionFeedback>({});
     const [isLoggingFeedback, setIsLoggingFeedback] = useState(false);
@@ -128,6 +124,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [lastPastTask, setLastPastTask] = useState<any | null>(null);
     const [hasMoreActiveTasks, setHasMoreActiveTasks] = useState(true);
     const [hasMorePastTasks, setHasMorePastTasks] = useState(true);
+
+    useEffect(() => {
+        if (!salesCatalog) {
+            getDoc(doc(db, 'settings', 'salesCatalog')).then(docSnap => {
+                if(docSnap.exists()) setSalesCatalog(docSnap.data() as SalesCatalog)
+            });
+        }
+    }, [salesCatalog]);
 
     useEffect(() => {
         setCurrentLead(lead);
@@ -230,36 +234,22 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         return (currentLead.interactions || []).slice().sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime());
     }, [currentLead]);
     
-    const handleUpdate = async (field: string, value: any, isDeal: boolean = false) => {
+    const handleUpdate = async (field: string, value: any) => {
         if (!currentLead) return;
         
         let updatePayload: { [key: string]: any } = {};
-        let updatedLead: Lead;
-
-        if (isDeal) {
-            const newDeals = produce(currentLead.commitmentSnapshot?.deals || [], draft => {
-                const index = draft.findIndex(d => d.id === (value as Deal).id);
-                if (index > -1) draft[index] = value;
-                else draft.push(value);
+        updatePayload[field] = value;
+        
+        const updatedLead = produce(currentLead, draft => {
+            const keys = field.split('.');
+            let current: any = draft;
+            keys.slice(0, -1).forEach(key => {
+                if (!current[key]) current[key] = {};
+                current = current[key];
             });
-            updatePayload['commitmentSnapshot.deals'] = newDeals;
-            updatedLead = produce(currentLead, draft => {
-                if (!draft.commitmentSnapshot) draft.commitmentSnapshot = {};
-                draft.commitmentSnapshot.deals = newDeals;
-            });
-        } else {
-            updatePayload[field] = value;
-            updatedLead = produce(currentLead, draft => {
-                const keys = field.split('.');
-                let current: any = draft;
-                keys.slice(0, -1).forEach(key => {
-                    if (!current[key]) current[key] = {};
-                    current = current[key];
-                });
-                current[keys[keys.length - 1]] = value;
-            });
-        }
-
+            current[keys[keys.length - 1]] = value;
+        });
+       
         setCurrentLead(updatedLead);
         if (onLeadUpdate) {
             onLeadUpdate(updatedLead);
@@ -268,7 +258,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         try {
           const leadRef = doc(db, 'leads', currentLead.id);
           await updateDoc(leadRef, updatePayload);
-          toast({ title: isDeal ? 'Deal Saved' : 'Contact Updated' });
+          toast({ title: 'Contact Updated' });
         } catch (error) {
           console.error('Error updating contact:', error);
           toast({ variant: 'destructive', title: 'Update failed' });
@@ -280,20 +270,11 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
           }
         }
     };
-    
-    const handleSaveDeal = (deal: Deal) => {
-        handleUpdate('commitmentSnapshot.deals', deal, true);
-        setIsDealModalOpen(false);
-        setEditingDeal(null);
-    }
-    const handleDeleteDeal = async () => {
-        if (!dealToDelete || !currentLead) return;
-        const newDeals = (currentLead.commitmentSnapshot?.deals || []).filter(d => d.id !== dealToDelete);
-        await handleUpdate('commitmentSnapshot.deals', newDeals);
-        toast({ title: "Deal removed" });
-        setDealToDelete(null);
-    };
 
+     const handleQuoteLinesUpdate = (newQuoteLines: QuoteLine[]) => {
+      handleUpdate('commitmentSnapshot.quoteLines', newQuoteLines);
+    }
+    
     const handleDialogSave = async (values: LeadFormValues) => {
         if (!currentLead) return;
         setIsSaving(true);
@@ -584,41 +565,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </TabsList>
                 
                 <TabsContent value="snapshot" className="mt-3 space-y-3">
-                    <Card>
-                        <CardHeader className="p-2 flex-row items-center justify-between">
-                            <CardTitle className="text-xs font-semibold text-muted-foreground">Deals</CardTitle>
-                            <Button size="xs" onClick={() => { setEditingDeal(null); setIsDealModalOpen(true); }}><Plus className="mr-1 h-3 w-3"/>Add Deal</Button>
-                        </CardHeader>
-                        <CardContent className="p-2 pt-0">
-                            {(currentLead.commitmentSnapshot?.deals || []).length > 0 ? (
-                            <div className="space-y-2">
-                                {(currentLead.commitmentSnapshot.deals || []).map((deal) => (
-                                <Card key={deal.id} className="bg-muted/50">
-                                    <CardHeader className="p-2">
-                                    <div className="flex justify-between items-start">
-                                        <div className="font-semibold text-sm">${deal.price.toLocaleString()}</div>
-                                        <div className="flex gap-0.5">
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingDeal(deal); setIsDealModalOpen(true);}}>
-                                            <Pencil className="h-3 w-3" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setDealToDelete(deal.id)}>
-                                            <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                        </div>
-                                    </div>
-                                    </CardHeader>
-                                    <CardContent className="p-2 pt-0 text-xs text-muted-foreground">
-                                        <p className="font-medium text-foreground">{(deal.courses || []).join(', ')}</p>
-                                        <p>{deal.mode} &middot; {deal.format}</p>
-                                    </CardContent>
-                                </Card>
-                                ))}
-                            </div>
-                            ) : (
-                            <div className="text-center text-xs text-muted-foreground py-4">No deals added yet.</div>
-                            )}
-                        </CardContent>
-                    </Card>
+                     <QuoteManager lead={currentLead} salesCatalog={salesCatalog} onUpdate={handleQuoteLinesUpdate} />
                     <Card>
                          <CardContent className="p-2">
                             <EditableField
@@ -891,16 +838,6 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
             </Tabs>
 
             <DateTimePicker isOpen={isDateTimePickerOpen} onClose={() => setIsDateTimePickerOpen(false)} onSelect={dateTimePickerCallback} initialDate={dateTimePickerValue} />
-            
-            {isDealModalOpen && appSettings && (
-                <DealDialog
-                    isOpen={isDealModalOpen}
-                    onClose={() => { setIsDealModalOpen(false); setEditingDeal(null); }}
-                    onSave={handleSaveDeal}
-                    dealToEdit={editingDeal}
-                    courseNames={appSettings.courseNames}
-                />
-            )}
 
             {isLeadDialogOpen && appSettings && (
                 <LeadDialog
@@ -912,21 +849,6 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     relationshipTypes={appSettings.relationshipTypes}
                 />
             )}
-
-            <AlertDialog open={!!dealToDelete} onOpenChange={(open) => !open && setDealToDelete(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Deal?</AlertDialogTitle>
-                        <AlertDialogDescription>This will permanently remove this deal. Are you sure?</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <Button variant="destructive" onClick={handleDeleteDeal}>Delete</Button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }
-
-    
