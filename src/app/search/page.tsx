@@ -13,14 +13,12 @@ import {
   GitMerge,
   FilePenLine,
 } from 'lucide-react';
-import { useDebounce } from '@/hooks/use-debounce';
+
 import { searchLeadsAction, deleteLeadAction, mergeLeadsAction } from '@/app/actions';
 import type { Lead, AppSettings } from '@/lib/types';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ContactDetailView } from '@/components/contact-detail-view';
 import { useToast } from '@/hooks/use-toast';
 import { getDoc, doc } from 'firebase/firestore';
@@ -38,6 +36,7 @@ import {
 import { LeadDialog } from '@/components/lead-dialog';
 import { MergeDialog } from '@/components/merge-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Card } from '@/components/ui/card';
 
 export default function SearchPage() {
   const router = useRouter();
@@ -46,10 +45,9 @@ export default function SearchPage() {
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Lead[]>([]);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [searchPerformed, setSearchPerformed] = useState(false);
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isLoadingLead, setIsLoadingLead] = useState(false);
@@ -94,35 +92,32 @@ export default function SearchPage() {
     }
   }, [appSettings]);
 
-
-  useEffect(() => {
-    if (debouncedSearchTerm) {
-      setIsSearching(true);
-      searchLeadsAction(debouncedSearchTerm).then(result => {
-        if (result.success) {
-          setSearchResults(result.leads as Lead[]);
-        }
-        setIsSearching(false);
-      });
-    } else {
-      setSearchResults([]);
-      setIsPopoverOpen(false);
+  const handleSearchSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!searchTerm) {
+        setSearchResults([]);
+        setSearchPerformed(true);
+        return;
     }
-  }, [debouncedSearchTerm]);
+    
+    setIsSearching(true);
+    setSearchPerformed(true);
+    setSelectedLead(null);
+    router.replace('/search');
+
+    const result = await searchLeadsAction(searchTerm);
+    if (result.success) {
+      setSearchResults(result.leads as Lead[]);
+    } else {
+      toast({ variant: 'destructive', title: 'Search failed', description: result.error });
+    }
+    setIsSearching(false);
+  };
+
 
   const handleSelectContact = (lead: Lead) => {
-    setIsPopoverOpen(false);
     router.push(`/search?id=${lead.id}`);
   };
-  
-  const createQueryString = useCallback(
-    (name: string, value: string) => {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set(name, value)
-      return params.toString()
-    },
-    [searchParams]
-  )
 
   const handleLeadUpdate = (updatedLead: Lead) => {
     setSelectedLead(updatedLead);
@@ -204,36 +199,18 @@ export default function SearchPage() {
           )}
         </div>
         <div className="mt-4">
-            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                <PopoverTrigger asChild className="w-full">
-                     <div className="relative">
-                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search by name or phone..."
-                            className="pl-9"
-                            value={searchTerm}
-                            onChange={(e) => {
-                                setSearchTerm(e.target.value);
-                                if (!isPopoverOpen) setIsPopoverOpen(true);
-                            }}
-                            onFocus={() => setIsPopoverOpen(true)}
-                        />
-                        {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
-                    </div>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                        <CommandList>
-                            <CommandEmpty>{debouncedSearchTerm ? 'No results found.' : 'Type to search...'}</CommandEmpty>
-                            {searchResults.map(lead => (
-                                <CommandItem key={lead.id} onSelect={() => handleSelectContact(lead)}>
-                                    {lead.name}
-                                </CommandItem>
-                            ))}
-                        </CommandList>
-                    </Command>
-                </PopoverContent>
-            </Popover>
+            <form onSubmit={handleSearchSubmit}>
+                <div className="relative">
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search by name or phone and press Enter"
+                        className="pl-9"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
+                </div>
+            </form>
         </div>
       </header>
 
@@ -248,6 +225,33 @@ export default function SearchPage() {
                 appSettings={appSettings}
                 onLeadUpdate={handleLeadUpdate}
             />
+        ) : isSearching ? (
+             <div className="flex justify-center items-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+            </div>
+        ) : searchPerformed ? (
+          searchResults.length > 0 ? (
+            <div className="space-y-2">
+              {searchResults.map(lead => (
+                <Card key={lead.id} className="cursor-pointer hover:bg-muted" onClick={() => handleSelectContact(lead)}>
+                    <div className="p-3">
+                      <p className="font-semibold">{lead.name}</p>
+                      <p className="text-sm text-muted-foreground">{lead.email || (lead.phones && lead.phones[0]?.number)}</p>
+                    </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+             <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
+                <SearchIcon className="h-16 w-16 mb-4" />
+                <h2 className="text-2xl font-semibold text-foreground">
+                    No Results Found
+                </h2>
+                <p className="mt-2 max-w-xs">
+                    Try a different name or phone number.
+                </p>
+            </div>
+          )
         ) : (
              <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 h-[60vh] text-center text-muted-foreground">
                 <SearchIcon className="h-16 w-16 mb-4" />
