@@ -25,7 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./avatar"
 
 const sidebarItems = [
     { href: '/', icon: Zap, label: 'Routines' },
-    { href: '/contacts', icon: Users, label: 'Contacts' },
+    { href: '/search', icon: Users, label: 'Contacts' },
     { href: '/events', icon: CalendarDays, label: 'Events' },
     { href: '/reports', icon: BarChart, label: 'Reports' },
 ]

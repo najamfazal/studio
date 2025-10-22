@@ -2,7 +2,7 @@
 'use server';
 
 import {app, db} from '@/lib/firebase';
-import {collection, getDocs, writeBatch, query, where} from 'firebase/firestore';
+import {collection, getDocs, writeBatch, query, where, deleteDoc, doc} from 'firebase/firestore';
 import { getFunctions, httpsCallable} from 'firebase/functions';
 
 
@@ -132,4 +132,19 @@ export async function searchLeadsAction(term: string) {
         const errorMessage = httpsError.message || 'An unknown error occurred during search.';
         return { success: false, error: errorMessage, leads: [] };
     }
+}
+
+export async function deleteLeadAction(leadId: string) {
+  if (!leadId) {
+    return { success: false, error: 'No lead ID provided.' };
+  }
+  try {
+    await deleteDoc(doc(db, 'leads', leadId));
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting lead:', error);
+    const httpsError = error as any;
+    const errorMessage = httpsError.message || 'An unknown error occurred.';
+    return { success: false, error: errorMessage };
+  }
 }
