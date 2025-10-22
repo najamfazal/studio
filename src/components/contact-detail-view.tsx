@@ -39,6 +39,7 @@ import { CheckIcon } from 'lucide-react';
 import { DealDialog } from '@/components/deal-dialog';
 import { LeadDialog } from '@/components/lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
+import { QuoteManager } from './quote-manager';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1100,7 +1101,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                 <CardContent className="space-y-4 p-4 pt-0">
                     <div className="flex items-center justify-center gap-2">
                         {(['Info', 'Later', 'Event Scheduled'] as OutcomeType[]).map(outcome => (
-                            <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} onClick={() => setSelectedOutcome(o => o === outcome ? null : outcome)}>
+                            <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} onClick={() => setSelectedOutcome(o => o === outcome ? null : o)}>
                                 {outcome === 'Info' && <Info className="mr-2 h-4 w-4"/>}
                                 {outcome === 'Later' && <CalendarClock className="mr-2 h-4 w-4"/>}
                                 {outcome === 'Event Scheduled' && <CalendarPlus className="mr-2 h-4 w-4"/>}
