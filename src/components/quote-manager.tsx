@@ -223,33 +223,18 @@ function QuoteLineDialog({ isOpen, onClose, onSave, salesCatalog, quoteLineToEdi
                 <div className="space-y-4 py-4">
                     <div>
                         <Label>Course Package</Label>
-                         <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" className="w-full justify-start font-normal">
-                                    {quoteLine.courses.length > 0 ? quoteLine.courses.join(', ') : 'Select course...'}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Search courses..." />
-                                    <CommandList>
-                                        <CommandEmpty>No courses found.</CommandEmpty>
-                                        <CommandGroup>
-                                            {salesCatalog.courses.map(course => (
-                                                <CommandItem
-                                                    key={course.id}
-                                                    value={course.name}
-                                                    onSelect={() => handleCourseSelection(course.name)}
-                                                >
-                                                     <CheckIcon className={cn("mr-2 h-4 w-4", quoteLine.courses.includes(course.name) ? "opacity-100" : "opacity-0")}/>
-                                                    {course.name}
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
+                        <Select onValueChange={handleCourseSelection} value={quoteLine.courses[0]}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select course..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {salesCatalog.courses.map(course => (
+                                    <SelectItem key={course.id} value={course.name}>
+                                        {course.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div className="space-y-3">
