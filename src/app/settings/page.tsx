@@ -4,15 +4,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { AppSettings, ThemeSettings, SalesCatalog } from '@/lib/types';
+import type { AppSettings, ThemeSettings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Plus, Settings, Trash2, X, Pencil, Check, DatabaseZap } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { reindexLeadsAction, migrateDealsToQuotesAction } from '@/app/actions';
