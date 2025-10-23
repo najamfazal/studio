@@ -171,7 +171,7 @@ export type Task = {
 export type AppSettings = {
   id?: string;
   relationshipTypes: string[];
-  courseNames: string[]; // Maintained for DealDialog backwards compatibility for a bit, and for new course creation
+  courseNames: string[];
   commonTraits: string[];
   withdrawalReasons: string[];
   trainers: string[];

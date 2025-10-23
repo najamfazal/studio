@@ -23,7 +23,7 @@ import { SalesCatalogManager } from '@/components/sales-catalog-manager';
 import { Badge } from '@/components/ui/badge';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
-type AppSettingsField = 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions';
+type AppSettingsField = 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions' | 'courseNames';
 
 const colorPalettes: { name: string; colors: ThemeSettings }[] = [
     { name: 'Default', colors: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' } },
@@ -40,12 +40,15 @@ export default function SettingsPage() {
     const { toast } = useToast();
     const router = useRouter();
 
-    const [newTrait, setNewTrait] = useState("");
-    const [newWithdrawalReason, setNewWithdrawalReason] = useState("");
-    const [newRelationshipType, setNewRelationshipType] = useState("");
-    const [newTrainer, setNewTrainer] = useState("");
-    const [newTimeSlot, setNewTimeSlot] = useState("");
-    const [newInfoLogOption, setNewInfoLogOption] = useState("");
+    const [newItemValues, setNewItemValues] = useState<Record<AppSettingsField, string>>({
+        commonTraits: "",
+        withdrawalReasons: "",
+        relationshipTypes: "",
+        trainers: "",
+        timeSlots: "",
+        infoLogOptions: "",
+        courseNames: "",
+    });
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
 
     const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
@@ -70,6 +73,7 @@ export default function SettingsPage() {
                     infoLogOptions: data.infoLogOptions || ["Sent brochure", "Quoted", "Shared schedule"],
                     feedbackChips: data.feedbackChips || { content: [], schedule: [], price: [] },
                     theme: data.theme || defaultTheme,
+                    courseNames: data.courseNames || ["Power BI", "Data Analytics"],
                     id: settingsDoc.id,
                 };
                 setSettings(completeSettings);
@@ -81,6 +85,7 @@ export default function SettingsPage() {
                     trainers: ["Jhonny", "Marie", "Faisal"],
                     timeSlots: ["09:00 A - 11:00 A", "11:00 A - 01:00 P"],
                     infoLogOptions: ["Sent brochure", "Quoted", "Shared schedule"],
+                    courseNames: ["Power BI", "Data Analytics", "Python", "SQL"],
                     feedbackChips: {
                         content: ["Not relevant", "Too complex"],
                         schedule: ["Wrong time", "Too long"],
@@ -188,46 +193,19 @@ export default function SettingsPage() {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme' | 'courseNames'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' | 'infoLogOptions' = 'commonTraits';
+        let fieldKey: AppSettingsField | `feedbackChips.${FeedbackCategory}` = 'commonTraits';
 
-
-        if (field === 'commonTraits') {
-            if (!newTrait) return;
-            valueToAdd = newTrait;
-            fieldKey = 'commonTraits';
-            setNewTrait("");
-        } else if (field === 'withdrawalReasons') {
-            if (!newWithdrawalReason) return;
-            valueToAdd = newWithdrawalReason;
-            fieldKey = 'withdrawalReasons';
-            setNewWithdrawalReason("");
-        } else if (field === 'relationshipTypes') {
-            if(!newRelationshipType) return;
-            valueToAdd = newRelationshipType;
-            fieldKey = 'relationshipTypes';
-            setNewRelationshipType("");
-        } else if (field === 'trainers') {
-            if (!newTrainer) return;
-            valueToAdd = newTrainer;
-            fieldKey = 'trainers';
-            setNewTrainer("");
-        } else if (field === 'timeSlots') {
-            if (!newTimeSlot) return;
-            valueToAdd = newTimeSlot;
-            fieldKey = 'timeSlots';
-            setNewTimeSlot("");
-        } else if (field === 'infoLogOptions') {
-            if (!newInfoLogOption) return;
-            valueToAdd = newInfoLogOption;
-            fieldKey = 'infoLogOptions';
-            setNewInfoLogOption("");
-        }
-        else if (field.startsWith('feedbackChips.')) {
+        if (field.startsWith('feedbackChips.')) {
             const category = newFeedbackChip.category;
             if (!category || !newFeedbackChip.value) return;
             valueToAdd = newFeedbackChip.value;
             fieldKey = field;
             setNewFeedbackChip({ category: null, value: "" });
+        } else {
+            valueToAdd = newItemValues[field];
+            if (!valueToAdd) return;
+            fieldKey = field;
+            setNewItemValues(prev => ({...prev, [field]: ""}));
         }
 
         const newSettings = produce(settings, draft => {
@@ -236,7 +214,7 @@ export default function SettingsPage() {
                 const category = fieldKey.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[fieldKey as keyof Omit<AppSettings, 'id'| 'feedbackChips' | 'theme' | 'courseNames'>] as string[];
+                list = draft[fieldKey as AppSettingsField] as string[];
             }
             if (!list.includes(valueToAdd)) {
                 list.push(valueToAdd);
@@ -268,7 +246,7 @@ export default function SettingsPage() {
                 const category = field.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[field as keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme' | 'courseNames'>] as string[];
+                list = draft[field as AppSettingsField] as string[];
             }
             const index = list.indexOf(itemToRemove);
             if (index > -1) {
@@ -467,7 +445,30 @@ export default function SettingsPage() {
                         </CardContent>
                     </Card>
                     
-                    <SalesCatalogManager />
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Course Names</CardTitle>
+                            <CardDescription>Manage the master list of all individual courses you offer.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {renderChipList('courseNames', settings.courseNames || [])}
+                                <div className="flex gap-2 pt-2">
+                                    <Input 
+                                        value={newItemValues.courseNames} 
+                                        onChange={e => setNewItemValues(prev => ({...prev, courseNames: e.target.value}))} 
+                                        placeholder="Add new course name..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('courseNames')} 
+                                    />
+                                    <Button onClick={() => handleAddItem('courseNames')} disabled={isSaving || !newItemValues.courseNames}>
+                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <SalesCatalogManager courseNames={settings.courseNames} />
 
                     <Card>
                         <CardHeader>
@@ -478,8 +479,13 @@ export default function SettingsPage() {
                             <div className="space-y-2">
                                 {renderChipList('relationshipTypes', settings.relationshipTypes)}
                                 <div className="flex gap-2 pt-2">
-                                    <Input value={newRelationshipType} onChange={e => setNewRelationshipType(e.target.value)} placeholder="Add new type..." onKeyDown={e => e.key === 'Enter' && handleAddItem('relationshipTypes')} />
-                                    <Button onClick={() => handleAddItem('relationshipTypes')} disabled={isSaving || !newRelationshipType}>
+                                    <Input 
+                                        value={newItemValues.relationshipTypes} 
+                                        onChange={e => setNewItemValues(prev => ({ ...prev, relationshipTypes: e.target.value }))} 
+                                        placeholder="Add new type..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('relationshipTypes')} 
+                                    />
+                                    <Button onClick={() => handleAddItem('relationshipTypes')} disabled={isSaving || !newItemValues.relationshipTypes}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>
@@ -496,8 +502,13 @@ export default function SettingsPage() {
                             <div className="space-y-2">
                                 {renderChipList('trainers', settings.trainers)}
                                 <div className="flex gap-2 pt-2">
-                                    <Input value={newTrainer} onChange={e => setNewTrainer(e.target.value)} placeholder="Add new trainer..." onKeyDown={e => e.key === 'Enter' && handleAddItem('trainers')} />
-                                    <Button onClick={() => handleAddItem('trainers')} disabled={isSaving || !newTrainer}>
+                                    <Input 
+                                        value={newItemValues.trainers} 
+                                        onChange={e => setNewItemValues(prev => ({ ...prev, trainers: e.target.value }))}
+                                        placeholder="Add new trainer..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('trainers')} 
+                                    />
+                                    <Button onClick={() => handleAddItem('trainers')} disabled={isSaving || !newItemValues.trainers}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>
@@ -514,8 +525,12 @@ export default function SettingsPage() {
                             <div className="space-y-2">
                                 {renderChipList('timeSlots', settings.timeSlots)}
                                 <div className="flex gap-2 pt-2">
-                                    <Input value={newTimeSlot} onChange={e => setNewTimeSlot(e.target.value)} placeholder="Add new time slot..." onKeyDown={e => e.key === 'Enter' && handleAddItem('timeSlots')} />
-                                    <Button onClick={() => handleAddItem('timeSlots')} disabled={isSaving || !newTimeSlot}>
+                                    <Input 
+                                        value={newItemValues.timeSlots}
+                                        onChange={e => setNewItemValues(prev => ({ ...prev, timeSlots: e.target.value }))} 
+                                        placeholder="Add new time slot..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('timeSlots')} />
+                                    <Button onClick={() => handleAddItem('timeSlots')} disabled={isSaving || !newItemValues.timeSlots}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>
@@ -532,8 +547,13 @@ export default function SettingsPage() {
                              <div className="space-y-2">
                                 {renderChipList('infoLogOptions', settings.infoLogOptions || [])}
                                 <div className="flex gap-2 pt-2">
-                                    <Input value={newInfoLogOption} onChange={e => setNewInfoLogOption(e.target.value)} placeholder="Add new info log..." onKeyDown={e => e.key === 'Enter' && handleAddItem('infoLogOptions')} />
-                                    <Button onClick={() => handleAddItem('infoLogOptions')} disabled={isSaving || !newInfoLogOption}>
+                                    <Input 
+                                        value={newItemValues.infoLogOptions}
+                                        onChange={e => setNewItemValues(prev => ({ ...prev, infoLogOptions: e.target.value }))}
+                                        placeholder="Add new info log..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('infoLogOptions')} 
+                                    />
+                                    <Button onClick={() => handleAddItem('infoLogOptions')} disabled={isSaving || !newItemValues.infoLogOptions}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>
@@ -550,8 +570,13 @@ export default function SettingsPage() {
                              <div className="space-y-2">
                                 {renderChipList('commonTraits', settings.commonTraits)}
                                 <div className="flex gap-2 pt-2">
-                                    <Input value={newTrait} onChange={e => setNewTrait(e.target.value)} placeholder="Add new trait..." onKeyDown={e => e.key === 'Enter' && handleAddItem('commonTraits')} />
-                                    <Button onClick={() => handleAddItem('commonTraits')} disabled={isSaving || !newTrait}>
+                                    <Input 
+                                        value={newItemValues.commonTraits} 
+                                        onChange={e => setNewItemValues(prev => ({ ...prev, commonTraits: e.target.value }))}
+                                        placeholder="Add new trait..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('commonTraits')} 
+                                    />
+                                    <Button onClick={() => handleAddItem('commonTraits')} disabled={isSaving || !newItemValues.commonTraits}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>
@@ -568,8 +593,13 @@ export default function SettingsPage() {
                              <div className="space-y-2">
                                 {renderChipList('withdrawalReasons', settings.withdrawalReasons || [])}
                                 <div className="flex gap-2 pt-2">
-                                    <Input value={newWithdrawalReason} onChange={e => setNewWithdrawalReason(e.target.value)} placeholder="Add new reason..." onKeyDown={e => e.key === 'Enter' && handleAddItem('withdrawalReasons')} />
-                                    <Button onClick={() => handleAddItem('withdrawalReasons')} disabled={isSaving || !newWithdrawalReason}>
+                                    <Input 
+                                        value={newItemValues.withdrawalReasons} 
+                                        onChange={e => setNewItemValues(prev => ({ ...prev, withdrawalReasons: e.target.value }))} 
+                                        placeholder="Add new reason..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('withdrawalReasons')} 
+                                    />
+                                    <Button onClick={() => handleAddItem('withdrawalReasons')} disabled={isSaving || !newItemValues.withdrawalReasons}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>

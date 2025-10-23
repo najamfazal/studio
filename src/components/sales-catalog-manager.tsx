@@ -23,7 +23,11 @@ import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 
 
-export function SalesCatalogManager() {
+interface SalesCatalogManagerProps {
+    courseNames: string[];
+}
+
+export function SalesCatalogManager({ courseNames }: SalesCatalogManagerProps) {
     const [catalog, setCatalog] = useState<SalesCatalog | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
@@ -156,7 +160,7 @@ export function SalesCatalogManager() {
                     onClose={() => setIsCourseDialogOpen(false)}
                     onSave={handleSaveCourse}
                     courseToEdit={editingCourse}
-                    existingCourseNames={catalog.courses.map(c => c.name)}
+                    existingCourseNames={courseNames}
                 />
             )}
         </Card>
@@ -225,7 +229,12 @@ function CourseDialog({ isOpen, onClose, onSave, courseToEdit, existingCourseNam
                 <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-4">
                     <div className="space-y-2">
                         <Label htmlFor="courseName">Course Name</Label>
-                        <Input id="courseName" value={course.name} onChange={e => setCourse({...course, name: e.target.value})} />
+                        <Select value={course.name} onValueChange={(name) => setCourse({ ...course, name })}>
+                            <SelectTrigger><SelectValue placeholder="Select a course..." /></SelectTrigger>
+                            <SelectContent>
+                                {existingCourseNames.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
                     </div>
                      <div className="space-y-2">
                         <Label htmlFor="valueProposition">Value Proposition</Label>
