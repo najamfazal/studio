@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { errorEmitter } from '@/lib/error-emitter';
 import { FirestorePermissionError } from '@/lib/errors';
 import { SalesCatalogManager } from '@/components/sales-catalog-manager';
+import { Badge } from '@/components/ui/badge';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 type AppSettingsField = 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions';
@@ -617,5 +618,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-
-    
