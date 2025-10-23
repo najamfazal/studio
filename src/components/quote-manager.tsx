@@ -83,18 +83,13 @@ export function QuoteManager({ lead, salesCatalog, onUpdate, onFieldUpdate }: Qu
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between p-4">
-        <div className="grid gap-0.5">
-          <CardTitle className="text-lg">Quote</CardTitle>
-          <CardDescription className="text-xs">
-            Manage course packages and price variants for this lead.
-          </CardDescription>
-        </div>
-        <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleOpenQuoteDialog(null)}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Option
+        <CardTitle className="text-lg">Quote</CardTitle>
+        <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={() => handleOpenQuoteDialog(null)}>
+                <PlusCircle className="h-5 w-5" />
             </Button>
-            <Button variant="secondary" size="sm" onClick={copyToClipboard} disabled={!lead.commitmentSnapshot?.quoteLines?.length}>
-                <CopyIcon className="mr-2 h-4 w-4" /> Copy for WhatsApp
+            <Button variant="ghost" size="icon" onClick={copyToClipboard} disabled={!lead.commitmentSnapshot?.quoteLines?.length}>
+                <CopyIcon className="h-5 w-5" />
             </Button>
         </div>
       </CardHeader>
