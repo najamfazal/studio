@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Users,
@@ -15,12 +15,13 @@ import {
   UserPlus,
   FileUp,
 } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
-import { searchLeadsAction, deleteLeadAction, mergeLeadsAction } from '@/app/actions';
-import type { Lead, AppSettings, SalesCatalog } from '@/lib/types';
+import { searchLeadsAction, deleteLeadAction, mergeLeadsAction, createLeadAction } from '@/app/actions';
+import type { Lead, AppSettings, SalesCatalog, LeadStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
+import type { LeadFormValues } from '@/lib/schemas';
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,8 @@ export default function SearchPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   
   const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
-  
+  const [isSaving, startSavingTransition] = useTransition();
+
   const [mergeSourceLead, setMergeSourceLead] = useState<Lead | null>(null);
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
@@ -145,6 +147,40 @@ export default function SearchPage() {
       setIsDeleting(false);
     }
   };
+
+  const handleSaveLead = (values: LeadFormValues) => {
+    startSavingTransition(async () => {
+        if (selectedLead) { // Update existing lead
+            const updatedLeadData: Partial<Lead> = {
+                name: values.name,
+                email: values.email,
+                phones: values.phones,
+                relationship: values.relationship,
+                status: values.status as LeadStatus,
+                source: values.source,
+                assignedAt: values.assignedAt,
+            };
+            try {
+                await updateDoc(doc(db, 'leads', selectedLead.id), updatedLeadData);
+                toast({ title: 'Contact Updated' });
+                setSelectedLead(prev => prev ? {...prev, ...updatedLeadData} : null);
+                setIsLeadDialogOpen(false);
+            } catch (error) {
+                console.error("Error updating contact:", error);
+                toast({ variant: 'destructive', title: 'Update failed' });
+            }
+        } else { // Create new lead
+            const result = await createLeadAction(values);
+            if (result.success) {
+                toast({ title: "Contact Created!" });
+                setIsLeadDialogOpen(false);
+                router.push(`/search?id=${result.id}`);
+            } else {
+                toast({ variant: "destructive", title: "Failed to create contact", description: result.error });
+            }
+        }
+    });
+  }
   
    const handleMergeSave = async (primaryLeadId: string, secondaryLeadId: string) => {
     setIsMerging(true);
@@ -186,7 +222,7 @@ export default function SearchPage() {
               <FileUp className="h-5 w-5" />
               <span className="sr-only">Import Contacts</span>
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setIsLeadDialogOpen(true)}>
+            <Button variant="ghost" size="icon" onClick={() => { setSelectedLead(null); setIsLeadDialogOpen(true); }}>
               <UserPlus className="h-5 w-5" />
               <span className="sr-only">Add New Contact</span>
             </Button>
@@ -306,9 +342,9 @@ export default function SearchPage() {
         <LeadDialog
             isOpen={isLeadDialogOpen}
             setIsOpen={setIsLeadDialogOpen}
-            onSave={() => {}}
+            onSave={handleSaveLead}
             leadToEdit={selectedLead}
-            isSaving={false}
+            isSaving={isSaving}
             relationshipTypes={appSettings.relationshipTypes}
         />
       )}

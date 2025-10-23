@@ -2,9 +2,40 @@
 'use server';
 
 import {app, db} from '@/lib/firebase';
-import {collection, getDocs, writeBatch, query, where, deleteDoc, doc} from 'firebase/firestore';
+import {collection, getDocs, writeBatch, query, where, deleteDoc, doc, addDoc, serverTimestamp} from 'firebase/firestore';
 import { getFunctions, httpsCallable} from 'firebase/functions';
+import type { LeadFormValues } from '@/lib/schemas';
+import type { Lead } from '@/lib/types';
 
+
+export async function createLeadAction(values: LeadFormValues) {
+  try {
+    const leadData: Omit<Lead, 'id'> = {
+      ...values,
+      afc_step: 0,
+      hasEngaged: false,
+      onFollowList: false,
+      traits: [],
+      insights: [],
+      commitmentSnapshot: {},
+      interactions: [],
+      createdAt: new Date().toISOString(),
+      last_interaction_date: new Date().toISOString(),
+    };
+
+    const docRef = await addDoc(collection(db, 'leads'), {
+        ...leadData,
+        createdAt: serverTimestamp(),
+        last_interaction_date: serverTimestamp(),
+    });
+
+    return { success: true, id: docRef.id };
+  } catch (error) {
+    console.error('Error creating lead:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    return { success: false, error: errorMessage };
+  }
+}
 
 export async function importContactsAction(formData: { jsonData: string; isNew: boolean; dryRun?: boolean }) {
   const { jsonData, isNew, dryRun = false } = formData;

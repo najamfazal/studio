@@ -30,6 +30,7 @@ import { LeadDialog } from './lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
 import { Input } from './ui/input';
 import { QuoteManager } from './quote-manager';
+import { createLeadAction } from '@/app/actions';
 
 const TASK_PAGE_SIZE = 5;
 
@@ -276,37 +277,38 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     }
     
     const handleDialogSave = async (values: LeadFormValues) => {
-        if (!currentLead) return;
         setIsSaving(true);
-        const originalLead = { ...currentLead };
-        const updatedLeadData: Partial<Lead> = {
-            name: values.name,
-            email: values.email,
-            phones: values.phones,
-            relationship: values.relationship,
-            status: values.status as LeadStatus,
-            source: values.source,
-            assignedAt: values.assignedAt,
-        };
-
-        const updatedLead = { ...currentLead, ...updatedLeadData };
-
-        setCurrentLead(updatedLead);
-        if (onLeadUpdate) {
-            onLeadUpdate(updatedLead);
-        }
-        
         try {
-            await updateDoc(doc(db, 'leads', currentLead.id), updatedLeadData);
-            toast({ title: 'Contact Updated' });
+            if (currentLead) { // Update existing lead
+                const updatedLeadData: Partial<Lead> = {
+                    name: values.name,
+                    email: values.email,
+                    phones: values.phones,
+                    relationship: values.relationship,
+                    status: values.status as LeadStatus,
+                    source: values.source,
+                    assignedAt: values.assignedAt,
+                };
+                await updateDoc(doc(db, 'leads', currentLead.id), updatedLeadData);
+                const updatedLead = { ...currentLead, ...updatedLeadData };
+                setCurrentLead(updatedLead);
+                if (onLeadUpdate) onLeadUpdate(updatedLead);
+                toast({ title: 'Contact Updated' });
+            } else { // This case should ideally not be hit from FocusView, but as a fallback:
+                const result = await createLeadAction(values);
+                if (!result.success) throw new Error(result.error);
+                const newLeadDoc = await getDoc(doc(db, 'leads', result.id!));
+                if (newLeadDoc.exists()) {
+                    const newLead = { id: newLeadDoc.id, ...newLeadDoc.data() } as Lead;
+                    setCurrentLead(newLead);
+                    if (onLeadUpdate) onLeadUpdate(newLead);
+                }
+                toast({ title: 'Contact Created' });
+            }
             setIsLeadDialogOpen(false);
         } catch (error) {
             console.error("Error saving contact from dialog:", error);
             toast({ variant: 'destructive', title: 'Update failed' });
-            setCurrentLead(originalLead);
-             if (onLeadUpdate) {
-                onLeadUpdate(originalLead);
-            }
         } finally {
             setIsSaving(false);
         }
