@@ -3,7 +3,7 @@
 "use client";
 
 import { produce } from "immer";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Copy, PlusCircle, Trash2, Loader2, Sparkles, CopyIcon, Pencil, Check, X } from "lucide-react";
 
 import type { Lead, QuoteLine, PriceVariant, SalesCatalog, CatalogCourse } from "@/lib/types";
