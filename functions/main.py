@@ -206,6 +206,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             on_follow_list = row.get("onFollowList", False)
             traits = row.get("traits", [])
             insights = row.get("insights", [])
+            inquired_for = row.get("inquiredFor", "").strip()
             
             # --- NEW SOURCE AND ASSIGNEDAT FIELDS ---
             source = row.get("source", row.get("Source", "")).strip()
@@ -241,6 +242,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 "commitmentSnapshot": {
                     "quoteLines": quote_lines,
                     "keyNotes": notes,
+                    "inquiredFor": inquired_for,
                 },
                 "status": status, "afc_step": 0, "hasEngaged": has_engaged,
                 "onFollowList": on_follow_list, "traits": traits, "insights": insights, 
@@ -1284,8 +1286,6 @@ def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
 
     
 
-
-    
 
     
 

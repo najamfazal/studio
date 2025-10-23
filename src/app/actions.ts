@@ -5,19 +5,30 @@ import {app, db} from '@/lib/firebase';
 import {collection, getDocs, writeBatch, query, where, deleteDoc, doc, addDoc, serverTimestamp} from 'firebase/firestore';
 import { getFunctions, httpsCallable} from 'firebase/functions';
 import type { LeadFormValues } from '@/lib/schemas';
-import type { Lead } from '@/lib/types';
+import type { Lead, CommitmentSnapshot } from '@/lib/types';
 
 
 export async function createLeadAction(values: LeadFormValues) {
   try {
+    const commitmentSnapshot: CommitmentSnapshot = {};
+    if (values.inquiredFor) {
+        commitmentSnapshot.inquiredFor = values.inquiredFor;
+    }
+    
     const leadData: Omit<Lead, 'id'> = {
-      ...values,
+      name: values.name,
+      email: values.email || '',
+      phones: values.phones,
+      relationship: values.relationship,
+      status: values.status as any,
+      source: values.source,
+      assignedAt: values.assignedAt,
       afc_step: 0,
       hasEngaged: false,
       onFollowList: false,
       traits: [],
       insights: [],
-      commitmentSnapshot: {},
+      commitmentSnapshot: commitmentSnapshot,
       interactions: [],
       createdAt: new Date().toISOString(),
       last_interaction_date: new Date().toISOString(),

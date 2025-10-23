@@ -33,6 +33,7 @@ export type QuoteLine = {
 
 
 export type CommitmentSnapshot = {
+  inquiredFor?: string;
   // `deals` is deprecated, will be migrated to `quoteLines`
   deals?: Deal[]; 
   quoteLines?: QuoteLine[];

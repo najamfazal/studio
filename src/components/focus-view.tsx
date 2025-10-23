@@ -280,7 +280,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         setIsSaving(true);
         try {
             if (currentLead) { // Update existing lead
-                const updatedLeadData: Partial<Lead> = {
+                const updatedLeadData: Partial<Lead> & { commitmentSnapshot: { inquiredFor?: string } } = {
                     name: values.name,
                     email: values.email,
                     phones: values.phones,
@@ -288,6 +288,10 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     status: values.status as LeadStatus,
                     source: values.source,
                     assignedAt: values.assignedAt,
+                    commitmentSnapshot: {
+                        ...currentLead.commitmentSnapshot,
+                        inquiredFor: values.inquiredFor
+                    }
                 };
                 await updateDoc(doc(db, 'leads', currentLead.id), updatedLeadData);
                 const updatedLead = { ...currentLead, ...updatedLeadData };
@@ -567,6 +571,16 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </TabsList>
                 
                 <TabsContent value="snapshot" className="mt-3 space-y-3">
+                     <div className="border-b pb-3">
+                        <EditableField
+                            label="Inquired For"
+                            value={currentLead.commitmentSnapshot?.inquiredFor || ""}
+                            onSave={(val) => handleUpdate('commitmentSnapshot.inquiredFor', val)}
+                            type="select"
+                            selectOptions={appSettings.courseNames}
+                            placeholder="Select course"
+                        />
+                     </div>
                      <QuoteManager 
                         lead={currentLead} 
                         salesCatalog={salesCatalog} 
@@ -843,6 +857,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     onSave={handleDialogSave}
                     isSaving={isSaving}
                     relationshipTypes={appSettings.relationshipTypes}
+                    courseNames={appSettings.courseNames}
                 />
             )}
         </div>

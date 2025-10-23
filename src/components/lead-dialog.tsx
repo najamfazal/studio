@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -43,6 +44,7 @@ interface LeadDialogProps {
   leadToEdit: Lead | null;
   isSaving?: boolean;
   relationshipTypes: string[];
+  courseNames: string[];
 }
 
 export function LeadDialog({
@@ -52,6 +54,7 @@ export function LeadDialog({
   leadToEdit,
   isSaving,
   relationshipTypes,
+  courseNames,
 }: LeadDialogProps) {
   
   const form = useForm<LeadFormValues>({
@@ -64,6 +67,7 @@ export function LeadDialog({
       status: "Active",
       source: "",
       assignedAt: "",
+      inquiredFor: "",
     },
   });
 
@@ -83,6 +87,7 @@ export function LeadDialog({
           status: leadToEdit.status || 'Active',
           source: leadToEdit.source || "",
           assignedAt: leadToEdit.assignedAt || "",
+          inquiredFor: leadToEdit.commitmentSnapshot?.inquiredFor || "",
         });
       } else {
         form.reset({
@@ -93,6 +98,7 @@ export function LeadDialog({
           status: "Active",
           source: "",
           assignedAt: new Date().toISOString(),
+          inquiredFor: "",
         });
       }
     }
@@ -127,6 +133,28 @@ export function LeadDialog({
                   <FormControl>
                     <Input placeholder="e.g. John Doe" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="inquiredFor"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Inquired For</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a course" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {courseNames.map(course => (
+                            <SelectItem key={course} value={course}>{course}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   <FormMessage />
                 </FormItem>
               )}

@@ -22,6 +22,7 @@ export const leadSchema = z.object({
   status: z.string().min(1, { message: "Status is required." }),
   source: z.string().optional(),
   assignedAt: z.string().optional(),
+  inquiredFor: z.string().optional(),
 });
 
 export type LeadFormValues = z.infer<typeof leadSchema>;
