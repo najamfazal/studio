@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { produce } from "immer";
@@ -19,15 +20,17 @@ import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import { CheckIcon } from "lucide-react";
 import { Textarea } from "./ui/textarea";
+import { EditableField } from "./editable-field";
 
 
 interface QuoteManagerProps {
   lead: Lead;
   salesCatalog: SalesCatalog | null;
   onUpdate: (newQuoteLines: QuoteLine[]) => void;
+  onFieldUpdate: (field: string, value: any) => Promise<void>;
 }
 
-export function QuoteManager({ lead, salesCatalog, onUpdate }: QuoteManagerProps) {
+export function QuoteManager({ lead, salesCatalog, onUpdate, onFieldUpdate }: QuoteManagerProps) {
   const { toast } = useToast();
   const [isQuoteDialogOpen, setIsQuoteDialogOpen] = useState(false);
   const [editingQuoteLine, setEditingQuoteLine] = useState<QuoteLine | null>(null);
@@ -60,7 +63,7 @@ export function QuoteManager({ lead, salesCatalog, onUpdate }: QuoteManagerProps
     let quoteText = `Hi ${lead.name},\n\nIt was great speaking with you! As discussed, here are the options for your training:\n\n`;
 
     (lead.commitmentSnapshot?.quoteLines || []).forEach((ql, index) => {
-      const course = salesCatalog?.courses.find(c => c.id === ql.courses[0]);
+      const course = salesCatalog?.courses.find(c => c.name === ql.courses[0]);
       
       quoteText += `*Option ${index + 1}: ${ql.courses.join(', ')}*\n`;
       if (course?.valueProposition) {
@@ -103,7 +106,7 @@ export function QuoteManager({ lead, salesCatalog, onUpdate }: QuoteManagerProps
                  <div>
                     <h4 className="font-semibold">{ql.courses.join(', ')}</h4>
                     <p className="text-xs text-muted-foreground italic mt-1">
-                        {salesCatalog?.courses.find(c => c.id === ql.courses[0])?.valueProposition}
+                        {salesCatalog?.courses.find(c => c.name === ql.courses[0])?.valueProposition}
                     </p>
                  </div>
                  <div className="flex items-center">
@@ -126,6 +129,15 @@ export function QuoteManager({ lead, salesCatalog, onUpdate }: QuoteManagerProps
             No quote options added yet.
           </div>
         )}
+         <div className="border-t pt-4">
+            <EditableField
+                label="Key Notes"
+                value={lead.commitmentSnapshot?.keyNotes || ""}
+                onSave={(val) => onFieldUpdate('commitmentSnapshot.keyNotes', val)}
+                type="textarea"
+                placeholder="Add key negotiation points or summary..."
+            />
+        </div>
       </CardContent>
 
       {isQuoteDialogOpen && salesCatalog && (
@@ -161,8 +173,8 @@ function QuoteLineDialog({ isOpen, onClose, onSave, salesCatalog, quoteLineToEdi
         }
     }, [quoteLineToEdit, isOpen]);
 
-    const handleCourseSelection = (courseId: string) => {
-        const course = salesCatalog.courses.find(c => c.id === courseId);
+    const handleCourseSelection = (courseName: string) => {
+        const course = salesCatalog.courses.find(c => c.name === courseName);
         if (!course) return;
 
         setQuoteLine(produce(draft => {
@@ -227,7 +239,7 @@ function QuoteLineDialog({ isOpen, onClose, onSave, salesCatalog, quoteLineToEdi
                                                 <CommandItem
                                                     key={course.id}
                                                     value={course.name}
-                                                    onSelect={() => handleCourseSelection(course.id)}
+                                                    onSelect={() => handleCourseSelection(course.name)}
                                                 >
                                                      <CheckIcon className={cn("mr-2 h-4 w-4", quoteLine.courses.includes(course.name) ? "opacity-100" : "opacity-0")}/>
                                                     {course.name}

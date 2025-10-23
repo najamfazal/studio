@@ -9,7 +9,7 @@ import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, Ca
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Lead, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, Deal, SalesCatalog, QuoteLine } from '@/lib/types';
+import type { AppSettings, Lead, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, Deal, SalesCatalog, QuoteLine, LeadStatus } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -565,18 +565,12 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </TabsList>
                 
                 <TabsContent value="snapshot" className="mt-3 space-y-3">
-                     <QuoteManager lead={currentLead} salesCatalog={salesCatalog} onUpdate={handleQuoteLinesUpdate} />
-                    <Card>
-                         <CardContent className="p-2">
-                            <EditableField
-                            label="Key Notes"
-                            value={currentLead.commitmentSnapshot?.keyNotes || ""}
-                            onSave={(val) => handleUpdate('commitmentSnapshot.keyNotes', val)}
-                            type="textarea"
-                            placeholder="Add key negotiation points..."
-                            />
-                         </CardContent>
-                    </Card>
+                     <QuoteManager 
+                        lead={currentLead} 
+                        salesCatalog={salesCatalog} 
+                        onUpdate={handleQuoteLinesUpdate}
+                        onFieldUpdate={handleUpdate}
+                     />
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <Card>
                             <CardHeader className="p-2"><CardTitle className="text-xs font-semibold text-muted-foreground">Insights</CardTitle></CardHeader>

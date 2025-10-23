@@ -813,7 +813,12 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                   </CardContent>
               </Card>
 
-              <QuoteManager lead={lead} salesCatalog={salesCatalog} onUpdate={handleQuoteLinesUpdate} />
+              <QuoteManager 
+                lead={lead} 
+                salesCatalog={salesCatalog} 
+                onUpdate={handleQuoteLinesUpdate}
+                onFieldUpdate={handleUpdate}
+              />
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Card>
@@ -862,7 +867,15 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                 <Card>
                    <CardHeader>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <CardTitle className="text-lg">Training Schedule</CardTitle>
+                        <div>
+                            <CardTitle className="text-lg">Training Schedule</CardTitle>
+                            <EditableField
+                                label="Schedule Summary"
+                                value={lead.commitmentSnapshot?.schedule || ""}
+                                onSave={(val) => handleUpdate('commitmentSnapshot.schedule', val)}
+                                placeholder="e.g. MWF 10am-12pm"
+                            />
+                        </div>
                         <Button onClick={() => setIsScheduleModalOpen(true)} size="sm">
                             <Plus className="mr-2 h-4 w-4"/> 
                             <span className="sm:hidden md:inline">Add Session Group</span>
@@ -1045,7 +1058,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                 </Card>
 
                 <Card>
-                <CardHeader className="flex flex-row items-center justify-between p-4">
+                <CardHeader className="flex-row items-center justify-between p-4">
                     <CardTitle className="text-lg font-normal">Log Feedback</CardTitle>
                     <Button onClick={handleLogFeedback} disabled={isLoggingFeedback || Object.keys(feedback).length === 0} size="icon" variant="ghost">
                     {isLoggingFeedback ? <Loader2 className="animate-spin" /> : <Send />}
@@ -1092,7 +1105,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                 </Card>
                 
                 <Card>
-                <CardHeader className="flex flex-row items-center justify-between p-4">
+                <CardHeader className="flex-row items-center justify-between p-4">
                     <CardTitle className="text-lg font-normal">Log Outcome</CardTitle>
                     <Button onClick={handleLogOutcome} disabled={isLoggingOutcome || !selectedOutcome} size="icon" variant="ghost">
                         {isLoggingOutcome ? <Loader2 className="animate-spin" /> : <Send />}
@@ -1286,7 +1299,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
             }}
             onSave={() => {}}
             dealToEdit={editingDeal}
-            courseNames={appSettings.courseNames}
+            courseNames={[]}
         />
        )}
 
@@ -1403,7 +1416,7 @@ function ScheduleEditorModal({ isOpen, onClose, onSave, appSettings, learnerSche
     const newSchedule = produce(sessionGroup.schedule || [], draft => {
         draft.splice(index, 1);
     });
-    setSessionGroup(prev => ({ ...prev, schedule: newSchedule }));
+    setSessionGroup(prev => ({...prev, schedule: newSchedule }));
   };
 
   return (
@@ -1475,8 +1488,8 @@ function PayPlanEditor({ plan, onPlanChange, onSave }: { plan: PaymentPlan, onPl
     const handleAddInstallment = () => {
         const newInstallment: PaymentInstallment = {
             id: `inst_${Date.now()}`,
-            amount: 0,
             dueDate: new Date().toISOString(),
+            amount: 0,
             status: 'Unpaid'
         };
         onPlanChange(produce(plan, draft => {

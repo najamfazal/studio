@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -9,13 +10,18 @@ import { useToast } from '@/hooks/use-toast';
 import { produce } from 'immer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, PlusCircle, Trash2, Pencil, Check, X } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Pencil, Check, X, CheckIcon } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from './ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { cn } from '@/lib/utils';
+import { Badge } from './ui/badge';
+
 
 export function SalesCatalogManager() {
     const [catalog, setCatalog] = useState<SalesCatalog | null>(null);
@@ -168,6 +174,7 @@ interface CourseDialogProps {
 
 function CourseDialog({ isOpen, onClose, onSave, courseToEdit, existingCourseNames }: CourseDialogProps) {
     const [course, setCourse] = useState<CatalogCourse>({ id: '', name: '', isBundle: false, includedCourses: [], valueProposition: '', standardPrices: []});
+    const [isCoursePopoverOpen, setIsCoursePopoverOpen] = useState(false);
 
     useEffect(() => {
         if (courseToEdit) {
@@ -195,6 +202,18 @@ function CourseDialog({ isOpen, onClose, onSave, courseToEdit, existingCourseNam
             draft.standardPrices = draft.standardPrices.filter(v => v.id !== id);
         }));
     };
+    
+    const handleToggleIncludedCourse = (courseName: string) => {
+        setCourse(produce(draft => {
+            const index = draft.includedCourses.indexOf(courseName);
+            if (index > -1) {
+                draft.includedCourses.splice(index, 1);
+            } else {
+                draft.includedCourses.push(courseName);
+            }
+        }));
+    };
+
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -218,8 +237,40 @@ function CourseDialog({ isOpen, onClose, onSave, courseToEdit, existingCourseNam
                     </div>
                     {course.isBundle && (
                         <div className="space-y-2 pl-4 border-l-2">
-                            <Label>Included Courses</Label>
-                            <Input placeholder="Enter comma-separated course names" value={course.includedCourses.join(', ')} onChange={e => setCourse({...course, includedCourses: e.target.value.split(',').map(s => s.trim())})} />
+                             <Label>Included Courses</Label>
+                             <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" role="combobox" className="w-full justify-start font-normal h-auto min-h-10">
+                                        <div className="flex gap-1 flex-wrap">
+                                            {course.includedCourses.length > 0 ? (
+                                                course.includedCourses.map(c => <Badge key={c} variant="secondary">{c}</Badge>)
+                                            ) : (
+                                                <span className="text-muted-foreground">Select courses...</span>
+                                            )}
+                                        </div>
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Search courses..." />
+                                        <CommandList>
+                                            <CommandEmpty>No course found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {existingCourseNames.filter(name => name !== course.name).map(name => (
+                                                    <CommandItem
+                                                        key={name}
+                                                        value={name}
+                                                        onSelect={() => handleToggleIncludedCourse(name)}
+                                                    >
+                                                        <CheckIcon className={cn("mr-2 h-4 w-4", course.includedCourses.includes(name) ? "opacity-100" : "opacity-0")} />
+                                                        {name}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     )}
                     <div className="space-y-3">
