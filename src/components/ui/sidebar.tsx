@@ -62,107 +62,20 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     )
 }
 
-const Sidebar = React.forwardRef<
-    HTMLDivElement,
-    React.ComponentProps<"div">
->(({ className, ...props }, ref) => {
-    const { openQuickLog } = useQuickLog();
-    const [user] = useAuthState(auth);
-
-    if (!user) return null;
-
-    return (
-        <nav className={cn("hidden sm:flex flex-col justify-between items-center gap-4 border-r bg-card px-2 sm:px-4 py-8", className)} ref={ref} {...props}>
-            <TooltipProvider>
-                <div className="flex flex-col items-center gap-4">
-                  <Link href="/" className="mb-4">
-                    <Logo className="h-8 w-8 text-primary" />
-                  </Link>
-                  {sidebarItems.map(item => (
-                      <DesktopSidebarItem key={item.href} {...item} />
-                  ))}
-                   <Tooltip delayDuration={0}>
-                      <TooltipTrigger asChild>
-                          <Button
-                              variant="ghost"
-                              size="icon"
-                              className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
-                              onClick={openQuickLog}
-                          >
-                              <NotebookPen className="h-5 w-5" />
-                              <span className="sr-only">Quick Log</span>
-                          </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">Quick Log</TooltipContent>
-                  </Tooltip>
-                </div>
-
-                <div className="flex flex-col items-center gap-4">
-                   {secondarySidebarItems.map(item => (
-                        <DesktopSidebarItem key={item.href} {...item} />
-                    ))}
-                    <DesktopSidebarItem href="/settings" icon={Settings} label="Settings" />
-                     <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                           <Button
-                              variant="ghost"
-                              size="icon"
-                              className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
-                              onClick={() => signOut(auth)}
-                          >
-                              <LogOut className="h-5 w-5" />
-                              <span className="sr-only">Sign Out</span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">Sign Out</TooltipContent>
-                    </Tooltip>
-                    <Avatar>
-                        <AvatarImage src={user?.photoURL ?? undefined} alt={user?.displayName ?? ''} />
-                        <AvatarFallback>{user?.email?.[0].toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                </div>
-            </TooltipProvider>
-        </nav>
-    )
-})
-Sidebar.displayName = "Sidebar"
-
-
-function DesktopSidebarItem({ href, icon: Icon, label }: { href: string, icon: React.ElementType, label: string }) {
+function SidebarNav() {
+  const { openQuickLog } = useQuickLog();
+  const [user] = useAuthState(auth);
+  const isMobile = useIsMobile();
+  const { open, setOpen } = useSidebar();
   const pathname = usePathname();
-  const isActive = pathname === href;
-  return (
-    <Tooltip delayDuration={0}>
-        <TooltipTrigger asChild>
-            <Link
-                href={href}
-                className={cn(
-                    "group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
-                    isActive && "bg-primary text-primary-foreground hover:text-primary-foreground"
-                )}
-            >
-                <Icon className="h-5 w-5" />
-                <span className="sr-only">{label}</span>
-            </Link>
-        </TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
-    </Tooltip>
-  )
-}
 
-function MobileSidebar() {
-    const { open, setOpen } = useSidebar();
-    const { openQuickLog } = useQuickLog();
-    const [user] = useAuthState(auth);
-    const pathname = usePathname();
+  if (!user) return null;
 
-    if (!user) return null;
-    
+  if (isMobile) {
     const handleQuickLogClick = () => {
         setOpen(false);
         openQuickLog();
     }
-
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetContent side="left" className="sm:max-w-xs p-0 bg-card">
@@ -242,6 +155,103 @@ function MobileSidebar() {
             </SheetContent>
         </Sheet>
     )
+  }
+
+  return (
+    <nav className="flex flex-col justify-between items-center gap-4 border-r bg-card px-2 sm:px-4 py-8">
+        <TooltipProvider>
+            <div className="flex flex-col items-center gap-4">
+              <Link href="/" className="mb-4">
+                <Logo className="h-8 w-8 text-primary" />
+              </Link>
+              {sidebarItems.map(item => (
+                  <DesktopSidebarItem key={item.href} {...item} />
+              ))}
+               <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                      <Button
+                          variant="ghost"
+                          size="icon"
+                          className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+                          onClick={openQuickLog}
+                      >
+                          <NotebookPen className="h-5 w-5" />
+                          <span className="sr-only">Quick Log</span>
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Quick Log</TooltipContent>
+              </Tooltip>
+            </div>
+
+            <div className="flex flex-col items-center gap-4">
+               {secondarySidebarItems.map(item => (
+                    <DesktopSidebarItem key={item.href} {...item} />
+                ))}
+                <DesktopSidebarItem href="/settings" icon={Settings} label="Settings" />
+                 <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                       <Button
+                          variant="ghost"
+                          size="icon"
+                          className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+                          onClick={() => signOut(auth)}
+                      >
+                          <LogOut className="h-5 w-5" />
+                          <span className="sr-only">Sign Out</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Sign Out</TooltipContent>
+                </Tooltip>
+                <Avatar>
+                    <AvatarImage src={user?.photoURL ?? undefined} alt={user?.displayName ?? ''} />
+                    <AvatarFallback>{user?.email?.[0].toUpperCase()}</AvatarFallback>
+                </Avatar>
+            </div>
+        </TooltipProvider>
+    </nav>
+  )
+}
+
+const Sidebar = React.forwardRef<
+    HTMLDivElement,
+    React.ComponentProps<"div">
+>(({ className, ...props }, ref) => {
+    const isMobile = useIsMobile()
+    // Render the static nav on the server and for desktop
+    if (!isMobile) {
+      return (
+        <div ref={ref} className={cn("hidden sm:block", className)} {...props}>
+          <SidebarNav />
+        </div>
+      )
+    }
+    // On mobile, SidebarNav will handle rendering the Sheet, which is client-side only.
+    // We return null here for the initial server render on mobile to prevent hydration mismatch.
+    return null
+})
+Sidebar.displayName = "Sidebar"
+
+
+function DesktopSidebarItem({ href, icon: Icon, label }: { href: string, icon: React.ElementType, label: string }) {
+  const pathname = usePathname();
+  const isActive = pathname === href;
+  return (
+    <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild>
+            <Link
+                href={href}
+                className={cn(
+                    "group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
+                    isActive && "bg-primary text-primary-foreground hover:text-primary-foreground"
+                )}
+            >
+                <Icon className="h-5 w-5" />
+                <span className="sr-only">{label}</span>
+            </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 const SidebarTrigger = React.forwardRef<
@@ -249,12 +259,12 @@ const SidebarTrigger = React.forwardRef<
   Omit<React.ComponentProps<typeof Button>, "children">
 >(({ className, ...props }, ref) => {
   const { setOpen } = useSidebar()
-  const [user] = useAuthState(auth);
+  const [user, loading] = useAuthState(auth);
+  const isMobile = useIsMobile()
 
-  if (!user) return null;
+  if (!user || !isMobile) return null;
 
   return (
-    <>
       <Button
         ref={ref}
         variant="ghost"
@@ -266,8 +276,6 @@ const SidebarTrigger = React.forwardRef<
         <Menu className="h-5 w-5"/>
         <span className="sr-only">Toggle Sidebar</span>
       </Button>
-      <MobileSidebar />
-    </>
   )
 })
 SidebarTrigger.displayName = "SidebarTrigger"
@@ -276,4 +284,5 @@ SidebarTrigger.displayName = "SidebarTrigger"
 export {
   Sidebar,
   SidebarTrigger,
+  SidebarNav,
 }
