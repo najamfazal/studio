@@ -65,7 +65,7 @@ def normalize_phone(phone_number) -> str:
     # Explicitly cast to string first to handle integer inputs from JSON
     return re.sub(r'\D', '', str(phone_number))
 
-def generate_search_keywords(name, phones, deals):
+def generate_search_keywords(name, phones, quote_lines):
     """Generates a map of n-grams for a lead's name, phones, and courses."""
     keywords = set()
     MAX_KEYWORD_LENGTH = 100  # Prevent Firestore field path errors
@@ -87,9 +87,9 @@ def generate_search_keywords(name, phones, deals):
         if phone.get('number'):
             add_ngrams(str(phone['number']))
     
-    # Add course n-grams
-    for deal in deals:
-        for course in deal.get('courses', []):
+    # Add course n-grams from quote lines
+    for quote_line in quote_lines:
+        for course in quote_line.get('courses', []):
             if course:
                 add_ngrams(course)
 
@@ -165,8 +165,8 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 if phone_generic:
                     phones.append({"number": phone_generic, "type": "both"})
             
-            # --- DYNAMIC DEAL MAPPING ---
-            deals = []
+            # --- DYNAMIC QUOTE LINE MAPPING ---
+            quote_lines = []
             deal_data = {}
             for key, value in row.items():
                 match = re.match(r'd(\d+)(.*)', key, re.IGNORECASE)
@@ -184,15 +184,20 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     price = float(price_str) if price_str else 0.0
                 except ValueError:
                     price = 0.0
-
-                deal = {
-                    "id": f"deal_{deal_num}_{int(datetime.now().timestamp())}",
-                    "courses": [c.strip() for c in str(data.get('courses', '')).split(',')] if data.get('courses') else [],
-                    "price": price,
+                
+                variant = {
+                    "id": f"v_{deal_num}_{int(datetime.now().timestamp())}",
                     "mode": str(data.get('mode', 'Online')).strip(),
                     "format": str(data.get('format', '1-1')).strip(),
+                    "price": price,
                 }
-                deals.append(deal)
+                
+                quote_line = {
+                    "id": f"ql_{deal_num}_{int(datetime.now().timestamp())}",
+                    "courses": [c.strip() for c in str(data.get('courses', '')).split(',')] if data.get('courses') else [],
+                    "variants": [variant] # The old deal format becomes a single variant
+                }
+                quote_lines.append(quote_line)
 
             # --- OPTIONAL FIELDS ---
             notes = row.get("notes", row.get("Notes", "")).strip()
@@ -228,13 +233,13 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 else:
                     status = "Active"
 
-            search_keywords = generate_search_keywords(name, phones, deals)
+            search_keywords = generate_search_keywords(name, phones, quote_lines)
             
             lead_data = {
                 "name": name, "email": email, "phones": phones,
                 "relationship": relationship,
                 "commitmentSnapshot": {
-                    "deals": deals,
+                    "quoteLines": quote_lines,
                     "keyNotes": notes,
                 },
                 "status": status, "afc_step": 0, "hasEngaged": has_engaged,
@@ -884,23 +889,30 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
 
         for lead in all_leads:
             lead_data = lead.to_dict()
-            deals = lead_data.get("commitmentSnapshot", {}).get("deals", [])
+            quote_lines = lead_data.get("commitmentSnapshot", {}).get("quoteLines", [])
             status = lead_data.get("status")
 
-            if not deals or not status:
+            if not quote_lines or not status:
                 continue
-
-            for deal in deals:
-                price = deal.get('price', 0)
-                courses = deal.get('courses', [])
-
+            
+            for line in quote_lines:
+                courses = line.get('courses', [])
+                if not courses:
+                    continue
+                
+                # For revenue, we might take the first variant's price or an average.
+                # Here, we'll take the first one for simplicity.
+                price = line.get('variants', [{}])[0].get('price', 0)
+                
                 if not isinstance(price, (int, float)) or price <= 0:
                     continue
 
+                # The revenue from this quote line is attributed to all courses in it.
+                # This could be refined to split revenue if needed.
                 for course_name in courses:
                     if not course_name:
                         continue
-
+                    
                     if course_name not in course_data:
                         course_data[course_name] = {
                             "courseName": course_name,
@@ -912,6 +924,7 @@ def generateCourseRevenueReport(req: https_fn.CallableRequest) -> dict:
                         course_data[course_name]["enrolledRevenue"] += price
                     elif status == "Active":
                         course_data[course_name]["opportunityRevenue"] += price
+
 
         report_courses = list(course_data.values())
 
@@ -1097,10 +1110,10 @@ def reindexLeads(req: https_fn.CallableRequest) -> dict:
             lead_data = lead_doc.to_dict()
             name = lead_data.get("name", "")
             phones = lead_data.get("phones", [])
-            deals = lead_data.get("commitmentSnapshot", {}).get("deals", [])
+            quote_lines = lead_data.get("commitmentSnapshot", {}).get("quoteLines", [])
             
             # Generate keywords
-            search_keywords = generate_search_keywords(name, phones, deals)
+            search_keywords = generate_search_keywords(name, phones, quote_lines)
             batch.update(lead_doc.reference, {"search_keywords": search_keywords})
             processed_count += 1
             
@@ -1164,6 +1177,81 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
             message=f"An internal error occurred during deletion: {e}",
         )
     
+@https_fn.on_call(region="us-central1")
+def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
+    """
+    One-time migration script to convert the old 'deals' array to the new
+    'quoteLines' array for all relevant leads.
+    """
+    print("Starting migration of deals to quote lines...")
+    try:
+        leads_ref = db.collection("leads")
+        
+        # This query is broad, but we will filter in the loop.
+        # A more targeted query could be leads_ref.where("commitmentSnapshot.deals", "!=", [])
+        # but that requires a composite index. We'll do it this way to avoid that requirement.
+        leads_with_deals_query = leads_ref.where("commitmentSnapshot.deals", "!=", None)
+        
+        docs_stream = leads_with_deals_query.stream()
+        
+        batch = db.batch()
+        migrated_count = 0
+        BATCH_LIMIT = 400
+
+        for doc in docs_stream:
+            lead_data = doc.to_dict()
+            deals = lead_data.get("commitmentSnapshot", {}).get("deals", [])
+
+            if not deals or not isinstance(deals, list) or len(deals) == 0:
+                continue
+
+            # Check if all deals have a price > 0
+            if not all(d.get('price', 0) > 0 for d in deals):
+                continue
+
+            print(f"Migrating lead: {doc.id}")
+
+            new_quote_lines = []
+            for deal in deals:
+                variant = {
+                    "id": f"v_{deal.get('id', int(datetime.now().timestamp()))}",
+                    "mode": deal.get('mode', 'Online'),
+                    "format": deal.get('format', '1-1'),
+                    "price": deal.get('price', 0)
+                }
+                quote_line = {
+                    "id": f"ql_{deal.get('id', int(datetime.now().timestamp()))}",
+                    "courses": deal.get('courses', []),
+                    "variants": [variant]
+                }
+                new_quote_lines.append(quote_line)
+            
+            # Prepare update payload
+            update_payload = {
+                "commitmentSnapshot.quoteLines": new_quote_lines,
+                "commitmentSnapshot.deals": firestore.DELETE_FIELD
+            }
+            
+            batch.update(doc.reference, update_payload)
+            migrated_count += 1
+            
+            if migrated_count % BATCH_LIMIT == 0:
+                batch.commit()
+                batch = db.batch()
+                print(f"Committed batch of {migrated_count} migrations.")
+
+        if migrated_count > 0 and (migrated_count % BATCH_LIMIT != 0):
+            batch.commit()
+        
+        print(f"Migration complete. Migrated {migrated_count} leads.")
+        return {"message": f"Migration complete. Migrated {migrated_count} leads.", "migrated": migrated_count}
+
+    except Exception as e:
+        print(f"Error during deals to quotes migration: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"An internal error occurred during migration: {e}",
+        )
 # --- Algolia Sync Functions ---
 # @firestore_fn.on_document_created(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_KEY"])
 # @firestore_fn.on_document_updated(document="leads/{leadId}", region="us-central1", secrets=["ALGOLIA_APP_KEY"])
@@ -1196,6 +1284,8 @@ def bulkDeleteLeads(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
 

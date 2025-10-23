@@ -187,7 +187,8 @@ export default function SettingsPage() {
         if (!settings) return;
         
         let valueToAdd = "";
-        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' | 'infoLogOptions' = 'commonTraits';
+        let fieldKey: keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme' | 'courseNames'> | 'feedbackChips.content' | 'feedbackChips.schedule' | 'feedbackChips.price' | 'trainers' | 'timeSlots' | 'infoLogOptions' = 'commonTraits';
+
 
         if (field === 'commonTraits') {
             if (!newTrait) return;
@@ -234,7 +235,7 @@ export default function SettingsPage() {
                 const category = fieldKey.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[fieldKey as keyof Omit<AppSettings, 'id'| 'feedbackChips' | 'theme'>] as string[];
+                list = draft[fieldKey as keyof Omit<AppSettings, 'id'| 'feedbackChips' | 'theme' | 'courseNames'>] as string[];
             }
             if (!list.includes(valueToAdd)) {
                 list.push(valueToAdd);
@@ -266,7 +267,7 @@ export default function SettingsPage() {
                 const category = field.split('.')[1] as FeedbackCategory;
                 list = draft.feedbackChips[category];
             } else {
-                list = draft[field as keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme'>] as string[];
+                list = draft[field as keyof Omit<AppSettings, 'id' | 'feedbackChips' | 'theme' | 'courseNames'>] as string[];
             }
             const index = list.indexOf(itemToRemove);
             if (index > -1) {
@@ -616,3 +617,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    
