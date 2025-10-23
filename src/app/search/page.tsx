@@ -12,6 +12,8 @@ import {
   Trash2,
   GitMerge,
   FilePenLine,
+  UserPlus,
+  FileUp,
 } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -38,6 +40,7 @@ import {
 import { LeadDialog } from '@/components/lead-dialog';
 import { MergeDialog } from '@/components/merge-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ImportDialog } from '@/components/import-dialog';
 
 export default function SearchPage() {
   const router = useRouter();
@@ -63,6 +66,7 @@ export default function SearchPage() {
   const [mergeSourceLead, setMergeSourceLead] = useState<Lead | null>(null);
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
 
   useEffect(() => {
@@ -130,7 +134,7 @@ export default function SearchPage() {
     if (!leadToDelete) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'leads', leadToDelete));
+      await deleteLeadAction(leadToDelete);
       toast({ title: 'Contact Deleted' });
       setLeadToDelete(null);
       router.replace('/search'); // Go back to blank search page
@@ -177,29 +181,39 @@ export default function SearchPage() {
             <Users className="h-8 w-8 text-primary hidden sm:block" />
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contacts</h1>
           </div>
-          {selectedLead && (
-             <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setIsLeadDialogOpen(true)}>
-                        <FilePenLine className="mr-2 h-4 w-4" />
-                        <span>Edit</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setMergeSourceLead(selectedLead)}>
-                        <GitMerge className="mr-2 h-4 w-4" />
-                        <span>Merge</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setLeadToDelete(selectedLead.id)} className="text-destructive focus:bg-destructive/10">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        <span>Delete</span>
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setIsImportDialogOpen(true)}>
+              <FileUp className="h-5 w-5" />
+              <span className="sr-only">Import Contacts</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setIsLeadDialogOpen(true)}>
+              <UserPlus className="h-5 w-5" />
+              <span className="sr-only">Add New Contact</span>
+            </Button>
+            {selectedLead && (
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                      </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setIsLeadDialogOpen(true)}>
+                          <FilePenLine className="mr-2 h-4 w-4" />
+                          <span>Edit</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setMergeSourceLead(selectedLead)}>
+                          <GitMerge className="mr-2 h-4 w-4" />
+                          <span>Merge</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setLeadToDelete(selectedLead.id)} className="text-destructive focus:bg-destructive/10">
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          <span>Delete</span>
+                      </DropdownMenuItem>
+                  </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
         <div className="mt-4">
             <form onSubmit={handleSearchSubmit}>
@@ -308,6 +322,12 @@ export default function SearchPage() {
           isMerging={isMerging}
         />
       )}
+
+      <ImportDialog 
+        isOpen={isImportDialogOpen}
+        setIsOpen={setIsImportDialogOpen}
+        onSuccess={() => {}}
+      />
     </div>
   );
 }
