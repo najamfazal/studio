@@ -3,13 +3,11 @@ import type {Metadata} from 'next';
 import Link from 'next/link';
 import { Home, ListChecks, Brain, UserCheck, PanelLeft } from 'lucide-react';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster";
-import { Sidebar, SidebarProvider } from '@/components/ui/sidebar';
+import { Sidebar } from '@/components/ui/sidebar';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { AppSettings, ThemeSettings } from '@/lib/types';
-import { QuickLogProvider } from '@/hooks/use-quick-log';
-import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import { AppProviders } from '@/components/app-providers';
 
 export const metadata: Metadata = {
   title: 'LeadTrack Solo',
@@ -55,16 +53,12 @@ export default async function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className="font-body antialiased h-full">
-        <QuickLogProvider>
-          <SidebarProvider>
-            <FirebaseErrorListener />
+        <AppProviders>
             <div className="flex min-h-screen w-full">
               <Sidebar />
               <div className="flex-1 w-full">{children}</div>
             </div>
-          </SidebarProvider>
-        </QuickLogProvider>
-        <Toaster />
+        </AppProviders>
       </body>
     </html>
   );

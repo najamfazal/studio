@@ -65,170 +65,177 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 function SidebarNav() {
   const { openQuickLog } = useQuickLog();
   const [user] = useAuthState(auth);
-  const isMobile = useIsMobile();
   const { open, setOpen } = useSidebar();
   const pathname = usePathname();
 
   if (!user) return null;
 
-  if (isMobile) {
-    const handleQuickLogClick = () => {
-        setOpen(false);
-        openQuickLog();
-    }
-    return (
-        <Sheet open={open} onOpenChange={setOpen}>
-            <SheetContent side="left" className="sm:max-w-xs p-0 bg-card">
-                 <SheetHeader className="p-4 border-b">
-                    <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
-                        <Logo className="h-8 w-8 text-primary" />
-                        <span className="font-bold text-lg">LeadTrack</span>
-                    </Link>
-                    <SheetTitle className="sr-only">Main Menu</SheetTitle>
-                </SheetHeader>
-                <nav className="flex flex-col justify-between h-[calc(100vh-70px)]">
-                    <div className="p-4">
-                        {sidebarItems.map(item => (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={cn(
-                                    "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
-                                    pathname === item.href && "bg-muted text-foreground"
-                                )}
-                                onClick={() => setOpen(false)}
-                            >
-                                <item.icon className="h-5 w-5" />
-                                {item.label}
-                            </Link>
-                        ))}
-                         <button
-                            onClick={handleQuickLogClick}
-                            className="flex w-full items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground"
-                        >
-                            <NotebookPen className="h-5 w-5" />
-                            Quick Log
-                        </button>
-                        <div className="my-4 border-t border-border -mx-4"></div>
-                        {secondarySidebarItems.map(item => (
-                             <Link
-                                key={item.href}
-                                href={item.href}
-                                className={cn(
-                                    "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
-                                    pathname === item.href && "bg-muted text-foreground"
-                                )}
-                                onClick={() => setOpen(false)}
-                            >
-                                <item.icon className="h-5 w-5" />
-                                {item.label}
-                            </Link>
-                        ))}
-                        <Link
-                            href="/settings"
-                            className={cn(
-                                "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
-                                pathname === '/settings' && "bg-muted text-foreground"
-                            )}
-                            onClick={() => setOpen(false)}
-                        >
-                            <Settings className="h-5 w-5" />
-                            Settings
-                        </Link>
-                    </div>
-                     <div className="p-4 border-t">
-                          <div className="flex items-center gap-3 mb-4">
-                             <Avatar>
-                                <AvatarImage src={user?.photoURL ?? undefined} alt={user?.displayName ?? ''} />
-                                <AvatarFallback>{user?.email?.[0].toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <div className="grid gap-0.5 text-xs">
-                               <div className="font-medium">{user?.displayName}</div>
-                               <div className="text-muted-foreground">{user?.email}</div>
-                            </div>
-                        </div>
-                        <Button variant="outline" className="w-full" onClick={() => {signOut(auth); setOpen(false);}}>
-                           <LogOut className="mr-2 h-4 w-4" /> Sign Out
-                        </Button>
-                    </div>
-                </nav>
-            </SheetContent>
-        </Sheet>
-    )
+  const handleQuickLogClick = () => {
+      setOpen(false);
+      openQuickLog();
   }
-
-  return (
-    <nav className="flex flex-col justify-between items-center gap-4 border-r bg-card px-2 sm:px-4 py-8">
-        <TooltipProvider>
-            <div className="flex flex-col items-center gap-4">
-              <Link href="/" className="mb-4">
-                <Logo className="h-8 w-8 text-primary" />
-              </Link>
-              {sidebarItems.map(item => (
-                  <DesktopSidebarItem key={item.href} {...item} />
-              ))}
-               <Tooltip delayDuration={0}>
-                  <TooltipTrigger asChild>
-                      <Button
-                          variant="ghost"
-                          size="icon"
-                          className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
-                          onClick={openQuickLog}
-                      >
-                          <NotebookPen className="h-5 w-5" />
-                          <span className="sr-only">Quick Log</span>
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Quick Log</TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div className="flex flex-col items-center gap-4">
-               {secondarySidebarItems.map(item => (
-                    <DesktopSidebarItem key={item.href} {...item} />
-                ))}
-                <DesktopSidebarItem href="/settings" icon={Settings} label="Settings" />
-                 <Tooltip delayDuration={0}>
-                    <TooltipTrigger asChild>
-                       <Button
-                          variant="ghost"
-                          size="icon"
-                          className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
-                          onClick={() => signOut(auth)}
-                      >
-                          <LogOut className="h-5 w-5" />
-                          <span className="sr-only">Sign Out</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">Sign Out</TooltipContent>
-                </Tooltip>
-                <Avatar>
+  
+  const commonNavContent = (
+    <nav className="flex flex-col justify-between h-full">
+        <div className="p-4">
+            {sidebarItems.map(item => (
+                <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                        "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
+                        pathname === item.href && "bg-muted text-foreground"
+                    )}
+                    onClick={() => setOpen(false)}
+                >
+                    <item.icon className="h-5 w-5" />
+                    {item.label}
+                </Link>
+            ))}
+             <button
+                onClick={handleQuickLogClick}
+                className="flex w-full items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground"
+            >
+                <NotebookPen className="h-5 w-5" />
+                Quick Log
+            </button>
+            <div className="my-4 border-t border-border -mx-4"></div>
+            {secondarySidebarItems.map(item => (
+                 <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                        "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
+                        pathname === item.href && "bg-muted text-foreground"
+                    )}
+                    onClick={() => setOpen(false)}
+                >
+                    <item.icon className="h-5 w-5" />
+                    {item.label}
+                </Link>
+            ))}
+            <Link
+                href="/settings"
+                className={cn(
+                    "flex items-center gap-4 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground",
+                    pathname === '/settings' && "bg-muted text-foreground"
+                )}
+                onClick={() => setOpen(false)}
+            >
+                <Settings className="h-5 w-5" />
+                Settings
+            </Link>
+        </div>
+         <div className="p-4 border-t">
+              <div className="flex items-center gap-3 mb-4">
+                 <Avatar>
                     <AvatarImage src={user?.photoURL ?? undefined} alt={user?.displayName ?? ''} />
                     <AvatarFallback>{user?.email?.[0].toUpperCase()}</AvatarFallback>
                 </Avatar>
+                <div className="grid gap-0.5 text-xs">
+                   <div className="font-medium">{user?.displayName}</div>
+                   <div className="text-muted-foreground">{user?.email}</div>
+                </div>
             </div>
-        </TooltipProvider>
+            <Button variant="outline" className="w-full" onClick={() => {signOut(auth); setOpen(false);}}>
+               <LogOut className="mr-2 h-4 w-4" /> Sign Out
+            </Button>
+        </div>
     </nav>
+  )
+
+  return (
+      <Sheet open={open} onOpenChange={setOpen}>
+          <SheetContent side="left" className="sm:max-w-xs p-0 bg-card">
+               <SheetHeader className="p-4 border-b">
+                  <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
+                      <Logo className="h-8 w-8 text-primary" />
+                      <span className="font-bold text-lg">LeadTrack</span>
+                  </Link>
+                  <SheetTitle className="sr-only">Main Menu</SheetTitle>
+              </SheetHeader>
+              <div className="h-[calc(100vh-70px)]">
+                  {commonNavContent}
+              </div>
+          </SheetContent>
+      </Sheet>
   )
 }
 
-const Sidebar = React.forwardRef<
-    HTMLDivElement,
-    React.ComponentProps<"div">
->(({ className, ...props }, ref) => {
-    const isMobile = useIsMobile()
-    // Render the static nav on the server and for desktop
-    if (!isMobile) {
-      return (
-        <div ref={ref} className={cn("hidden sm:block", className)} {...props}>
-          <SidebarNav />
+function DesktopSidebar() {
+    const { openQuickLog } = useQuickLog();
+    const [user] = useAuthState(auth);
+
+    if (!user) return null;
+
+    return (
+        <nav className="flex flex-col justify-between items-center gap-4 border-r bg-card px-2 sm:px-4 py-8">
+            <TooltipProvider>
+                <div className="flex flex-col items-center gap-4">
+                  <Link href="/" className="mb-4">
+                    <Logo className="h-8 w-8 text-primary" />
+                  </Link>
+                  {sidebarItems.map(item => (
+                      <DesktopSidebarItem key={item.href} {...item} />
+                  ))}
+                   <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                          <Button
+                              variant="ghost"
+                              size="icon"
+                              className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+                              onClick={openQuickLog}
+                          >
+                              <NotebookPen className="h-5 w-5" />
+                              <span className="sr-only">Quick Log</span>
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">Quick Log</TooltipContent>
+                  </Tooltip>
+                </div>
+    
+                <div className="flex flex-col items-center gap-4">
+                   {secondarySidebarItems.map(item => (
+                        <DesktopSidebarItem key={item.href} {...item} />
+                    ))}
+                    <DesktopSidebarItem href="/settings" icon={Settings} label="Settings" />
+                     <Tooltip delayDuration={0}>
+                        <TooltipTrigger asChild>
+                           <Button
+                              variant="ghost"
+                              size="icon"
+                              className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+                              onClick={() => signOut(auth)}
+                          >
+                              <LogOut className="h-5 w-5" />
+                              <span className="sr-only">Sign Out</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">Sign Out</TooltipContent>
+                    </Tooltip>
+                    <Avatar>
+                        <AvatarImage src={user?.photoURL ?? undefined} alt={user?.displayName ?? ''} />
+                        <AvatarFallback>{user?.email?.[0].toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                </div>
+            </TooltipProvider>
+        </nav>
+    )
+}
+
+const Sidebar = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>((props, ref) => {
+    const isMobile = useIsMobile();
+    return (
+        <div ref={ref} {...props}>
+            <div className="sm:hidden">
+                <SidebarNav />
+            </div>
+            <div className="hidden sm:flex h-full">
+                <DesktopSidebar />
+            </div>
         </div>
-      )
-    }
-    // On mobile, SidebarNav will handle rendering the Sheet, which is client-side only.
-    // We return null here for the initial server render on mobile to prevent hydration mismatch.
-    return null
-})
+    );
+});
 Sidebar.displayName = "Sidebar"
 
 
@@ -241,7 +248,7 @@ function DesktopSidebarItem({ href, icon: Icon, label }: { href: string, icon: R
             <Link
                 href={href}
                 className={cn(
-                    "group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
+                    "group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-muted-foreground transition-colors hover:text-foreground md:h-8 md-w-8",
                     isActive && "bg-primary text-primary-foreground hover:text-primary-foreground"
                 )}
             >
@@ -259,10 +266,9 @@ const SidebarTrigger = React.forwardRef<
   Omit<React.ComponentProps<typeof Button>, "children">
 >(({ className, ...props }, ref) => {
   const { setOpen } = useSidebar()
-  const [user, loading] = useAuthState(auth);
   const isMobile = useIsMobile()
 
-  if (!user || !isMobile) return null;
+  if (!isMobile) return null;
 
   return (
       <Button
@@ -284,5 +290,4 @@ SidebarTrigger.displayName = "SidebarTrigger"
 export {
   Sidebar,
   SidebarTrigger,
-  SidebarNav,
 }
