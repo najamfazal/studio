@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, PaymentPlan, PaymentInstallment, Deal, QuoteLine, PriceVariant, SalesCatalog, CatalogCourse } from '@/lib/types';
+import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, PaymentPlan, PaymentInstallment, Deal, QuoteLine, PriceVariant, SalesCatalog, CatalogCourse, LeadStatus } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { WhatsAppIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -733,7 +733,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
 
   const isLearner = useMemo(() => lead?.relationship?.toLowerCase() === 'learner', [lead]);
 
-  if (!appSettings) {
+  if (!appSettings || !salesCatalog) {
     return <div className="flex h-full items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
@@ -758,6 +758,16 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
             </TabsList>
             
             <TabsContent value="overview" className="space-y-4 mt-4">
+               <div className="border-b pb-4">
+                  <EditableField
+                      label="Inquired For"
+                      value={lead.commitmentSnapshot?.inquiredFor || ""}
+                      onSave={(val) => handleUpdate('commitmentSnapshot.inquiredFor', val)}
+                      type="select"
+                      selectOptions={appSettings.courseNames}
+                      placeholder="Select course"
+                  />
+               </div>
               <Card>
                   <CardHeader className="p-4 flex-row items-center justify-between">
                     <CardTitle className="text-lg">Contact Details</CardTitle>
@@ -1114,7 +1124,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                 <CardContent className="space-y-4 p-4 pt-0">
                     <div className="flex items-center justify-center gap-2">
                         {(['Info', 'Later', 'Event Scheduled'] as OutcomeType[]).map(outcome => (
-                            <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} onClick={() => setSelectedOutcome(o => o === outcome ? null : o)}>
+                            <Button key={outcome} variant={selectedOutcome === outcome ? 'default' : 'outline'} onClick={() => setSelectedOutcome(o => o === outcome ? null : outcome)}>
                                 {outcome === 'Info' && <Info className="mr-2 h-4 w-4"/>}
                                 {outcome === 'Later' && <CalendarClock className="mr-2 h-4 w-4"/>}
                                 {outcome === 'Event Scheduled' && <CalendarPlus className="mr-2 h-4 w-4"/>}
@@ -1130,7 +1140,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                     )}
 
                     {selectedOutcome === 'Later' && (
-                       <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}>
+                       <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, (date) => setDateTimePickerValue(date))}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select follow-up date & time'}
                        </Button>
@@ -1148,7 +1158,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                                     {eventTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-                            <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}>
+                            <Button variant="outline" className="w-full" onClick={() => openDateTimePicker(dateTimePickerValue, (date) => setDateTimePickerValue(date))}>
                                 <CalendarClock className="mr-2 h-4 w-4" />
                                 {dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select date & time'}
                             </Button>

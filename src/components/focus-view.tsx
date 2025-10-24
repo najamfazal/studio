@@ -280,7 +280,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         setIsSaving(true);
         try {
             if (currentLead) { // Update existing lead
-                const updatedLeadData: Partial<Lead> & { commitmentSnapshot: { inquiredFor?: string } } = {
+                const updatedLeadData: Partial<Lead> = {
                     name: values.name,
                     email: values.email,
                     phones: values.phones,
@@ -288,13 +288,17 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     status: values.status as LeadStatus,
                     source: values.source,
                     assignedAt: values.assignedAt,
+                };
+                 const updatedLeadWithInquiry: Partial<Lead> & { commitmentSnapshot: { inquiredFor?: string } } = {
+                    ...updatedLeadData,
                     commitmentSnapshot: {
                         ...currentLead.commitmentSnapshot,
                         inquiredFor: values.inquiredFor
                     }
                 };
-                await updateDoc(doc(db, 'leads', currentLead.id), updatedLeadData);
-                const updatedLead = { ...currentLead, ...updatedLeadData };
+
+                await updateDoc(doc(db, 'leads', currentLead.id), updatedLeadWithInquiry);
+                const updatedLead = { ...currentLead, ...updatedLeadWithInquiry };
                 setCurrentLead(updatedLead);
                 if (onLeadUpdate) onLeadUpdate(updatedLead);
                 toast({ title: 'Contact Updated' });
@@ -492,7 +496,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         return appSettings.commonTraits.filter(trait => !currentLead.traits.includes(trait));
     }, [appSettings?.commonTraits, currentLead?.traits]);
     
-    if (!appSettings) {
+    if (!appSettings || !salesCatalog) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>;
     }
     
@@ -571,7 +575,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                 </TabsList>
                 
                 <TabsContent value="snapshot" className="mt-3 space-y-3">
-                     <div className="border-b pb-3">
+                    <div className="border-b pb-3">
                         <EditableField
                             label="Inquired For"
                             value={currentLead.commitmentSnapshot?.inquiredFor || ""}
@@ -580,7 +584,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                             selectOptions={appSettings.courseNames}
                             placeholder="Select course"
                         />
-                     </div>
+                    </div>
                      <QuoteManager 
                         lead={currentLead} 
                         salesCatalog={salesCatalog} 
@@ -735,14 +739,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                                 ))}
                             </div>
                             {selectedOutcome === 'Info' && <Textarea placeholder="Enter info/details..." value={outcomeNotes} onChange={e => setOutcomeNotes(e.target.value)} className="text-xs" />}
-                            {selectedOutcome === 'Later' && <Button variant="outline" className="w-full h-8 text-xs" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}><CalendarIcon className="mr-2 h-3 w-3" />{dateTimePickerValue ? format(dateTimePickerValue, 'PP p') : 'Select follow-up date'}</Button>}
+                            {selectedOutcome === 'Later' && <Button variant="outline" className="w-full h-8 text-xs" onClick={() => openDateTimePicker(dateTimePickerValue, (date) => setDateTimePickerValue(date))}><CalendarIcon className="mr-2 h-3 w-3" />{dateTimePickerValue ? format(dateTimePickerValue, 'PP p') : 'Select follow-up date'}</Button>}
                             {selectedOutcome === 'Event Scheduled' && (
                                 <div className="space-y-2">
                                     <Select value={currentLead.eventDetails?.type || ''} onValueChange={val => setCurrentLead(p => p && produce(p, d => { if(!d.eventDetails) d.eventDetails = {type:'', dateTime:''}; d.eventDetails.type = val; }))}>
                                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select event type..." /></SelectTrigger>
                                         <SelectContent>{eventTypes.map(type => <SelectItem key={type} value={type} className="text-xs">{type}</SelectItem>)}</SelectContent>
                                     </Select>
-                                    <Button variant="outline" className="w-full h-8 text-xs" onClick={() => openDateTimePicker(dateTimePickerValue, setDateTimePickerValue)}><CalendarClock className="mr-2 h-3 w-3" />{dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select date & time'}</Button>
+                                    <Button variant="outline" className="w-full h-8 text-xs" onClick={() => openDateTimePicker(dateTimePickerValue, (date) => setDateTimePickerValue(date))}><CalendarClock className="mr-2 h-3 w-3" />{dateTimePickerValue ? format(dateTimePickerValue, 'PPP p') : 'Select date & time'}</Button>
                                 </div>
                             )}
                         </CardContent>

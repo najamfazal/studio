@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
@@ -18,7 +19,7 @@ import {
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 import { searchLeadsAction, deleteLeadAction, mergeLeadsAction, createLeadAction } from '@/app/actions';
-import type { Lead, AppSettings, SalesCatalog, LeadStatus } from '@/lib/types';
+import type { Lead, AppSettings, SalesCatalog, LeadStatus, CommitmentSnapshot } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import type { LeadFormValues } from '@/lib/schemas';
@@ -276,7 +277,7 @@ export default function SearchPage() {
             <div className="flex justify-center items-center h-64">
                 <Loader2 className="h-8 w-8 animate-spin text-primary"/>
             </div>
-        ) : selectedLead ? (
+        ) : selectedLead && appSettings && salesCatalog ? (
              <ContactDetailView 
                 lead={selectedLead} 
                 appSettings={appSettings}
