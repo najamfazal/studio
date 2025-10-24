@@ -136,7 +136,11 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             # --- CORE FIELDS ---
             name = row.get("name", row.get("Name", "")).strip()
             email = row.get("email", row.get("Email", "")).strip().lower()
-            relationship = row.get("relationship", default_relationship).strip()
+            relationship = row.get("relationship", default_relationship)
+            if not relationship:
+                relationship = default_relationship
+            relationship = relationship.strip()
+
 
             if not name:
                 skipped_count += 1
@@ -1286,6 +1290,8 @@ def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
 
