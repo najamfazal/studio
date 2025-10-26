@@ -5,13 +5,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { AppSettings, ThemeSettings } from '@/lib/types';
+import type { AppSettings, MessageTemplate, ThemeSettings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Plus, Settings, Trash2, X, Pencil, Check, DatabaseZap } from 'lucide-react';
+import { Loader2, Plus, Settings, Trash2, X, Pencil, Check, DatabaseZap, MessageSquare, PlusCircle } from 'lucide-react';
 import { produce } from 'immer';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { reindexLeadsAction, migrateDealsToQuotesAction } from '@/app/actions';
@@ -22,6 +22,9 @@ import { errorEmitter } from '@/lib/error-emitter';
 import { FirestorePermissionError } from '@/lib/errors';
 import { SalesCatalogManager } from '@/components/sales-catalog-manager';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
 type AppSettingsField = 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions' | 'courseNames' | 'invalidReasons';
@@ -53,6 +56,9 @@ export default function SettingsPage() {
         invalidReasons: "",
     });
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
+    
+    const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null);
 
     const [editingItem, setEditingItem] = useState<{ field: string; index: number; value: string } | null>(null);
     const [isReindexing, setIsReindexing] = useState(false);
@@ -79,6 +85,7 @@ export default function SettingsPage() {
                     theme: data.theme || defaultTheme,
                     courseNames: data.courseNames || ["Power BI", "Data Analytics"],
                     id: settingsDoc.id,
+                    messageTemplates: data.messageTemplates || [],
                 };
                 setSettings(completeSettings);
             } else {
@@ -96,7 +103,11 @@ export default function SettingsPage() {
                         schedule: ["Wrong time", "Too long"],
                         price: ["Too expensive", "No budget"],
                     },
-                    theme: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' }
+                    theme: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' },
+                    messageTemplates: [
+                      { id: 'new-1', name: 'Initial Inquiry', type: 'new', template: 'Hi {Name}, thanks for your interest in the {InquiredCourse} course! Would you be free for a quick call tomorrow to discuss it?' },
+                      { id: 'followup-1', name: 'Follow-up 1', type: 'followup', template: 'Hi {Name}, just following up on our conversation about the {InquiredCourse} course. Let me know if you have any questions.' },
+                    ],
                 };
                 await setDoc(settingsDocRef, defaultSettings);
                 setSettings(defaultSettings);
@@ -305,6 +316,33 @@ export default function SettingsPage() {
         }
     }
 
+    const handleSaveTemplate = (template: MessageTemplate) => {
+        if (!settings) return;
+        const newSettings = produce(settings, draft => {
+            if (!draft.messageTemplates) draft.messageTemplates = [];
+            const index = draft.messageTemplates.findIndex(t => t.id === template.id);
+            if (index > -1) {
+                draft.messageTemplates[index] = template;
+            } else {
+                draft.messageTemplates.push(template);
+            }
+        });
+        handleSave({ messageTemplates: newSettings.messageTemplates }, newSettings);
+        setEditingTemplate(null);
+        setIsTemplateDialogOpen(false);
+    };
+
+    const handleRemoveTemplate = (templateId: string) => {
+        if (!settings) return;
+        const newSettings = produce(settings, draft => {
+            if (draft.messageTemplates) {
+                draft.messageTemplates = draft.messageTemplates.filter(t => t.id !== templateId);
+            }
+        });
+        handleSave({ messageTemplates: newSettings.messageTemplates }, newSettings);
+    };
+
+
     const renderChipList = (
         field: AppSettingsField | `feedbackChips.${FeedbackCategory}`,
         items: string[]
@@ -419,6 +457,39 @@ export default function SettingsPage() {
                                      </div>
                                 </div>
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>WhatsApp Message Templates</CardTitle>
+                                <CardDescription>Create and manage templates for quick messaging.</CardDescription>
+                            </div>
+                            <Button onClick={() => { setEditingTemplate(null); setIsTemplateDialogOpen(true) }} size="sm">
+                                <PlusCircle className="mr-2 h-4 w-4" /> Add Template
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                           {(settings.messageTemplates || []).length > 0 ? (
+                                (settings.messageTemplates || []).map(template => (
+                                    <div key={template.id} className="border rounded-md p-3 flex justify-between items-start">
+                                        <div>
+                                            <p className="font-semibold">{template.name} <Badge variant="secondary" className="ml-2">{template.type}</Badge></p>
+                                            <p className="text-xs text-muted-foreground mt-1 font-mono truncate">{template.template}</p>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTemplate(template); setIsTemplateDialogOpen(true); }}><Pencil className="h-4 w-4"/></Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveTemplate(template.id)}><Trash2 className="h-4 w-4"/></Button>
+                                        </div>
+                                    </div>
+                                ))
+                           ) : (
+                             <p className="text-sm text-muted-foreground text-center py-4">No message templates created yet.</p>
+                           )}
+                           <div className="text-xs text-muted-foreground pt-2">
+                            Available tags: <code className="bg-muted px-1 py-0.5 rounded-sm">{'{Name}'}</code>, <code className="bg-muted px-1 py-0.5 rounded-sm">{'{InquiredCourse}'}</code>, <code className="bg-muted px-1 py-0.5 rounded-sm">{'{Quotes}'}</code>
+                           </div>
                         </CardContent>
                     </Card>
 
@@ -673,6 +744,81 @@ export default function SettingsPage() {
 
                 </div>
             </main>
+            {isTemplateDialogOpen && (
+                <TemplateDialog
+                    isOpen={isTemplateDialogOpen}
+                    onClose={() => setIsTemplateDialogOpen(false)}
+                    onSave={handleSaveTemplate}
+                    templateToEdit={editingTemplate}
+                />
+            )}
         </div>
     );
+}
+
+
+interface TemplateDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (template: MessageTemplate) => void;
+  templateToEdit: MessageTemplate | null;
+}
+
+function TemplateDialog({ isOpen, onClose, onSave, templateToEdit }: TemplateDialogProps) {
+  const [template, setTemplate] = useState<MessageTemplate>({ id: '', name: '', type: 'new', template: '' });
+
+  useEffect(() => {
+    if (templateToEdit) {
+      setTemplate(templateToEdit);
+    } else {
+      setTemplate({ id: `msg_${Date.now()}`, name: '', type: 'new', template: '' });
+    }
+  }, [templateToEdit, isOpen]);
+
+  const handleSave = () => {
+    if (!template.name || !template.template) {
+        // Basic validation
+        return;
+    }
+    onSave(template);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>{templateToEdit ? 'Edit' : 'Add'} Message Template</DialogTitle>
+                <DialogDescription>
+                    Craft a reusable message. Use tags like {'{Name}'} for personalization.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label htmlFor="templateName">Template Name</Label>
+                    <Input id="templateName" value={template.name} onChange={(e) => setTemplate(p => ({...p, name: e.target.value}))} placeholder="e.g. Initial Welcome" />
+                </div>
+                 <div className="space-y-2">
+                    <Label htmlFor="templateType">Template Type</Label>
+                    <Select value={template.type} onValueChange={(val: 'new' | 'followup') => setTemplate(p => ({...p, type: val}))}>
+                        <SelectTrigger id="templateType">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="new">New</SelectItem>
+                            <SelectItem value="followup">Follow-up</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                 <div className="space-y-2">
+                    <Label htmlFor="templateContent">Template Content</Label>
+                    <Textarea id="templateContent" value={template.template} onChange={(e) => setTemplate(p => ({...p, template: e.target.value}))} placeholder="e.g. Hi {Name}, ..." className="min-h-[150px] font-mono"/>
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={onClose}>Cancel</Button>
+                <Button onClick={handleSave}>Save Template</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+  )
 }

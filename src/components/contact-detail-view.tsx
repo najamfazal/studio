@@ -6,13 +6,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, arrayUnion, startAfter, limit, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { produce } from 'immer';
-import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon, FileUp, CircleUser, Pencil, Copy, Sparkles, CopyIcon, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, User, Briefcase, Clock, Radio, Plus, Trash2, Check, Loader2, ChevronRight, Info, CalendarClock, CalendarPlus, Send, ThumbsDown, ThumbsUp, X, BookOpen, Calendar as CalendarIcon, Settings, Wallet, XIcon, FileUp, CircleUser, Pencil, Copy, Sparkles, CopyIcon, PlusCircle, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { addDays, format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
-import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, PaymentPlan, PaymentInstallment, Deal, QuoteLine, PriceVariant, SalesCatalog, CatalogCourse, LeadStatus } from '@/lib/types';
+import type { AppSettings, Lead, CourseSchedule, SessionGroup, Interaction, Task, InteractionFeedback, QuickLogType, OutcomeType, PaymentPlan, PaymentInstallment, Deal, QuoteLine, PriceVariant, SalesCatalog, CatalogCourse, LeadStatus, MessageTemplate } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { WhatsAppIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -40,6 +40,7 @@ import { DealDialog } from '@/components/deal-dialog';
 import { LeadDialog } from '@/components/lead-dialog';
 import { LeadFormValues } from '@/lib/schemas';
 import { QuoteManager } from './quote-manager';
+import { WhatsAppTemplatesDialog } from './whatsapp-templates-dialog';
 
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -133,6 +134,8 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
   // Deal management (legacy)
   const [isDealModalOpen, setIsDealModalOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+
+  const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
 
   useEffect(() => {
     setLead(initialLead);
@@ -807,8 +810,9 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                       )}
                       {(lead.phones || []).map((phone, index) => {
                             const cleanNumber = phone.number.replace(/\D/g, '');
+                            const isChatEnabled = phone.type === 'chat' || phone.type === 'both';
                             return (
-                            <div key={index} className="flex items-center gap-3 group">
+                            <div key={index} className="flex items-center gap-2 group">
                                 {(phone.type === 'calling' || phone.type === 'both') ? (
                                     <a href={`tel:${cleanNumber}`} className="flex items-center gap-2">
                                         <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -823,10 +827,15 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                                 <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyToClipboard(phone.number)}>
                                   <Copy className="h-3 w-3" />
                                 </Button>
-                                {(phone.type === 'chat' || phone.type === 'both') && 
+                                {isChatEnabled && 
+                                  <div className="flex items-center gap-0.5">
                                     <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-700">
                                         <WhatsAppIcon className="h-4 w-4" />
                                     </a>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setIsTemplatesModalOpen(true)}>
+                                      <MessageSquare className="h-3 w-3" />
+                                    </Button>
+                                  </div>
                                 }
                                 {phone.type !== 'both' && <Badge variant="secondary" className="text-xs capitalize">{phone.type}</Badge>}
                             </div>
@@ -1375,6 +1384,14 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
         onSelect={dateTimePickerCallback}
         initialDate={dateTimePickerValue}
       />
+      {isTemplatesModalOpen && (
+        <WhatsAppTemplatesDialog
+          isOpen={isTemplatesModalOpen}
+          onClose={() => setIsTemplatesModalOpen(false)}
+          lead={lead}
+          templates={appSettings?.messageTemplates || []}
+        />
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { doc, updateDoc, arrayUnion, collection, query, where, orderBy, limit, startAfter, getDocs, getDoc } from 'firebase/firestore';
 import { produce } from 'immer';
-import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check, ListTodo, Clock, NotebookPen } from 'lucide-react';
+import { Loader2, ArrowLeft, Send, ThumbsDown, ThumbsUp, Info, CalendarClock, CalendarPlus, X, Calendar as CalendarIcon, Mail, Phone, Book, XIcon, Pencil, CheckIcon, Plus, Trash2, FileUp, Copy, CircleUser, Check, ListTodo, Clock, NotebookPen, MessageSquare } from 'lucide-react';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 
 import { db } from '@/lib/firebase';
@@ -31,6 +31,7 @@ import { LeadFormValues } from '@/lib/schemas';
 import { Input } from './ui/input';
 import { QuoteManager } from './quote-manager';
 import { createLeadAction } from '@/app/actions';
+import { WhatsAppTemplatesDialog } from './whatsapp-templates-dialog';
 
 const TASK_PAGE_SIZE = 5;
 
@@ -129,6 +130,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [lastPastTask, setLastPastTask] = useState<any | null>(null);
     const [hasMoreActiveTasks, setHasMoreActiveTasks] = useState(true);
     const [hasMorePastTasks, setHasMorePastTasks] = useState(true);
+    
+    const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
 
     useEffect(() => {
         if (!salesCatalog) {
@@ -575,15 +578,22 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     {currentLead.email && <a href={`mailto:${currentLead.email}`} className="flex items-center gap-1.5 hover:text-foreground"><Mail className="h-3 w-3" /> {currentLead.email}</a>}
                     {(currentLead.phones || []).map((phone, index) => {
                         const cleanNumber = phone.number.replace(/\D/g, '');
+                        const isChatEnabled = phone.type === 'chat' || phone.type === 'both';
                         return (
-                            <div key={index} className="flex items-center gap-1.5 group">
+                            <div key={index} className="flex items-center gap-1 group">
                                 <Phone className="h-3 w-3" />
                                 <a href={`tel:${cleanNumber}`} className="group-hover:underline">{phone.number}</a>
                                 <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopyToClipboard(phone.number)}>
                                   <Copy className="h-3 w-3" />
                                 </Button>
-                                {(phone.type === 'chat' || phone.type === 'both') && 
-                                    <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon className="h-3 w-3" /></a>}
+                                {isChatEnabled && 
+                                  <div className="flex items-center gap-0.5">
+                                    <a href={`https://wa.me/${cleanNumber}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon className="h-3 w-3" /></a>
+                                     <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setIsTemplatesModalOpen(true)}>
+                                      <MessageSquare className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                }
                             </div>
                         )
                     })}
@@ -898,6 +908,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     relationshipTypes={appSettings.relationshipTypes}
                     courseNames={appSettings.courseNames}
                 />
+            )}
+            {isTemplatesModalOpen && (
+              <WhatsAppTemplatesDialog
+                isOpen={isTemplatesModalOpen}
+                onClose={() => setIsTemplatesModalOpen(false)}
+                lead={lead}
+                templates={appSettings?.messageTemplates || []}
+              />
             )}
         </div>
     );

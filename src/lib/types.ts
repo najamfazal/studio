@@ -171,6 +171,13 @@ export type Task = {
   nature: TaskNature;
 };
 
+export type MessageTemplate = {
+  id: string;
+  name: string;
+  type: 'new' | 'followup';
+  template: string;
+};
+
 // Main application settings, stored in `settings/appConfig`
 export type AppSettings = {
   id?: string;
@@ -189,6 +196,7 @@ export type AppSettings = {
   };
   theme?: ThemeSettings;
   logAnalysisPrompt?: string;
+  messageTemplates?: MessageTemplate[];
 }
 
 // New type for the Sales Catalog
