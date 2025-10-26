@@ -95,7 +95,7 @@ def generate_search_keywords(name, phones, quote_lines):
 
     return {kw: True for kw in keywords}
 
-@https_fn.on_call(region="us-central1")
+@https_fn.on_call(region="us-central1", timeout_sec=300, memory=options.MemoryOption.MB_512)
 def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
     Imports contacts from JSON. Supports a dry run mode for previewing changes.
@@ -207,6 +207,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             notes = str(row.get("notes", row.get("Notes", ""))).strip()
             price = str(row.get("price", "")).strip()
             has_engaged = row.get("hasEngaged", False)
+            has_conversations = row.get("hasConversations", False)
             on_follow_list = row.get("onFollowList", False)
             traits = row.get("traits", [])
             insights = row.get("insights", [])
@@ -217,17 +218,27 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             assigned_at_raw = row.get("assignedAt", row.get("Assigned", ""))
             assigned_at = None
             if assigned_at_raw:
-                try:
-                    # Attempt to parse various date formats
-                    # This is a basic attempt, for production more robust parsing would be needed
-                    assigned_at = datetime.fromisoformat(str(assigned_at_raw).replace("Z", "+00:00")).isoformat()
-                except (ValueError, TypeError):
-                     # Fallback for simple date formats like YYYY-MM-DD
+                # Add multiple date formats to try
+                date_formats = [
+                    '%Y-%m-%d',          # 2025-09-08
+                    '%d-%b-%Y',          # 08-Sep-2025
+                    '%d/%m/%Y',          # 08/09/2025
+                    '%m/%d/%Y',          # 09/08/2025
+                ]
+                date_str = str(assigned_at_raw)
+                for fmt in date_formats:
                     try:
-                        assigned_at = datetime.strptime(str(assigned_at_raw), '%Y-%m-%d').isoformat()
+                        assigned_at = datetime.strptime(date_str, fmt).isoformat()
+                        break 
                     except ValueError:
-                         print(f"Could not parse date: {assigned_at_raw}")
-                         assigned_at = None
+                        continue
+                
+                if not assigned_at:
+                    try:
+                       assigned_at = datetime.fromisoformat(date_str.replace("Z", "+00:00")).isoformat()
+                    except (ValueError, TypeError):
+                        print(f"Could not parse date: {assigned_at_raw}")
+                        assigned_at = None
 
 
             # --- STATUS MAPPING ---
@@ -249,7 +260,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     "inquiredFor": inquired_for,
                 },
                 "status": status, "afc_step": 0, "hasEngaged": has_engaged,
-                "hasConversations": False,
+                "hasConversations": has_conversations,
                 "onFollowList": on_follow_list, "traits": traits, "insights": insights, 
                 "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
@@ -536,17 +547,17 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
 
     # Process Quick Log specific state changes
     if quick_log_type:
-        if quick_log_type in ["Enrolled", "Withdrawn"]:
-            new_status = "Enrolled" if quick_log_type == "Enrolled" else "Withdrawn"
-            update_data = {"status": new_status, "afc_step": 0}
-            
+        if quick_log_type in ["Enrolled", "Withdrawn", "Invalid"]:
             if quick_log_type == "Enrolled":
-                update_data["relationship"] = "Learner"
+                new_status = "Enrolled"
+                lead_ref.update({"status": new_status, "afc_step": 0, "relationship": "Learner"})
                 # Create a task to set up the new learner
                 due_date = datetime.now() + timedelta(days=1)
                 create_task(lead_id, lead_name, f"For {lead_name} create schedule, trainer and payplan", "Procedural", due_date)
-
-            lead_ref.update(update_data)
+            else:
+                new_status = "Withdrawn" if quick_log_type == "Withdrawn" else "Invalid"
+                lead_ref.update({"status": new_status, "afc_step": 0})
+            
             print(f"Lead {lead_id} status set to {new_status}. Ending AFC process.")
             # Delete any pending follow-ups for this now-closed lead
             delete_pending_followups(lead_id)
@@ -1291,8 +1302,6 @@ def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
 
     
 
-
-    
 
     
 
