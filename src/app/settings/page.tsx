@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -23,7 +24,8 @@ import { SalesCatalogManager } from '@/components/sales-catalog-manager';
 import { Badge } from '@/components/ui/badge';
 
 type FeedbackCategory = 'content' | 'schedule' | 'price';
-type AppSettingsField = 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions' | 'courseNames';
+type AppSettingsField = 'commonTraits' | 'withdrawalReasons' | 'relationshipTypes' | 'trainers' | 'timeSlots' | 'infoLogOptions' | 'courseNames' | 'invalidReasons';
+
 
 const colorPalettes: { name: string; colors: ThemeSettings }[] = [
     { name: 'Default', colors: { primary: '231 48% 48%', background: '0 0% 98%', accent: '262 39% 55%' } },
@@ -48,6 +50,7 @@ export default function SettingsPage() {
         timeSlots: "",
         infoLogOptions: "",
         courseNames: "",
+        invalidReasons: "",
     });
     const [newFeedbackChip, setNewFeedbackChip] = useState<{ category: FeedbackCategory | null, value: string }>({ category: null, value: "" });
 
@@ -67,10 +70,11 @@ export default function SettingsPage() {
                 const completeSettings: AppSettings = {
                     commonTraits: data.commonTraits || [],
                     withdrawalReasons: data.withdrawalReasons || [],
+                    invalidReasons: data.invalidReasons || ["Invalid Phone", "Number not on WhatsApp", "Incorrect Person", "Email Bounced"],
                     relationshipTypes: data.relationshipTypes || ['Lead', 'Learner'],
                     trainers: data.trainers || [],
                     timeSlots: data.timeSlots || [],
-                    infoLogOptions: data.infoLogOptions || ["Sent brochure", "Quoted", "Shared schedule"],
+                    infoLogOptions: data.infoLogOptions || ["Sent brochure", "Quoted", "Shared schedule", "Unanswered Call", "No WhatsApp History"],
                     feedbackChips: data.feedbackChips || { content: [], schedule: [], price: [] },
                     theme: data.theme || defaultTheme,
                     courseNames: data.courseNames || ["Power BI", "Data Analytics"],
@@ -81,10 +85,11 @@ export default function SettingsPage() {
                 const defaultSettings: AppSettings = {
                     commonTraits: ["Decisive", "Budget-conscious"],
                     withdrawalReasons: ["Not interested", "Found alternative"],
+                    invalidReasons: ["Invalid Phone", "Number not on WhatsApp", "Incorrect Person", "Email Bounced"],
                     relationshipTypes: ["Lead", "Learner", "Archived", "Graduated"],
                     trainers: ["Jhonny", "Marie", "Faisal"],
                     timeSlots: ["09:00 A - 11:00 A", "11:00 A - 01:00 P"],
-                    infoLogOptions: ["Sent brochure", "Quoted", "Shared schedule"],
+                    infoLogOptions: ["Sent brochure", "Quoted", "Shared schedule", "Unanswered Call", "No WhatsApp History"],
                     courseNames: ["Power BI", "Data Analytics", "Python", "SQL"],
                     feedbackChips: {
                         content: ["Not relevant", "Too complex"],
@@ -600,6 +605,29 @@ export default function SettingsPage() {
                                         onKeyDown={e => e.key === 'Enter' && handleAddItem('withdrawalReasons')} 
                                     />
                                     <Button onClick={() => handleAddItem('withdrawalReasons')} disabled={isSaving || !newItemValues.withdrawalReasons}>
+                                        {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Invalid Contact Reasons</CardTitle>
+                            <CardDescription>Manage the reasons shown when a contact is marked as "Invalid".</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="space-y-2">
+                                {renderChipList('invalidReasons', settings.invalidReasons || [])}
+                                <div className="flex gap-2 pt-2">
+                                    <Input 
+                                        value={newItemValues.invalidReasons} 
+                                        onChange={e => setNewItemValues(prev => ({ ...prev, invalidReasons: e.target.value }))} 
+                                        placeholder="Add new reason..." 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddItem('invalidReasons')} 
+                                    />
+                                    <Button onClick={() => handleAddItem('invalidReasons')} disabled={isSaving || !newItemValues.invalidReasons}>
                                         {isSaving ? <Loader2 className="animate-spin" /> : <Plus/>}
                                     </Button>
                                 </div>

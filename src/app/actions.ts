@@ -25,6 +25,7 @@ export async function createLeadAction(values: LeadFormValues) {
       assignedAt: values.assignedAt,
       afc_step: 0,
       hasEngaged: false,
+      hasConversations: false,
       onFollowList: false,
       traits: [],
       insights: [],

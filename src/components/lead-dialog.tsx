@@ -34,8 +34,9 @@ import { Calendar } from "./ui/calendar";
 import { format, parseISO } from "date-fns";
 
 const ALL_STATUSES: LeadStatus[] = [
-  'Active', 'Paused', 'Snoozed', 'Cooling', 'Dormant', 'Enrolled', 'Withdrawn', 'Archived', 'Graduated'
+  'Active', 'Paused', 'Snoozed', 'Cooling', 'Dormant', 'Enrolled', 'Withdrawn', 'Archived', 'Graduated', 'Invalid'
 ];
+
 
 interface LeadDialogProps {
   isOpen: boolean;
@@ -44,7 +45,7 @@ interface LeadDialogProps {
   leadToEdit: Lead | null;
   isSaving?: boolean;
   relationshipTypes: string[];
-  courseNames: string[];
+  courseNames?: string[];
 }
 
 export function LeadDialog({
@@ -54,7 +55,7 @@ export function LeadDialog({
   leadToEdit,
   isSaving,
   relationshipTypes,
-  courseNames,
+  courseNames = [],
 }: LeadDialogProps) {
   
   const form = useForm<LeadFormValues>({
@@ -143,7 +144,7 @@ export function LeadDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Inquired For</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                   <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a course" />
@@ -356,5 +357,3 @@ export function LeadDialog({
     </Dialog>
   );
 }
-
-    

@@ -55,7 +55,7 @@ const toDate = (dateValue: any): Date | null => {
 };
 
 type FeedbackCategory = keyof InteractionFeedback;
-type QuickLogStep = 'initial' | 'withdrawn';
+type QuickLogStep = 'initial' | 'withdrawn' | 'invalid';
 
 const quickLogOptions: { value: QuickLogType; label: string, multistep: QuickLogStep | null }[] = [
   { value: "Followup", label: "Followup", multistep: null },
@@ -64,7 +64,9 @@ const quickLogOptions: { value: QuickLogType; label: string, multistep: QuickLog
   { value: "Unchanged", label: "Unchanged", multistep: null },
   { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
   { value: "Enrolled", label: "Enrolled", multistep: null },
+  { value: "Invalid", label: "Invalid", multistep: 'invalid' },
 ];
+
 
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
 
@@ -112,6 +114,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
   const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
   const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'submitted'>('idle');
   const [withdrawalReasons, setWithdrawalReasons] = useState<string[]>([]);
+  const [invalidReasons, setInvalidReasons] = useState<string[]>([]);
   const [selectedInfoLogs, setSelectedInfoLogs] = useState<string[]>([]);
   const [isLoggingInfo, setIsLoggingInfo] = useState(false);
 
@@ -395,10 +398,23 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
     } as Interaction;
   
     const originalLead = { ...lead };
+
+    let requiresConversationUpdate = false;
+    if (!lead.hasConversations) {
+        const conversationStarters: (QuickLogType | OutcomeType)[] = ['Followup', 'Enrolled', 'Info', 'Later', 'Event Scheduled'];
+        if ((newInteraction.quickLogType && conversationStarters.includes(newInteraction.quickLogType)) || 
+            (newInteraction.outcome && conversationStarters.includes(newInteraction.outcome)) || 
+            newInteraction.feedback) {
+            requiresConversationUpdate = true;
+        }
+    }
   
     // Optimistic UI Update
     const optimisticLead = produce(originalLead, draft => {
       draft.interactions = [newInteraction, ...(draft.interactions || [])];
+      if (requiresConversationUpdate) {
+          draft.hasConversations = true;
+      }
   
       if (newInteraction.quickLogType) {
         if (newInteraction.quickLogType === 'Enrolled') {
@@ -406,6 +422,8 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
           draft.relationship = 'Learner';
         } else if (newInteraction.quickLogType === 'Withdrawn') {
           draft.status = 'Withdrawn';
+        } else if (newInteraction.quickLogType === 'Invalid') {
+            draft.status = 'Invalid';
         }
       }
     });
@@ -415,9 +433,13 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
     setInteractions([...(optimisticLead.interactions || [])].sort((a,b) => toDate(b.createdAt)!.getTime() - toDate(a.createdAt)!.getTime()));
     
     try {
-      await updateDoc(leadRef, {
-        interactions: arrayUnion(newInteraction)
-      });
+       const updatePayload: { interactions: any, hasConversations?: boolean } = {
+            interactions: arrayUnion(newInteraction)
+        };
+        if (requiresConversationUpdate) {
+            updatePayload.hasConversations = true;
+        }
+      await updateDoc(leadRef, updatePayload);
       toast({ title: 'Interaction Logged' });
       
       // Instead of full reload, just refresh tasks which might have changed
@@ -436,9 +458,9 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
   const handleQuickLog = async () => {
     if (!selectedQuickLog || !lead) return;
     
-    if (quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) {
-        toast({ variant: 'destructive', title: "Please select a reason for withdrawal."});
-        return;
+    if ((quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) || (quickLogStep === 'invalid' && invalidReasons.length === 0)) {
+      toast({ variant: 'destructive', title: "Please select a reason." });
+      return;
     }
 
     setSubmissionState('submitting');
@@ -449,6 +471,8 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
 
     if (selectedQuickLog === 'Withdrawn') {
         interaction.withdrawalReasons = withdrawalReasons;
+    } else if (selectedQuickLog === 'Invalid') {
+        interaction.invalidReasons = invalidReasons;
     }
 
     await handleLogInteraction(interaction);
@@ -459,6 +483,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
         setSelectedQuickLog(null);
         setQuickLogStep('initial');
         setWithdrawalReasons([]);
+        setInvalidReasons([]);
     }, 1000);
   }
 
@@ -643,19 +668,17 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
     if (option?.multistep) { setQuickLogStep(option.multistep); }
   };
 
-  const handleToggleWithdrawalReason = (reason: string) => {
-    setWithdrawalReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]);
-  };
-
   const handleBackFromMultistep = () => {
     setQuickLogStep('initial');
     setSelectedQuickLog(null);
     setWithdrawalReasons([]);
+    setInvalidReasons([]);
   }
   
   const isSubmitDisabled = () => {
     if (submissionState !== 'idle' || !selectedQuickLog) return true;
     if (quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) return true;
+    if (quickLogStep === 'invalid' && invalidReasons.length === 0) return true;
     return false;
   }
   
@@ -744,6 +767,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
             <h1 className="text-xl font-bold tracking-tight">{lead.name}</h1>
             <Badge variant={lead.status === 'Active' ? 'default' : 'secondary'}>{lead.status}</Badge>
             <Badge variant="outline">{lead.relationship}</Badge>
+            {lead.hasConversations === false && <Badge variant="destructive" className="animate-pulse">Uncontacted</Badge>}
           </div>
           <div className="text-sm text-muted-foreground">{lead.email}</div>
       </div>
@@ -1025,15 +1049,15 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                         </CardContent>
                         </>
                     )}
-                    {quickLogStep === 'withdrawn' && (
+                    {(quickLogStep === 'withdrawn' || quickLogStep === 'invalid') && (
                         <>
                         <CardHeader className="p-4">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleBackFromMultistep}><ArrowLeft/></Button>
                                 <div>
-                                    <CardDescription>Quick Log - Withdrawn</CardDescription>
-                                    <CardTitle className="text-lg font-normal">Select Reason</CardTitle>
+                                    <CardDescription>Quick Log - {quickLogStep}</CardDescription>
+                                    <CardTitle className="text-lg font-normal capitalize">Select Reason</CardTitle>
                                 </div>
                                 </div>
                                 <Button onClick={handleQuickLog} size="icon" variant="ghost" disabled={isSubmitDisabled()}>
@@ -1043,8 +1067,11 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                         </CardHeader>
                         <CardContent className="p-4 pt-0">
                             <div className="flex flex-wrap gap-2">
-                            {(appSettings.withdrawalReasons || []).map(reason => (
-                                <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => handleToggleWithdrawalReason(reason)} className="cursor-pointer text-sm">{reason}</Badge>
+                            {(quickLogStep === 'withdrawn' ? appSettings.withdrawalReasons : appSettings.invalidReasons).map(reason => (
+                                <Badge key={reason} variant={(quickLogStep === 'withdrawn' && withdrawalReasons.includes(reason)) || (quickLogStep === 'invalid' && invalidReasons.includes(reason)) ? 'default' : 'secondary'} onClick={() => {
+                                  if (quickLogStep === 'withdrawn') setWithdrawalReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]);
+                                  if (quickLogStep === 'invalid') setInvalidReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]);
+                                }} className="cursor-pointer text-sm">{reason}</Badge>
                             ))}
                             </div>
                         </CardContent>
@@ -1203,6 +1230,7 @@ export function ContactDetailView({ lead: initialLead, appSettings, salesCatalog
                                   {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
                                   : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
                                   : interaction.withdrawalReasons ? `Reasons: ${interaction.withdrawalReasons.join(', ')}`
+                                  : interaction.invalidReasons ? `Reasons: ${interaction.invalidReasons.join(', ')}`
                                   : interaction.infoLogs ? interaction.infoLogs.join(', ')
                                   : interaction.notes}
                                   </p>

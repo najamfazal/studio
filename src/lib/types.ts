@@ -15,7 +15,8 @@ export type LeadStatus =
   | 'Enrolled'
   | 'Withdrawn'
   | 'Archived'
-  | 'Graduated';
+  | 'Graduated'
+  | 'Invalid';
 
 // New, more flexible structure for quotes
 export type PriceVariant = {
@@ -100,7 +101,7 @@ export type InteractionEventDetails = {
   rescheduledFrom?: string; // ISO string of original date
 };
 
-export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged' | 'Followup';
+export type QuickLogType = 'Initiated' | 'Enrolled' | 'Withdrawn' | 'Unresponsive' | 'Unchanged' | 'Followup' | 'Invalid';
 
 export type OutcomeType = 'Info' | 'Later' | 'Event Scheduled';
 
@@ -110,6 +111,7 @@ export type Interaction = {
   
   quickLogType?: QuickLogType;
   withdrawalReasons?: string[];
+  invalidReasons?: string[];
 
   feedback?: InteractionFeedback;
   outcome?: OutcomeType;
@@ -136,6 +138,7 @@ export type Lead = {
   afc_step: number; // 0-5
   last_interaction_date?: string; // ISO date string
   hasEngaged: boolean;
+  hasConversations: boolean;
   onFollowList: boolean;
   traits: string[];
   insights: string[];
@@ -175,6 +178,7 @@ export type AppSettings = {
   courseNames: string[];
   commonTraits: string[];
   withdrawalReasons: string[];
+  invalidReasons: string[];
   trainers: string[];
   timeSlots: string[];
   infoLogOptions: string[];

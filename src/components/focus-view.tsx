@@ -34,17 +34,19 @@ import { createLeadAction } from '@/app/actions';
 
 const TASK_PAGE_SIZE = 5;
 
-const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | null }[] = [
+const quickLogOptions: { value: QuickLogType; label: string, multistep: 'initial' | 'withdrawn' | 'invalid' | null }[] = [
     { value: "Followup", label: "Followup", multistep: null },
     { value: "Initiated", label: "Initiated", multistep: null },
     { value: "Unresponsive", label: "Unresponsive", multistep: null },
     { value: "Unchanged", label: "Unchanged", multistep: null },
     { value: "Withdrawn", label: "Withdrawn", multistep: 'withdrawn' },
     { value: "Enrolled", label: "Enrolled", multistep: null },
+    { value: "Invalid", label: "Invalid", multistep: 'invalid' },
 ];
 
+
 const eventTypes = ["Online Meet", "Online Demo", "Physical Demo", "Visit"];
-type QuickLogStep = 'initial' | 'withdrawn';
+type QuickLogStep = 'initial' | 'withdrawn' | 'invalid';
 type FeedbackCategory = keyof InteractionFeedback;
 
 interface FocusViewProps {
@@ -97,6 +99,8 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
     const [selectedQuickLog, setSelectedQuickLog] = useState<QuickLogType | null>(null);
     const [submissionState, setSubmissionState] = useState<'idle' | 'submitting' | 'submitted'>('idle');
     const [withdrawalReasons, setWithdrawalReasons] = useState<string[]>([]);
+    const [invalidReasons, setInvalidReasons] = useState<string[]>([]);
+
     
     const [selectedOutcome, setSelectedOutcome] = useState<OutcomeType | null>(null);
     const [isLoggingOutcome, setIsLoggingOutcome] = useState(false);
@@ -331,9 +335,23 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
           ...interactionData,
           createdAt: new Date().toISOString(),
         } as Interaction;
+
+        let requiresConversationUpdate = false;
+        if (!currentLead.hasConversations) {
+            // Check if this interaction type should mark the lead as "conversed"
+            const conversationStarters: (QuickLogType | OutcomeType)[] = ['Followup', 'Enrolled', 'Info', 'Later', 'Event Scheduled'];
+            if ((newInteraction.quickLogType && conversationStarters.includes(newInteraction.quickLogType)) || 
+                (newInteraction.outcome && conversationStarters.includes(newInteraction.outcome)) || 
+                newInteraction.feedback) {
+                requiresConversationUpdate = true;
+            }
+        }
     
         const optimisticLead = produce(currentLead, draft => {
           draft.interactions = [newInteraction, ...(draft.interactions || [])];
+          if (requiresConversationUpdate) {
+              draft.hasConversations = true;
+          }
         });
         setCurrentLead(optimisticLead);
         if (onLeadUpdate) {
@@ -341,7 +359,14 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
         }
     
         try {
-          await updateDoc(leadRef, { interactions: arrayUnion(newInteraction) });
+          const updatePayload: { interactions: any, hasConversations?: boolean } = {
+            interactions: arrayUnion(newInteraction)
+          };
+          if (requiresConversationUpdate) {
+              updatePayload.hasConversations = true;
+          }
+          await updateDoc(leadRef, updatePayload);
+
           toast({ title: 'Interaction Logged' });
           if (onInteractionLogged) {
             onInteractionLogged();
@@ -360,23 +385,28 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
 
     const handleQuickLog = async () => {
         if (!selectedQuickLog || !currentLead) return;
-        if (quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) {
-            toast({ variant: 'destructive', title: "Please select a reason for withdrawal."});
+        if ((quickLogStep === 'withdrawn' && withdrawalReasons.length === 0) || (quickLogStep === 'invalid' && invalidReasons.length === 0)) {
+            toast({ variant: 'destructive', title: "Please select a reason." });
             return;
         }
-
+    
         setSubmissionState('submitting');
         let interaction: Partial<Interaction> = { quickLogType: selectedQuickLog };
-        if (selectedQuickLog === 'Withdrawn') interaction.withdrawalReasons = withdrawalReasons;
-
+        if (selectedQuickLog === 'Withdrawn') {
+            interaction.withdrawalReasons = withdrawalReasons;
+        } else if (selectedQuickLog === 'Invalid') {
+            interaction.invalidReasons = invalidReasons;
+        }
+    
         await handleLogInteraction(interaction);
-        
+    
         setSubmissionState('submitted');
         setTimeout(() => {
             setSubmissionState('idle');
             setSelectedQuickLog(null);
             setQuickLogStep('initial');
             setWithdrawalReasons([]);
+            setInvalidReasons([]);
         }, 1000);
     }
 
@@ -532,6 +562,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                     <h2 className={cn("text-xl font-bold", currentTask.completed && "line-through")}>{currentLead.name}</h2>
                     <Badge variant="secondary" className="text-xs">{currentLead.relationship}</Badge>
                     <Badge className="text-xs">{currentLead.status}</Badge>
+                    {currentLead.hasConversations === false && <Badge variant="destructive" className="animate-pulse">Uncontacted</Badge>}
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsLeadDialogOpen(true)}>
                         <Pencil className="h-4 w-4" />
                     </Button>
@@ -682,8 +713,11 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                              <CardContent className="p-2 pt-0 space-y-2">
                                 <Button variant="ghost" size="sm" className="text-muted-foreground h-auto p-0 mb-2" onClick={() => {setQuickLogStep('initial'); setSelectedQuickLog(null);}}><ArrowLeft className="h-3 w-3 mr-1"/>Back</Button>
                                 <div className="flex flex-wrap gap-1">
-                                {(appSettings.withdrawalReasons || []).map(reason => (
-                                    <Badge key={reason} variant={withdrawalReasons.includes(reason) ? 'default' : 'secondary'} onClick={() => setWithdrawalReasons(p => p.includes(reason) ? p.filter(r => r !== reason) : [...p, reason])} className="cursor-pointer text-xs">{reason}</Badge>
+                                {(quickLogStep === 'withdrawn' ? appSettings.withdrawalReasons : appSettings.invalidReasons).map(reason => (
+                                    <Badge key={reason} variant={(quickLogStep === 'withdrawn' && withdrawalReasons.includes(reason)) || (quickLogStep === 'invalid' && invalidReasons.includes(reason)) ? 'default' : 'secondary'} onClick={() => {
+                                        if (quickLogStep === 'withdrawn') setWithdrawalReasons(p => p.includes(reason) ? p.filter(r => r !== reason) : [...p, reason]);
+                                        if (quickLogStep === 'invalid') setInvalidReasons(p => p.includes(reason) ? p.filter(r => r !== reason) : [...p, reason]);
+                                    }} className="cursor-pointer text-xs">{reason}</Badge>
                                 ))}
                                 </div>
                             </CardContent>
@@ -788,6 +822,7 @@ export function FocusView({ lead, task, appSettings, onInteractionLogged, onLead
                                                 {interaction.feedback ? formatFeedbackLog(interaction.feedback) 
                                                 : interaction.eventDetails ? `${interaction.eventDetails.type} at ${format(toDate(interaction.eventDetails.dateTime)!, 'PPp')}`
                                                 : interaction.withdrawalReasons ? `Reasons: ${interaction.withdrawalReasons.join(', ')}`
+                                                : interaction.invalidReasons ? `Reasons: ${interaction.invalidReasons.join(', ')}`
                                                 : interaction.infoLogs ? interaction.infoLogs.join(', ')
                                                 : interaction.notes}
                                             </p>
