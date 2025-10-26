@@ -134,9 +134,9 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
 
         for row in contacts:
             # --- CORE FIELDS ---
-            name = row.get("name", row.get("Name", "")).strip()
-            email = row.get("email", row.get("Email", "")).strip().lower()
-            relationship = row.get("relationship", default_relationship)
+            name = str(row.get("name", row.get("Name", ""))).strip()
+            email = str(row.get("email", row.get("Email", ""))).strip().lower()
+            relationship = str(row.get("relationship", default_relationship))
             if not relationship:
                 relationship = default_relationship
             relationship = relationship.strip()
@@ -204,16 +204,16 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                 quote_lines.append(quote_line)
 
             # --- OPTIONAL FIELDS ---
-            notes = row.get("notes", row.get("Notes", "")).strip()
+            notes = str(row.get("notes", row.get("Notes", ""))).strip()
             price = str(row.get("price", "")).strip()
             has_engaged = row.get("hasEngaged", False)
             on_follow_list = row.get("onFollowList", False)
             traits = row.get("traits", [])
             insights = row.get("insights", [])
-            inquired_for = row.get("inquiredFor", "").strip()
+            inquired_for = str(row.get("inquiredFor", "")).strip()
             
             # --- NEW SOURCE AND ASSIGNEDAT FIELDS ---
-            source = row.get("source", row.get("Source", "")).strip()
+            source = str(row.get("source", row.get("Source", ""))).strip()
             assigned_at_raw = row.get("assignedAt", row.get("Assigned", ""))
             assigned_at = None
             if assigned_at_raw:
@@ -231,7 +231,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
 
 
             # --- STATUS MAPPING ---
-            status = row.get("status", "").strip()
+            status = str(row.get("status", "")).strip()
             if not status:
                 if relationship.lower() == "learner":
                     status = "Enrolled"
@@ -249,6 +249,7 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
                     "inquiredFor": inquired_for,
                 },
                 "status": status, "afc_step": 0, "hasEngaged": has_engaged,
+                "hasConversations": False,
                 "onFollowList": on_follow_list, "traits": traits, "insights": insights, 
                 "interactions": [],
                 "createdAt": firestore.SERVER_TIMESTAMP,
@@ -1290,6 +1291,8 @@ def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
 
