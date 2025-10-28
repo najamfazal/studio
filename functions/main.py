@@ -95,7 +95,7 @@ def generate_search_keywords(name, phones, quote_lines):
 
     return {kw: True for kw in keywords}
 
-@https_fn.on_call(region="us-central1", timeout_sec=540, memory=options.MemoryOption.MB1024)
+@https_fn.on_call(region="us-central1", timeout_sec=540, memory=options.MemoryOption.GB_1)
 def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
     Imports contacts from JSON. Supports a dry run mode for previewing changes.
@@ -1305,6 +1305,8 @@ def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
 
