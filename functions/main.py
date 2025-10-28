@@ -95,7 +95,7 @@ def generate_search_keywords(name, phones, quote_lines):
 
     return {kw: True for kw in keywords}
 
-@https_fn.on_call(region="us-central1", timeout_sec=540, memory=options.MemoryOption.MB_1024)
+@https_fn.on_call(region="us-central1", timeout_sec=540, memory=options.MemoryOption.MB1024)
 def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
     Imports contacts from JSON. Supports a dry run mode for previewing changes.
@@ -136,10 +136,8 @@ def importContactsJson(req: https_fn.CallableRequest) -> dict:
             # --- CORE FIELDS ---
             name = str(row.get("name", row.get("Name", ""))).strip()
             email = str(row.get("email", row.get("Email", ""))).strip().lower()
-            relationship = str(row.get("relationship", default_relationship))
-            if not relationship:
-                relationship = default_relationship
-            relationship = relationship.strip()
+            relationship_raw = row.get("relationship")
+            relationship = str(relationship_raw).strip() if relationship_raw is not None else default_relationship
 
 
             if not name:
@@ -1307,6 +1305,8 @@ def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
 
     
 
+
+    
 
     
 
