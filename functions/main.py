@@ -95,7 +95,7 @@ def generate_search_keywords(name, phones, quote_lines):
 
     return {kw: True for kw in keywords}
 
-@https_fn.on_call(region="us-central1", timeout_sec=300, memory=options.MemoryOption.MB_512)
+@https_fn.on_call(region="us-central1", timeout_sec=540, memory=options.MemoryOption.MB_1024)
 def importContactsJson(req: https_fn.CallableRequest) -> dict:
     """
     Imports contacts from JSON. Supports a dry run mode for previewing changes.
@@ -491,6 +491,10 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
             print(f"Paused AFC and created 'Info' task for lead {lead_id}")
             
         elif outcome == "Later":
+            # If lead is new (afc_step 0), mark as engaged first.
+            if data_after.get("afc_step", 0) == 0 and not data_after.get("hasEngaged"):
+                lead_ref.update({"hasEngaged": True})
+            
             # Snooze AFC and create a future follow-up task
             follow_up_date_str = interaction_data.get("followUpDate")
             if follow_up_date_str:
@@ -498,6 +502,7 @@ def logProcessor(event: firestore_fn.Event[firestore_fn.Change]) -> None:
                 create_task(lead_id, lead_name, "Scheduled Follow-up", "Interactive", follow_up_date)
                 lead_ref.update({"afc_step": 0}) # Pause AFC
                 print(f"Paused AFC and created 'Later' follow-up for lead {lead_id} on {follow_up_date_str}")
+
 
         elif outcome == "Event Scheduled":
             event_details = interaction_data.get("eventDetails", {})
@@ -1317,3 +1322,4 @@ def migrateDealsToQuotes(req: https_fn.CallableRequest) -> dict:
 
     
 
+    
